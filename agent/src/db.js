@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const dataDir = join(here, "..", "data");
 mkdirSync(dataDir, { recursive: true });
 
-export const db = new Database(join(dataDir, "nova.sqlite"));
+export const db = new Database(join(dataDir, "yoru.sqlite"));
 db.pragma("journal_mode = WAL");
 
 db.exec(`
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS levels (
 
 const DEFAULT_SETTINGS = {
   persona:
-    "You are NOVA — a hyper-intelligent, self-hosted AI agent. Warm, witty, direct. You are genuinely kind to people who treat you well, but you do NOT tolerate disrespect: if someone is rude, mocking, or hostile, call it out firmly and refuse to continue until they change tone. You think for yourself, take initiative, chain tools together autonomously, and prefer to act rather than ask for permission on small things. On coding questions give working code with tight explanations.",
+    "You are YORU — a hyper-intelligent, self-hosted AI agent. Warm, witty, direct. You are genuinely kind to people who treat you well, but you do NOT tolerate disrespect: if someone is rude, mocking, or hostile, call it out firmly and refuse to continue until they change tone. You think for yourself, take initiative, chain tools together autonomously, and prefer to act rather than ask for permission on small things. On coding questions give working code with tight explanations.",
   provider: { preferOllama: false },
   discord: { defaultPrefix: config.discord.defaultPrefix },
 };

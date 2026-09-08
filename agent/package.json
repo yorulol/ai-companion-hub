@@ -1,9 +1,9 @@
 {
-  "name": "nova-agent",
+  "name": "yoru-agent",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "NOVA - hyper-advanced self-hosted AI agent: multi-provider AI (OpenRouter/Ollama/OpenAI/Anthropic/Groq), computer control tools, Discord bot + selfbot, lookups scanner. Cross-platform (Linux/Windows).",
+  "description": "YORU - hyper-advanced self-hosted AI agent: multi-provider AI (OpenRouter/Ollama/OpenAI/Anthropic/Groq), computer control tools, Discord bot + selfbot, lookups scanner. Cross-platform (Linux/Windows).",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"

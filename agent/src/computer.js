@@ -125,7 +125,7 @@ export function scanForMalware({ onLine } = {}) {
 
 // ---- Lockdown: encrypt a folder with AES-256-GCM ----
 
-const KEY_DIR = path.join(os.homedir(), ".nova-agent");
+const KEY_DIR = path.join(os.homedir(), ".yoru-agent");
 const LOCK_STATE = path.join(KEY_DIR, "lockdown.json");
 
 async function walk(dir, out = []) {
@@ -141,13 +141,13 @@ async function walk(dir, out = []) {
 async function encryptFile(file, key) {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const tmp = `${file}.novaenc`;
+  const tmp = `${file}.yoruenc`;
   await pipeline(createReadStream(file), cipher, createWriteStream(tmp));
   const tag = cipher.getAuthTag();
   const original = await fs.readFile(tmp);
   await fs.writeFile(tmp, Buffer.concat([iv, tag, original]));
   await fs.rm(file);
-  await fs.rename(tmp, `${file}.nova`);
+  await fs.rename(tmp, `${file}.yoru`);
 }
 
 async function decryptFile(file, key) {
@@ -158,7 +158,7 @@ async function decryptFile(file, key) {
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
   const plain = Buffer.concat([decipher.update(data), decipher.final()]);
-  const restored = file.replace(/\.nova$/, "");
+  const restored = file.replace(/\.yoru$/, "");
   await fs.writeFile(restored, plain);
   await fs.rm(file);
 }
@@ -175,7 +175,7 @@ export async function engageLockdown() {
   const files = await walk(full);
   let done = 0;
   for (const f of files) {
-    if (f.endsWith(".nova")) continue;
+    if (f.endsWith(".yoru")) continue;
     try {
       await encryptFile(f, key);
       done++;
@@ -197,7 +197,7 @@ export async function releaseLockdown(keyHex) {
   if (!state.target) throw new Error("No lockdown state found.");
   const key = Buffer.from(keyHex, "hex");
   if (key.length !== 32) throw new Error("Invalid decryption key length.");
-  const files = (await walk(state.target)).filter((f) => f.endsWith(".nova"));
+  const files = (await walk(state.target)).filter((f) => f.endsWith(".yoru"));
   let done = 0;
   for (const f of files) {
     try {

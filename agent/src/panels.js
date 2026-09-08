@@ -89,6 +89,6 @@ function startPanel({ name, port, basePath }) {
 
 export function startPanels() {
   if (!config.panels.enabled) return;
-  startPanel({ name: "NOVA chat panel", port: config.panels.chatPort, basePath: "/" });
-  startPanel({ name: "NOVA owner panel", port: config.panels.ownerPort, basePath: "/owner" });
+  startPanel({ name: "YORU chat panel", port: config.panels.chatPort, basePath: "/" });
+  startPanel({ name: "YORU owner panel", port: config.panels.ownerPort, basePath: "/owner" });
 }

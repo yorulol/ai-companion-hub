@@ -1,4 +1,4 @@
-/** Talks to the locally-running NOVA agent service. */
+/** Talks to the locally-running YORU agent service. */
 
 const BASE_KEY = "agent.baseUrl";
 const OWNER_KEY = "agent.ownerId";

@@ -186,7 +186,7 @@ add({ name: "botstats", category: "owner", description: "Bot process stats.", us
     const mem = process.memoryUsage();
     const users = client.guilds.cache.reduce((a, g) => a + (g.memberCount || 0), 0);
     message.reply({ embeds: [embed({
-      title: "📊 NOVA stats",
+      title: "📊 YORU stats",
       color: COLORS.info,
       fields: [
         { name: "Servers", value: fmt(client.guilds.cache.size), inline: true },

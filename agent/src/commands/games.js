@@ -476,7 +476,7 @@ add({ name: "anagram", category: "games", description: "Unscramble the word befo
   } });
 
 // ---------- typerace ----------
-const RACE_PHRASES = ["the quick brown fox jumps over the lazy dog", "nova is the fastest bot around", "practice makes perfect every single day"];
+const RACE_PHRASES = ["the quick brown fox jumps over the lazy dog", "yoru is the fastest bot around", "practice makes perfect every single day"];
 add({ name: "typerace", category: "games", description: "Race to type the phrase first.", usage: "typerace", permission: "everyone",
   run: async ({ message }) => {
     const phrase = pick(RACE_PHRASES);
@@ -555,9 +555,9 @@ add({ name: "guessnumber", category: "games", description: "Guess the secret num
   } });
 
 // ---------- akinator-style 20 questions ----------
-add({ name: "akinator", category: "games", description: "Think of something, NOVA's AI will try to guess it in 20 questions.", usage: "akinator", permission: "everyone",
+add({ name: "akinator", category: "games", description: "Think of something, YORU's AI will try to guess it in 20 questions.", usage: "akinator", permission: "everyone",
   run: async ({ message }) => {
-    await message.reply({ embeds: [embed({ title: "🧞 NOVA Akinator", description: "Think of a person, place, or thing. I'll ask yes/no questions to guess it! Reply to each question. Say `stop` to end.", color: COLORS.brand })] });
+    await message.reply({ embeds: [embed({ title: "🧞 YORU Akinator", description: "Think of a person, place, or thing. I'll ask yes/no questions to guess it! Reply to each question. Say `stop` to end.", color: COLORS.brand })] });
     let history = "";
     for (let i = 1; i <= 8; i++) {
       let question;

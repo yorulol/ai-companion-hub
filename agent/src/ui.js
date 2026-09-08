@@ -22,10 +22,10 @@ export const EMOJI = {
   shield: "🛡️", star: "⭐", fire: "🔥", left: "◀️", right: "▶️", stop: "⏹️",
 };
 
-/** Standard NOVA embed. */
+/** Standard YORU embed. */
 export function embed({
   title, description, fields = [], color = COLORS.brand,
-  thumbnail, image, footer = "NOVA", author, url, timestamp = true,
+  thumbnail, image, footer = "YORU", author, url, timestamp = true,
 } = {}) {
   const e = new EmbedBuilder().setColor(color);
   if (title) e.setTitle(title.slice(0, 256));

@@ -6,7 +6,7 @@ import { startSelfbot } from "./selfbot.js";
 import { refreshModels } from "./ai.js";
 
 console.log(`\n  ╔══════════════════════════════════════════╗`);
-console.log(`  ║   NOVA · self-hosted AI agent            ║`);
+console.log(`  ║   YORU · self-hosted AI agent            ║`);
 console.log(`  ║   OS: ${config.os.platform.padEnd(35)}║`);
 console.log(`  ║   Owner: ${(config.ownerId || "NOT SET").padEnd(32)}║`);
 console.log(`  ╚══════════════════════════════════════════╝\n`);

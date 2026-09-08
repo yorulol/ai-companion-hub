@@ -1,5 +1,5 @@
 /**
- * Moderation command module for NOVA. 32 commands covering member discipline,
+ * Moderation command module for YORU. 32 commands covering member discipline,
  * channel/server locking, purge tooling, roles, voice management and case logs.
  * All destructive/irreversible actions run through confirm() and every action
  * is written to a module-level case log + posted as a clean embed.
@@ -52,7 +52,7 @@ function caseEmbed({ title, color, target, moderator, reason, extra = [] }) {
       { name: "Reason", value: reason || "No reason provided.", inline: false },
       ...extra,
     ],
-    footer: "NOVA moderation",
+    footer: "YORU moderation",
   });
 }
 

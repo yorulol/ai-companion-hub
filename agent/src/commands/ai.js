@@ -1,4 +1,4 @@
-/** AI commands — talking to NOVA itself. */
+/** AI commands — talking to YORU itself. */
 import {
   embed, okEmbed, errEmbed, infoEmbed, warnEmbed, COLORS, EMOJI,
   button, row, paginate, confirm, choose, listPages, codeBlock, num,
@@ -17,7 +17,7 @@ const personas = new Map(); // channelId -> tone
 const scopeFor = (message) => `c:${message.channel.id}:${message.author.id}`;
 
 /** Split a long answer into paginated embeds. */
-function answerPages(text, { title = "NOVA", footer } = {}) {
+function answerPages(text, { title = "YORU", footer } = {}) {
   const clean = String(text || "(no response)");
   const size = 1800;
   const parts = [];
@@ -27,7 +27,7 @@ function answerPages(text, { title = "NOVA", footer } = {}) {
   );
 }
 
-async function askNova(message, text, { mode = "general", isOwner = false, title = "NOVA", scope } = {}) {
+async function askYoru(message, text, { mode = "general", isOwner = false, title = "YORU", scope } = {}) {
   await message.channel.sendTyping().catch(() => {});
   const tone = personas.get(message.channel.id);
   const userText = tone ? `[tone: ${tone}]\n${text}` : text;
@@ -38,13 +38,13 @@ async function askNova(message, text, { mode = "general", isOwner = false, title
 }
 
 // 1 — main chat, with Regenerate / Continue buttons
-add({ name: "ai", category: "ai", description: "Chat with NOVA.", usage: "ai <message>", permission: "everyone",
-  aliases: ["ask", "nova"],
+add({ name: "ai", category: "ai", description: "Chat with YORU.", usage: "ai <message>", permission: "everyone",
+  aliases: ["ask", "yoru"],
   run: async ({ message, args, isOwner }) => {
     const text = args.join(" ");
     if (!text) return void message.reply({ embeds: [infoEmbed("Ask me anything", "`ai What's the fastest way to learn Rust?`")] });
 
-    const first = await askNova(message, text, { isOwner });
+    const first = await askYoru(message, text, { isOwner });
     const controls = (disabled = false) => row(
       button({ id: "ai:regen", label: "Regenerate", emoji: "🔁", style: "secondary", disabled }),
       button({ id: "ai:more", label: "Continue", emoji: "➡️", style: "primary", disabled }),
@@ -57,28 +57,28 @@ add({ name: "ai", category: "ai", description: "Chat with NOVA.", usage: "ai <me
       if (int.user.id !== message.author.id) return void int.reply({ content: "Not your chat.", ephemeral: true }).catch(() => {});
       await int.deferUpdate().catch(() => {});
       const follow = int.customId === "ai:regen"
-        ? await askNova(message, `Answer this again, differently: ${text}`, { isOwner })
-        : await askNova(message, "Continue your previous answer.", { isOwner });
+        ? await askYoru(message, `Answer this again, differently: ${text}`, { isOwner })
+        : await askYoru(message, "Continue your previous answer.", { isOwner });
       await sent.edit({ embeds: [follow.pages[0]], components: [controls()] }).catch(() => {});
     });
     collector.on("end", () => sent.edit({ components: [controls(true)] }).catch(() => {}));
   }});
 
 // 2 — coding
-add({ name: "code", category: "ai", description: "Coding help from NOVA.", usage: "code <question>", permission: "everyone",
+add({ name: "code", category: "ai", description: "Coding help from YORU.", usage: "code <question>", permission: "everyone",
   run: async ({ message, args, isOwner }) => {
     if (!args.length) return void message.reply({ embeds: [infoEmbed("Coding mode", "`code write a debounce in TypeScript`")] });
-    const { reply, footer } = await askNova(message, args.join(" "), { mode: "coding", isOwner, title: "NOVA · code" });
+    const { reply, footer } = await askYoru(message, args.join(" "), { mode: "coding", isOwner, title: "YORU · code" });
     const body = reply.includes("```") ? reply : codeBlock(reply);
     const sent = await message.reply({
-      embeds: [embed({ title: "NOVA · code", description: body.slice(0, 4000), footer })],
+      embeds: [embed({ title: "YORU · code", description: body.slice(0, 4000), footer })],
       components: [row(button({ id: "code:explain", label: "Explain this", emoji: "🧠", style: "primary" }))],
     });
     const collector = sent.createMessageComponentCollector({ componentType: ComponentType.Button, time: 180_000, max: 3 });
     collector.on("collect", async (int) => {
       if (int.user.id !== message.author.id) return void int.reply({ content: "Not your chat.", ephemeral: true }).catch(() => {});
       await int.deferUpdate().catch(() => {});
-      const ex = await askNova(message, `Explain the code you just wrote, line by line, plainly.`, { mode: "coding", isOwner });
+      const ex = await askYoru(message, `Explain the code you just wrote, line by line, plainly.`, { mode: "coding", isOwner });
       await paginate(message, ex.pages, { userId: message.author.id });
     });
   }});
@@ -89,7 +89,7 @@ add({ name: "explain", category: "ai", description: "Explain a reply or pasted c
     const ref = message.reference ? await message.channel.messages.fetch(message.reference.messageId).catch(() => null) : null;
     const target = args.join(" ") || ref?.content;
     if (!target) return void message.reply({ embeds: [infoEmbed("Nothing to explain", "Reply to a message or paste something after the command.")] });
-    const { pages } = await askNova(message, `Explain this clearly:\n${target}`, { isOwner, title: "Explanation" });
+    const { pages } = await askYoru(message, `Explain this clearly:\n${target}`, { isOwner, title: "Explanation" });
     await paginate(message, pages, { userId: message.author.id });
   }});
 
@@ -99,7 +99,7 @@ add({ name: "review", category: "ai", description: "Code review with findings.",
     const ref = message.reference ? await message.channel.messages.fetch(message.reference.messageId).catch(() => null) : null;
     const code = args.join(" ") || ref?.content;
     if (!code) return void message.reply({ embeds: [infoEmbed("Paste some code", "`review <code>` or reply to a code message.")] });
-    const { reply, footer } = await askNova(message, `Review this code. Reply as short bullet findings, each starting with a severity word (Critical/Warning/Nit):\n${code}`, { mode: "coding", isOwner });
+    const { reply, footer } = await askYoru(message, `Review this code. Reply as short bullet findings, each starting with a severity word (Critical/Warning/Nit):\n${code}`, { mode: "coding", isOwner });
     const lines = reply.split("\n").filter((l) => l.trim()).slice(0, 20);
     await message.reply({ embeds: [embed({
       title: "🔍 Code review",
@@ -112,7 +112,7 @@ add({ name: "review", category: "ai", description: "Code review with findings.",
 add({ name: "debug", category: "ai", description: "Diagnose an error message.", usage: "debug <error or stack trace>", permission: "everyone",
   run: async ({ message, args, isOwner }) => {
     if (!args.length) return void message.reply({ embeds: [infoEmbed("Paste the error", "`debug TypeError: x is not a function …`")] });
-    const { pages } = await askNova(message, `Diagnose this problem and give the fix:\n${args.join(" ")}`, { mode: "coding", isOwner, title: "🐞 Debug" });
+    const { pages } = await askYoru(message, `Diagnose this problem and give the fix:\n${args.join(" ")}`, { mode: "coding", isOwner, title: "🐞 Debug" });
     await paginate(message, pages, { userId: message.author.id });
   }});
 
@@ -128,7 +128,7 @@ add({ name: "translate", category: "ai", description: "Translate text.", usage: 
       options: LANGS.map((l) => ({ label: l, value: l })),
     });
     if (!lang) return;
-    const { pages } = await askNova(message, `Translate into ${lang}, reply with the translation only:\n${text}`, { isOwner, title: `Translation · ${lang}` });
+    const { pages } = await askYoru(message, `Translate into ${lang}, reply with the translation only:\n${text}`, { isOwner, title: `Translation · ${lang}` });
     await paginate(message, pages, { userId: message.author.id });
   }});
 
@@ -141,7 +141,7 @@ add({ name: "summarize", category: "ai", description: "Summarise recent channel 
     const transcript = [...fetched.values()].reverse()
       .filter((m) => !m.author.bot && m.content)
       .map((m) => `${m.author.username}: ${m.content}`).join("\n").slice(0, 6000);
-    const { pages } = await askNova(message, `Summarise this conversation in short bullets, then one line on what needs a decision:\n${transcript}`, { isOwner, title: `📝 Summary of ${fetched.size} messages` });
+    const { pages } = await askYoru(message, `Summarise this conversation in short bullets, then one line on what needs a decision:\n${transcript}`, { isOwner, title: `📝 Summary of ${fetched.size} messages` });
     await paginate(message, pages, { userId: message.author.id });
   }});
 
@@ -150,19 +150,19 @@ add({ name: "brainstorm", category: "ai", description: "Generate ideas.", usage:
   run: async ({ message, args, isOwner }) => {
     const topic = args.join(" ");
     if (!topic) return void message.reply({ embeds: [infoEmbed("Brainstorm what?", "`brainstorm names for a coffee brand`")] });
-    const first = await askNova(message, `Give 8 numbered ideas about: ${topic}`, { isOwner, title: `💡 ${topic}` });
+    const first = await askYoru(message, `Give 8 numbered ideas about: ${topic}`, { isOwner, title: `💡 ${topic}` });
     const sent = await message.reply({ embeds: [first.pages[0]], components: [row(button({ id: "bs:more", label: "More ideas", emoji: "✨", style: "primary" }))] });
     const collector = sent.createMessageComponentCollector({ componentType: ComponentType.Button, time: 180_000, max: 5 });
     collector.on("collect", async (int) => {
       if (int.user.id !== message.author.id) return void int.reply({ content: "Not your list.", ephemeral: true }).catch(() => {});
       await int.deferUpdate().catch(() => {});
-      const more = await askNova(message, `8 more, completely different ideas about: ${topic}`, { isOwner, title: `💡 ${topic}` });
+      const more = await askYoru(message, `8 more, completely different ideas about: ${topic}`, { isOwner, title: `💡 ${topic}` });
       await message.channel.send({ embeds: [more.pages[0]] }).catch(() => {});
     });
   }});
 
 // 9 — persona
-add({ name: "persona", category: "ai", description: "View or set NOVA's tone here.", usage: "persona [tone]", permission: "mod",
+add({ name: "persona", category: "ai", description: "View or set YORU's tone here.", usage: "persona [tone]", permission: "mod",
   run: async ({ message, args }) => {
     const tone = args.join(" ");
     if (!tone) {
@@ -205,7 +205,7 @@ add({ name: "reset", category: "ai", description: "Clear this conversation's mem
 add({ name: "imagine", category: "ai", description: "Craft a great image prompt.", usage: "imagine <idea>", permission: "everyone",
   run: async ({ message, args, isOwner }) => {
     if (!args.length) return void message.reply({ embeds: [infoEmbed("Describe the idea", "`imagine a neon city in the rain`")] });
-    const { reply, footer } = await askNova(message, `Turn this into one richly detailed image prompt (subject, style, lighting, lens, mood). Reply with the prompt only: ${args.join(" ")}`, { isOwner });
+    const { reply, footer } = await askYoru(message, `Turn this into one richly detailed image prompt (subject, style, lighting, lens, mood). Reply with the prompt only: ${args.join(" ")}`, { isOwner });
     message.reply({ embeds: [embed({ title: "🎨 Image prompt", description: codeBlock(reply), footer })] });
   }});
 
@@ -268,7 +268,7 @@ add({ name: "lookup", category: "ai", description: "Search the lookups folder.",
   }});
 
 // 16 — lookup files
-add({ name: "lookupfiles", category: "ai", description: "List files NOVA can search.", usage: "lookupfiles", permission: "mod",
+add({ name: "lookupfiles", category: "ai", description: "List files YORU can search.", usage: "lookupfiles", permission: "mod",
   run: async ({ message }) => {
     const files = await listLookupFiles().catch(() => []);
     if (!files.length) return void message.reply({ embeds: [warnEmbed("Lookups folder is empty", "Drop PDF / CSV / TXT / JSON files into `agent/lookups/`.")] });

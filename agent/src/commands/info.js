@@ -16,7 +16,7 @@ add({ name: "help", category: "info", description: "Interactive command browser.
     const cats = [...new Set(all.map((c) => c.category))];
     if (!cats.length) return message.reply({ embeds: [warnEmbed("No commands loaded", "Command registry is empty.")] });
     const menu = select({ id: "help:cat", placeholder: "Choose a category…", options: cats.map((c) => ({ label: c, value: c })) });
-    const intro = embed({ title: "🧭 NOVA help", description: `Prefix: \`${guildCfg?.prefix ?? "!"}\`\n${all.length} commands across ${cats.length} categories.\nPick a category below to browse.` });
+    const intro = embed({ title: "🧭 YORU help", description: `Prefix: \`${guildCfg?.prefix ?? "!"}\`\n${all.length} commands across ${cats.length} categories.\nPick a category below to browse.` });
     const sent = await message.reply({ embeds: [intro], components: [row(menu)] });
     const collector = sent.createMessageComponentCollector({ time: 120_000 });
     collector.on("collect", async (int) => {
@@ -60,7 +60,7 @@ add({ name: "botinfo", category: "info", description: "Show bot statistics.", us
     const uptimeS = Math.floor(process.uptime());
     const mem = process.memoryUsage();
     message.reply({ embeds: [embed({
-      title: "🤖 NOVA bot info",
+      title: "🤖 YORU bot info",
       thumbnail: client.user.displayAvatarURL(),
       fields: [
         { name: "Uptime", value: `${Math.floor(uptimeS / 3600)}h ${Math.floor((uptimeS % 3600) / 60)}m ${uptimeS % 60}s`, inline: true },
@@ -337,21 +337,21 @@ add({ name: "permissions", category: "info", description: "View a member's permi
 add({ name: "support", category: "info", description: "Get support links.", usage: "support", permission: "everyone", aliases: ["links"],
   run: async ({ message, client }) => {
     const links = row(
-      button({ id: "invite-link", label: "Invite NOVA", style: "link", url: `https://discord.com/oauth2/authorize?client_id=${client.user.id}&scope=bot&permissions=8`, emoji: "➕" }),
+      button({ id: "invite-link", label: "Invite YORU", style: "link", url: `https://discord.com/oauth2/authorize?client_id=${client.user.id}&scope=bot&permissions=8`, emoji: "➕" }),
       button({ id: "github-link", label: "GitHub", style: "link", url: "https://github.com" }),
     );
-    message.reply({ embeds: [embed({ title: "🛟 Support & links", description: "Need help or want to invite NOVA elsewhere? Use the buttons below." })], components: [links] });
+    message.reply({ embeds: [embed({ title: "🛟 Support & links", description: "Need help or want to invite YORU elsewhere? Use the buttons below." })], components: [links] });
   } });
 
-add({ name: "about", category: "info", description: "Learn about NOVA.", usage: "about", permission: "everyone",
+add({ name: "about", category: "info", description: "Learn about YORU.", usage: "about", permission: "everyone",
   run: async ({ message, client }) => {
     const links = row(
       button({ id: "about-invite", label: "Invite", style: "link", url: `https://discord.com/oauth2/authorize?client_id=${client.user.id}&scope=bot&permissions=8`, emoji: "➕" }),
       button({ id: "about-github", label: "GitHub", style: "link", url: "https://github.com" }),
     );
     message.reply({ embeds: [embed({
-      title: "✨ NOVA",
-      description: "NOVA is a self-hosted, AI-powered Discord agent — moderation, economy, levels, utilities and a conversational AI brain, all in one bot.",
+      title: "✨ YORU",
+      description: "YORU is a self-hosted, AI-powered Discord agent — moderation, economy, levels, utilities and a conversational AI brain, all in one bot.",
       thumbnail: client.user.displayAvatarURL(),
       fields: [{ name: "Servers", value: fmt(client.guilds.cache.size), inline: true }, { name: "Node.js", value: process.version, inline: true }],
     })], components: [links] });

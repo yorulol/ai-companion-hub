@@ -17,16 +17,16 @@ import {
 export const Route = createFileRoute("/owner")({
   head: () => ({
     meta: [
-      { title: "Owner Control Panel — NOVA Agent" },
+      { title: "Owner Control Panel — YORU Agent" },
       {
         name: "description",
         content:
           "Owner-only control panel: Discord bot and account responder, command prefix, per-server admin and moderation roles, and AI model routing.",
       },
-      { property: "og:title", content: "Owner Control Panel — NOVA Agent" },
+      { property: "og:title", content: "Owner Control Panel — YORU Agent" },
       {
         property: "og:description",
-        content: "Owner-only controls for the NOVA self-hosted AI agent and Discord bot.",
+        content: "Owner-only controls for the YORU self-hosted AI agent and Discord bot.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
