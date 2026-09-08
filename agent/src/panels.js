@@ -1,23 +1,43 @@
 /**
- * Two separate local panels, each on its own port:
- *   - Chat panel   (default 8788) -> the AI agent chat page
- *   - Owner panel  (default 8789) -> the Discord / owner control page
+ * Two self-contained panels, each on its own port:
+ *   - Chat panel   (default 8788) -> agent/panel/index.html
+ *   - Owner panel  (default 8789) -> agent/panel/owner.html
  *
- * Both are thin local front-doors: they serve the web UI (from the site build
- * or the dev server running on SITE_URL) and forward every /api/* call to the
- * agent service on PORT. That means each panel is a single, self-contained
- * address you can open in the browser — no CORS setup, no extra flags.
+ * Both are pure static HTML/CSS/JS bundled INSIDE the agent folder, so this
+ * runs anywhere Node runs — your laptop, a VPS, a raspberry pi — with no
+ * separate frontend build step. They talk to the same-origin agent service
+ * on PORT for every /api/* call.
  */
 import http from "node:http";
+import { promises as fs } from "node:fs";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PANEL_DIR = path.join(__dirname, "..", "panel");
+
+const MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+};
 
 const hopHeaders = new Set([
   "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
   "te", "trailers", "transfer-encoding", "upgrade", "host", "content-length",
 ]);
 
-async function forward(req, res, targetBase, rewrittenPath) {
-  const url = new URL(rewrittenPath, targetBase);
+async function forwardApi(req, res) {
+  const target = new URL(req.url, `http://127.0.0.1:${config.port}`);
   const headers = {};
   for (const [k, v] of Object.entries(req.headers)) {
     if (!hopHeaders.has(k.toLowerCase())) headers[k] = v;
@@ -28,58 +48,79 @@ async function forward(req, res, targetBase, rewrittenPath) {
     for await (const c of req) chunks.push(c);
     body = Buffer.concat(chunks);
   }
-  const upstream = await fetch(url, { method: req.method, headers, body, redirect: "manual" });
+  const upstream = await fetch(target, { method: req.method, headers, body, redirect: "manual" });
   const outHeaders = {};
-  upstream.headers.forEach((v, k) => {
-    if (!hopHeaders.has(k.toLowerCase())) outHeaders[k] = v;
-  });
+  upstream.headers.forEach((v, k) => { if (!hopHeaders.has(k.toLowerCase())) outHeaders[k] = v; });
   res.writeHead(upstream.status, outHeaders);
-  const buf = Buffer.from(await upstream.arrayBuffer());
-  res.end(buf);
+  res.end(Buffer.from(await upstream.arrayBuffer()));
 }
 
-function offlinePage(name, siteUrl) {
-  return `<!doctype html><html><head><meta charset="utf-8">
-<title>${name} — waiting for the web UI</title>
-<style>
- body{margin:0;min-height:100vh;display:grid;place-items:center;background:#08060f;color:#e9e4ff;
- font:16px/1.6 ui-sans-serif,system-ui,sans-serif}
- .card{max-width:560px;padding:32px;border-radius:20px;background:rgba(120,60,255,.07);
- border:1px solid rgba(160,110,255,.25);box-shadow:0 0 60px rgba(130,70,255,.25);backdrop-filter:blur(14px)}
- h1{margin:0 0 12px;font-size:22px;color:#c9a7ff}
- code{background:rgba(160,110,255,.15);padding:2px 7px;border-radius:6px}
-</style></head><body><div class="card">
-<h1>${name}</h1>
-<p>The web interface isn't running yet at <code>${siteUrl}</code>.</p>
-<p>In the project folder run:</p>
-<p><code>npm install</code> then <code>npm run dev</code></p>
-<p>Then refresh this page.</p>
-</div></body></html>`;
+function safeJoin(root, rel) {
+  const clean = decodeURIComponent(rel.split("?")[0]).replace(/^\/+/, "");
+  const full = path.normalize(path.join(root, clean));
+  if (!full.startsWith(root)) return null;
+  return full;
 }
 
-function startPanel({ name, port, basePath }) {
-  const siteUrl = config.panels.siteUrl;
-  const apiUrl = `http://127.0.0.1:${config.port}`;
+async function serveStatic(res, filePath) {
+  try {
+    const data = await fs.readFile(filePath);
+    const type = MIME[path.extname(filePath)] || "application/octet-stream";
+    res.writeHead(200, { "content-type": type, "cache-control": "no-cache" });
+    res.end(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
+function notFound(res) {
+  res.writeHead(404, { "content-type": "text/plain" });
+  res.end("Not found");
+}
+
+function startPanel({ name, port, entryHtml, blockOwner }) {
   const server = http.createServer(async (req, res) => {
-    const [path] = req.url.split("?");
-    const query = req.url.slice(path.length);
     try {
-      // Agent API always goes to the agent service.
-      if (path.startsWith("/api/")) return await forward(req, res, apiUrl, req.url);
+      const [urlPath] = req.url.split("?");
 
-      // The owner panel only exposes the owner page; the chat panel hides it.
-      let target = path;
-      if (basePath === "/owner") {
-        if (path === "/" || path === "") target = "/owner";
-      } else if (path === "/owner" || path.startsWith("/owner/")) {
-        res.writeHead(302, { location: `http://localhost:${config.panels.ownerPort}/` });
+      // Agent API -> forward to same-machine agent service.
+      if (urlPath.startsWith("/api/")) {
+        if (urlPath === "/api/panel-info") {
+          res.writeHead(200, { "content-type": "application/json" });
+          return res.end(JSON.stringify({
+            chatPort: config.panels.chatPort,
+            ownerPort: config.panels.ownerPort,
+            name,
+          }));
+        }
+        return await forwardApi(req, res);
+      }
+
+      // Owner route is only served on the owner port.
+      if (blockOwner && (urlPath === "/owner" || urlPath === "/owner.html")) {
+        res.writeHead(302, { location: `http://${req.headers.host?.split(":")[0] || "localhost"}:${config.panels.ownerPort}/` });
         return res.end();
       }
-      return await forward(req, res, siteUrl, target + query);
-    } catch {
-      res.writeHead(503, { "content-type": "text/html; charset=utf-8" });
-      res.end(offlinePage(name, siteUrl));
+
+      // Entry pages.
+      if (urlPath === "/" || urlPath === "/index.html" || urlPath === "/owner" || urlPath === "/owner.html") {
+        const file = path.join(PANEL_DIR, entryHtml);
+        if (await serveStatic(res, file)) return;
+        return notFound(res);
+      }
+
+      // Static assets — /assets/*, favicon.ico, etc.
+      const full = safeJoin(PANEL_DIR, urlPath);
+      if (full && existsSync(full) && (await serveStatic(res, full))) return;
+
+      // SPA-ish fallback: serve entry HTML for unknown routes.
+      const fallback = path.join(PANEL_DIR, entryHtml);
+      if (await serveStatic(res, fallback)) return;
+      return notFound(res);
+    } catch (err) {
+      res.writeHead(500, { "content-type": "text/plain" });
+      res.end(`Panel error: ${err.message}`);
     }
   });
 
@@ -89,6 +130,6 @@ function startPanel({ name, port, basePath }) {
 
 export function startPanels() {
   if (!config.panels.enabled) return;
-  startPanel({ name: "YORU chat panel", port: config.panels.chatPort, basePath: "/" });
-  startPanel({ name: "YORU owner panel", port: config.panels.ownerPort, basePath: "/owner" });
+  startPanel({ name: "YORU chat panel", port: config.panels.chatPort, entryHtml: "index.html", blockOwner: true });
+  startPanel({ name: "YORU owner panel", port: config.panels.ownerPort, entryHtml: "owner.html", blockOwner: false });
 }
