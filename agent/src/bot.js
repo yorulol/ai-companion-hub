@@ -4,9 +4,11 @@ import { COMMANDS, findCommand, commandSummary } from "./commands.js";
 import { canRun } from "./permissions.js";
 import { getGuild, getAfk, clearAfk, addXp } from "./db.js";
 import { chat } from "./chat-loop.js";
+import { errEmbed, warnEmbed } from "./ui.js";
 
 let client = null;
 let running = false;
+const cooldowns = new Map();
 
 export async function startBot() {
   if (running) return { ok: true };
@@ -57,18 +59,34 @@ export async function startBot() {
       const [name, ...args] = message.content.slice(guildCfg.prefix.length).trim().split(/\s+/);
       const cmd = findCommand(name);
       if (!cmd) return;
-      if (guildCfg.disabledCommands.includes(cmd.name)) return;
-
-      const member = await message.guild.members.fetch(message.author.id).catch(() => null);
-      if (!canRun(member, guildCfg, cmd.permission)) {
-        return void message.reply(`⛔ You need **${cmd.permission}** permission.`);
+      if (guildCfg.disabledCommands.includes(cmd.name)) {
+        return void message.reply({ embeds: [warnEmbed("Command disabled", `\`${cmd.name}\` is turned off in this server.`)] }).catch(() => {});
       }
 
+      const member = await message.guild.members.fetch(message.author.id).catch(() => null);
       const isOwner = message.author.id === config.ownerId;
+      if (!isOwner && !canRun(member, guildCfg, cmd.permission)) {
+        return void message.reply({
+          embeds: [errEmbed("Not allowed", `\`${cmd.name}\` needs **${cmd.permission}** permission.`)],
+        }).catch(() => {});
+      }
+
+      // Light per-user cooldown so nothing can be spammed.
+      const key = `${message.author.id}:${cmd.name}`;
+      const until = cooldowns.get(key) || 0;
+      if (Date.now() < until) {
+        return void message.reply({
+          embeds: [warnEmbed("Slow down", `Try \`${cmd.name}\` again in ${Math.ceil((until - Date.now()) / 1000)}s.`)],
+        }).catch(() => {});
+      }
+      cooldowns.set(key, Date.now() + 2000);
+
       await cmd.run({ message, args, client, guildCfg, isOwner });
     } catch (err) {
       console.error("[bot] handler error", err);
-      message.reply(`❌ ${err.message}`.slice(0, 1900)).catch(() => {});
+      message.reply({
+        embeds: [errEmbed("Something went wrong", String(err.message || err).slice(0, 1000))],
+      }).catch(() => {});
     }
   });
 
