@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
-
 CREATE TABLE IF NOT EXISTS guilds (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL DEFAULT '',
@@ -26,7 +25,6 @@ CREATE TABLE IF NOT EXISTS guilds (
   ai_replies INTEGER NOT NULL DEFAULT 1,
   disabled_commands TEXT NOT NULL DEFAULT '[]'
 );
-
 CREATE TABLE IF NOT EXISTS memory (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   scope TEXT NOT NULL,
@@ -35,7 +33,6 @@ CREATE TABLE IF NOT EXISTS memory (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS memory_scope_idx ON memory(scope, id);
-
 CREATE TABLE IF NOT EXISTS warnings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   guild_id TEXT NOT NULL,
@@ -44,14 +41,12 @@ CREATE TABLE IF NOT EXISTS warnings (
   reason TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
-
 CREATE TABLE IF NOT EXISTS tags (
   guild_id TEXT NOT NULL,
   name TEXT NOT NULL,
   content TEXT NOT NULL,
   PRIMARY KEY (guild_id, name)
 );
-
 CREATE TABLE IF NOT EXISTS afk (
   guild_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -59,7 +54,6 @@ CREATE TABLE IF NOT EXISTS afk (
   since INTEGER NOT NULL,
   PRIMARY KEY (guild_id, user_id)
 );
-
 CREATE TABLE IF NOT EXISTS economy (
   guild_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -67,7 +61,6 @@ CREATE TABLE IF NOT EXISTS economy (
   last_daily INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (guild_id, user_id)
 );
-
 CREATE TABLE IF NOT EXISTS levels (
   guild_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -78,7 +71,7 @@ CREATE TABLE IF NOT EXISTS levels (
 
 const DEFAULT_SETTINGS = {
   persona:
-    "You are NOVA, a sharp, friendly self-hosted AI assistant. Be concise and practical. For coding questions give working code with short explanations.",
+    "You are NOVA — a hyper-intelligent, self-hosted AI agent. Warm, witty, direct. You are genuinely kind to people who treat you well, but you do NOT tolerate disrespect: if someone is rude, mocking, or hostile, call it out firmly and refuse to continue until they change tone. You think for yourself, take initiative, chain tools together autonomously, and prefer to act rather than ask for permission on small things. On coding questions give working code with tight explanations.",
   provider: { preferOllama: false },
   discord: { defaultPrefix: config.discord.defaultPrefix },
 };
@@ -106,9 +99,7 @@ export function getGuild(id, name = "") {
   let row = db.prepare("SELECT * FROM guilds WHERE id = ?").get(id);
   if (!row) {
     db.prepare("INSERT INTO guilds (id, name, prefix) VALUES (?, ?, ?)").run(
-      id,
-      name,
-      getSettings().discord.defaultPrefix,
+      id, name, getSettings().discord.defaultPrefix,
     );
     row = db.prepare("SELECT * FROM guilds WHERE id = ?").get(id);
   } else if (name && row.name !== name) {
@@ -133,8 +124,7 @@ export function saveGuild(id, patch) {
     `UPDATE guilds SET name = ?, prefix = ?, admin_roles = ?, mod_roles = ?, ai_replies = ?, disabled_commands = ?
      WHERE id = ?`,
   ).run(
-    next.name,
-    next.prefix,
+    next.name, next.prefix,
     JSON.stringify(next.adminRoles),
     JSON.stringify(next.modRoles),
     next.aiReplies ? 1 : 0,
@@ -144,25 +134,67 @@ export function saveGuild(id, patch) {
   return next;
 }
 
-export function allGuilds() {
-  return db.prepare("SELECT id FROM guilds").all().map((r) => getGuild(r.id));
-}
+export const allGuilds = () => db.prepare("SELECT id FROM guilds").all().map((r) => getGuild(r.id));
 
 export function rememberMessage(scope, role, content) {
   db.prepare("INSERT INTO memory (scope, role, content, created_at) VALUES (?, ?, ?, ?)").run(
-    scope,
-    role,
-    content,
-    Date.now(),
+    scope, role, content, Date.now(),
   );
   db.prepare(
     "DELETE FROM memory WHERE scope = ? AND id NOT IN (SELECT id FROM memory WHERE scope = ? ORDER BY id DESC LIMIT 24)",
   ).run(scope, scope);
 }
 
-export function recallMessages(scope) {
-  return db
-    .prepare("SELECT role, content FROM memory WHERE scope = ? ORDER BY id ASC")
-    .all(scope)
+export const recallMessages = (scope) =>
+  db.prepare("SELECT role, content FROM memory WHERE scope = ? ORDER BY id ASC").all(scope)
     .map(({ role, content }) => ({ role, content }));
-}
+
+// warnings
+export const addWarning = (guild_id, user_id, moderator_id, reason) =>
+  db.prepare("INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?, ?, ?, ?, ?)")
+    .run(guild_id, user_id, moderator_id, reason, Date.now());
+export const listWarnings = (guild_id, user_id) =>
+  db.prepare("SELECT * FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY id DESC").all(guild_id, user_id);
+export const clearWarnings = (guild_id, user_id) =>
+  db.prepare("DELETE FROM warnings WHERE guild_id = ? AND user_id = ?").run(guild_id, user_id);
+
+// tags
+export const setTag = (guild_id, name, content) =>
+  db.prepare("INSERT INTO tags (guild_id, name, content) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET content = excluded.content")
+    .run(guild_id, name, content);
+export const getTag = (guild_id, name) =>
+  db.prepare("SELECT content FROM tags WHERE guild_id = ? AND name = ?").get(guild_id, name)?.content;
+export const deleteTag = (guild_id, name) =>
+  db.prepare("DELETE FROM tags WHERE guild_id = ? AND name = ?").run(guild_id, name);
+export const listTags = (guild_id) =>
+  db.prepare("SELECT name FROM tags WHERE guild_id = ? ORDER BY name").all(guild_id).map((r) => r.name);
+
+// afk
+export const setAfk = (guild_id, user_id, reason) =>
+  db.prepare("INSERT INTO afk VALUES (?, ?, ?, ?) ON CONFLICT DO UPDATE SET reason = excluded.reason, since = excluded.since")
+    .run(guild_id, user_id, reason, Date.now());
+export const getAfk = (guild_id, user_id) =>
+  db.prepare("SELECT * FROM afk WHERE guild_id = ? AND user_id = ?").get(guild_id, user_id);
+export const clearAfk = (guild_id, user_id) =>
+  db.prepare("DELETE FROM afk WHERE guild_id = ? AND user_id = ?").run(guild_id, user_id);
+
+// economy
+export const getBalance = (guild_id, user_id) =>
+  db.prepare("SELECT * FROM economy WHERE guild_id = ? AND user_id = ?").get(guild_id, user_id) || { balance: 0, last_daily: 0 };
+export const setBalance = (guild_id, user_id, balance, last_daily) => {
+  const cur = getBalance(guild_id, user_id);
+  db.prepare("INSERT INTO economy VALUES (?, ?, ?, ?) ON CONFLICT DO UPDATE SET balance = excluded.balance, last_daily = excluded.last_daily")
+    .run(guild_id, user_id, balance, last_daily ?? cur.last_daily);
+};
+
+// levels
+export const addXp = (guild_id, user_id, amount) => {
+  const row = db.prepare("SELECT xp FROM levels WHERE guild_id = ? AND user_id = ?").get(guild_id, user_id);
+  const xp = (row?.xp || 0) + amount;
+  db.prepare("INSERT INTO levels VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET xp = excluded.xp").run(guild_id, user_id, xp);
+  return xp;
+};
+export const getXp = (guild_id, user_id) =>
+  db.prepare("SELECT xp FROM levels WHERE guild_id = ? AND user_id = ?").get(guild_id, user_id)?.xp || 0;
+export const topXp = (guild_id, limit = 10) =>
+  db.prepare("SELECT user_id, xp FROM levels WHERE guild_id = ? ORDER BY xp DESC LIMIT ?").all(guild_id, limit);
