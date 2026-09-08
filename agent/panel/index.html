@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>YORU · AI agent</title>
+<meta name="description" content="Chat directly with YORU, your self-hosted AI agent." />
+<link rel="stylesheet" href="/assets/panel.css" />
+</head>
+<body>
+<canvas id="particles"></canvas>
+
+<div class="shell">
+  <header class="bar glass">
+    <div class="brand">
+      <div id="miniMascot" style="width:44px"></div>
+      <div>
+        <h1>YORU</h1>
+        <small>self-hosted agent</small>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill"><span id="dotAgent" class="dot wait"></span><span id="agentText">connecting…</span></span>
+    <span class="pill" id="pillProvider">provider —</span>
+  </header>
+
+  <div class="chat-wrap">
+    <aside class="side glass">
+      <div id="mascotBig"></div>
+      <div class="muted" id="mood">Listening.</div>
+      <div style="width:100%">
+        <div class="pill" style="width:100%;justify-content:center;margin-bottom:8px"><span id="dotBot" class="dot"></span> Discord bot</div>
+        <div class="pill" style="width:100%;justify-content:center;margin-bottom:8px"><span id="dotSelf" class="dot"></span> alt account</div>
+        <div class="pill" style="width:100%;justify-content:center" id="pillOs">system —</div>
+      </div>
+      <div class="spacer"></div>
+      <button class="ghost sm" id="clearBtn">Clear chat</button>
+    </aside>
+
+    <main class="stream glass">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <div class="modes">
+          <button data-mode="general" aria-pressed="true">General</button>
+          <button data-mode="coding" aria-pressed="false">Coding</button>
+        </div>
+        <a class="btn sm" href="#" id="ownerLink" style="text-decoration:none">Owner panel</a>
+      </div>
+      <div class="messages" id="messages"></div>
+      <div class="composer">
+        <textarea id="input" rows="1" placeholder="Ask YORU anything — or tell it to do something on this machine…"></textarea>
+        <button class="primary" id="send">Send</button>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script type="module" src="/assets/chat.js"></script>
+</body>
+</html>
