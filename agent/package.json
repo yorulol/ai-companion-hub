@@ -4,7 +4,11 @@
   "private": true,
   "type": "module",
   "description": "YORU - hyper-advanced self-hosted AI agent: multi-provider AI (OpenRouter/Ollama/OpenAI/Anthropic/Groq), computer control tools, Discord bot + selfbot, lookups scanner. Cross-platform (Linux/Windows).",
+  "bin": {
+    "yoru": "bin/yoru.js"
+  },
   "scripts": {
+    "yoru": "node src/index.js",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
   },
