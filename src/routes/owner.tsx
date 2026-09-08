@@ -6,9 +6,6 @@ import {
   getOwnerId,
   setOwnerId,
   clearOwnerId,
-  getBaseUrl,
-  setBaseUrl,
-  DEFAULT_BASE,
   type GuildConfig,
   type CommandInfo,
   type HealthInfo,
@@ -39,11 +36,9 @@ function OwnerPanel() {
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [idInput, setIdInput] = useState("");
-  const [base, setBase] = useState(DEFAULT_BASE);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setBase(getBaseUrl());
     const id = getOwnerId();
     if (!id) {
       setChecking(false);
@@ -58,7 +53,6 @@ function OwnerPanel() {
 
   async function unlock() {
     setError(null);
-    setBaseUrl(base);
     const ok = await api.verifyOwner(idInput.trim()).catch(() => false);
     if (!ok) {
       setError("That Discord ID does not match the owner ID in your .env file (or the agent is offline).");
@@ -87,11 +81,6 @@ function OwnerPanel() {
             onKeyDown={(e) => e.key === "Enter" && void unlock()}
             placeholder="Your Discord user ID"
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-center font-mono outline-none focus:ring-2 focus:ring-ring"
-          />
-          <input
-            value={base}
-            onChange={(e) => setBase(e.target.value)}
-            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-center font-mono text-xs text-muted-foreground outline-none focus:ring-2 focus:ring-ring"
           />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <button

@@ -4,24 +4,40 @@ import { startPanels } from "./panels.js";
 import { startBot } from "./bot.js";
 import { startSelfbot } from "./selfbot.js";
 import { refreshModels } from "./ai.js";
+import { bootUI, log } from "./boot-ui.js";
 
-console.log(`\n  ╔══════════════════════════════════════════╗`);
-console.log(`  ║   YORU · self-hosted AI agent            ║`);
-console.log(`  ║   OS: ${config.os.platform.padEnd(35)}║`);
-console.log(`  ║   Owner: ${(config.ownerId || "NOT SET").padEnd(32)}║`);
-console.log(`  ╚══════════════════════════════════════════╝\n`);
+await bootUI();
 
-if (!config.ownerId) console.warn("⚠️  OWNER_DISCORD_ID not set — the owner panel will refuse to unlock.\n");
+if (!config.ownerId) log.warn("owner", "OWNER_DISCORD_ID not set — the owner panel will refuse to unlock.");
 
 startServer();
+log.ok("api", `listening on :${config.port}`);
+
 startPanels();
-refreshModels(true).catch(() => {});
+if (config.panels.enabled) {
+  log.ok("panel", `chat  → http://localhost:${config.panels.chatPort}`);
+  log.ok("panel", `owner → http://localhost:${config.panels.ownerPort}`);
+}
+
+refreshModels(true)
+  .then((n) => log.ok("ai", `${n ?? 0} free OpenRouter models cached`))
+  .catch((e) => log.warn("ai", `model scan failed: ${e.message}`));
 
 if (config.discord.botAutostart && config.discord.botToken) {
-  startBot().catch((err) => console.error("[bot] failed to start:", err.message));
-}
-if (config.discord.selfbotAutostart && config.discord.userToken) {
-  startSelfbot().catch((err) => console.error("[selfbot] failed to start:", err.message));
+  startBot()
+    .then(() => log.ok("bot", "discord bot online"))
+    .catch((err) => log.err("bot", `failed to start: ${err.message}`));
+} else {
+  log.info("bot", "autostart off or no token — skipping");
 }
 
-process.on("SIGINT", () => { console.log("\nBye."); process.exit(0); });
+if (config.discord.selfbotAutostart && config.discord.userToken) {
+  startSelfbot()
+    .then(() => log.ok("selfbot", "alt account responder online"))
+    .catch((err) => log.err("selfbot", `failed to start: ${err.message}`));
+}
+
+process.on("SIGINT", () => {
+  console.log("\n\x1b[38;5;141m◆\x1b[0m \x1b[38;5;219mYORU shutting down. Bye.\x1b[0m\n");
+  process.exit(0);
+});

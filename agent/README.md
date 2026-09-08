@@ -10,11 +10,16 @@ frontend build, no Lovable, no extra terminals.
 cd agent
 cp .env.example .env       # fill in what you use
 npm install
-npm start
+npm run yoru               # or: npx yoru
 ```
 
 That's it. The agent boots the AI router, the Discord bot (optional), and
-both web panels — all as one process.
+both web panels — all as one process, behind a colored terminal dashboard
+with an animated robot mascot.
+
+> `npm run yoru` is the canonical command. `npm start` still works as an
+> alias. If you `npm link` (or install the folder globally) you can just
+> type `yoru` from any shell.
 
 ## Addresses
 
