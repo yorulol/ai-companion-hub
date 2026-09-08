@@ -467,3 +467,128 @@ function Stat({ label, value, ok }: { label: string; value: string; ok: boolean 
     </div>
   );
 }
+
+function ComputerTab() {
+  const [sys, setSys] = useState<Record<string, unknown> | null>(null);
+  const [lock, setLock] = useState<{ active: boolean; target?: string; files?: number } | null>(null);
+  const [lookupFiles, setLookupFiles] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+  const [lookupResult, setLookupResult] = useState<string>("");
+  const [scanOut, setScanOut] = useState<string>("");
+  const [key, setKey] = useState<string>("");
+  const [releaseKey, setReleaseKey] = useState<string>("");
+  const [note, setNote] = useState<string>("");
+  const [busy, setBusy] = useState<string>("");
+
+  const refresh = () => {
+    api.system().then(setSys).catch(() => {});
+    api.lockdownStatus().then(setLock).catch(() => {});
+    api.lookupFiles().then((r) => setLookupFiles(r.files)).catch(() => {});
+  };
+  useEffect(refresh, []);
+
+  const doScan = async () => {
+    setBusy("scan"); setScanOut("Running…");
+    try { const r = await api.scan(); setScanOut(r.output || `Exit ${r.code}`); }
+    catch (e) { setScanOut(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(""); }
+  };
+  const doLockdown = async () => {
+    if (!confirm("Encrypt every file in LOCKDOWN_TARGET? Save the key somewhere safe.")) return;
+    setBusy("lock");
+    try {
+      const r = await api.lockdownEngage();
+      setKey(r.decryptionKey);
+      setNote(`🔒 Encrypted ${r.encryptedFiles} files. SAVE THE KEY.`);
+      refresh();
+    } catch (e) { setNote(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(""); }
+  };
+  const doRelease = async () => {
+    setBusy("release");
+    try { const r = await api.lockdownRelease(releaseKey.trim()); setNote(`🔓 Restored ${r.restoredFiles} files.`); refresh(); }
+    catch (e) { setNote(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(""); }
+  };
+  const doLookup = async () => {
+    setBusy("lookup"); setLookupResult("Searching…");
+    try { const r = await api.lookup(query); setLookupResult(JSON.stringify(r.matches, null, 2) || "No matches."); }
+    catch (e) { setLookupResult(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(""); }
+  };
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="panel space-y-2 p-4">
+        <h3 className="font-semibold">System</h3>
+        <pre className="max-h-64 overflow-auto rounded-lg bg-black/30 p-3 text-xs">
+{sys ? JSON.stringify(sys, null, 2) : "…"}
+        </pre>
+      </div>
+
+      <div className="panel space-y-3 p-4">
+        <h3 className="font-semibold">Malware scan</h3>
+        <p className="text-sm text-muted-foreground">
+          Linux uses ClamAV (`clamscan`); Windows uses Defender (`MpCmdRun`). Set the path in .env if it isn't on your PATH.
+        </p>
+        <button onClick={doScan} disabled={!!busy}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40">
+          {busy === "scan" ? "Scanning…" : "Run full scan"}
+        </button>
+        {scanOut && <pre className="max-h-52 overflow-auto rounded-lg bg-black/30 p-3 text-xs">{scanOut}</pre>}
+      </div>
+
+      <div className="panel space-y-3 p-4 lg:col-span-2">
+        <h3 className="font-semibold">Lockdown / encryption</h3>
+        <p className="text-sm text-muted-foreground">
+          Encrypts every file inside <code>LOCKDOWN_TARGET</code> with AES-256-GCM. You get a one-time hex key —
+          store it somewhere safe. Paste the key below to decrypt.
+        </p>
+        <p className="text-sm">Status: {lock?.active ? <span style={{ color: "var(--warning)" }}>🔒 ACTIVE ({lock.files} files)</span> : "🟢 Not active"}</p>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={doLockdown} disabled={!!busy}
+            className="rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground disabled:opacity-40">
+            {busy === "lock" ? "Encrypting…" : "Engage lockdown"}
+          </button>
+        </div>
+        {key && (
+          <div className="rounded-lg border border-warning/50 bg-warning/10 p-3">
+            <p className="mb-1 text-xs uppercase tracking-wide">Decryption key — copy now</p>
+            <code className="break-all text-sm">{key}</code>
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <input value={releaseKey} onChange={(e) => setReleaseKey(e.target.value)}
+            placeholder="Paste decryption key…"
+            className="min-w-64 flex-1 rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs" />
+          <button onClick={doRelease} disabled={!!busy || !releaseKey}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40">
+            {busy === "release" ? "Restoring…" : "Release lockdown"}
+          </button>
+        </div>
+        {note && <p className="text-sm" style={{ color: "var(--success)" }}>{note}</p>}
+      </div>
+
+      <div className="panel space-y-3 p-4 lg:col-span-2">
+        <h3 className="font-semibold">Lookups — {lookupFiles.length} file(s)</h3>
+        <p className="text-sm text-muted-foreground">
+          Drop PDF / CSV / TXT / JSON into <code>agent/lookups/</code>. Search across all of them here.
+        </p>
+        <ul className="flex flex-wrap gap-2 text-xs">
+          {lookupFiles.map((f) => (<li key={f} className="rounded-full bg-secondary px-2.5 py-1 font-mono">{f}</li>))}
+        </ul>
+        <div className="flex gap-2">
+          <input value={query} onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void doLookup()}
+            placeholder="Search value (username, ID, email, …)"
+            className="flex-1 rounded-lg border border-input bg-background px-3 py-2" />
+          <button onClick={doLookup} disabled={!!busy || query.length < 2}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40">
+            {busy === "lookup" ? "Searching…" : "Search"}
+          </button>
+        </div>
+        {lookupResult && <pre className="max-h-72 overflow-auto rounded-lg bg-black/30 p-3 text-xs">{lookupResult}</pre>}
+      </div>
+    </div>
+  );
+}
