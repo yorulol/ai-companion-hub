@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>YORU · Owner panel</title>
+<meta name="description" content="Owner-only control tower for the YORU agent." />
+<link rel="stylesheet" href="/assets/panel.css" />
+</head>
+<body>
+<canvas id="particles"></canvas>
+
+<div id="gate" class="gate hidden">
+  <div class="box glass">
+    <div id="gateMascot"></div>
+    <h2>OWNER GATE</h2>
+    <p class="muted">Enter the Discord user ID set as <code>OWNER_DISCORD_ID</code> in your <code>.env</code>.</p>
+    <div class="field"><input id="ownerInput" placeholder="e.g. 123456789012345678" /></div>
+    <button class="primary" id="ownerBtn" style="width:100%">Unlock</button>
+    <div class="muted" id="ownerErr" style="margin-top:10px;color:var(--bad)"></div>
+  </div>
+</div>
+
+<div class="shell">
+  <header class="bar glass">
+    <div class="brand">
+      <div id="miniMascot" style="width:44px"></div>
+      <div><h1>YORU</h1><small>owner panel</small></div>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill"><span id="dotAgent" class="dot wait"></span><span id="agentText">connecting…</span></span>
+    <button class="ghost sm" id="signOut">Sign out</button>
+  </header>
+
+  <div class="glass" style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div class="tabs" id="tabs">
+      <button data-tab="discord" aria-pressed="true">Discord</button>
+      <button data-tab="guilds">Servers</button>
+      <button data-tab="providers">AI providers</button>
+      <button data-tab="commands">Commands</button>
+      <button data-tab="computer">Computer</button>
+      <button data-tab="lookups">Lookups</button>
+    </div>
+
+    <div class="panes">
+      <!-- ============ Discord ============ -->
+      <section class="pane active" data-pane="discord">
+        <h2 class="sec">Discord bot &amp; alt account</h2>
+        <div class="grid two">
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <div><strong>Bot</strong><div class="muted" id="botInfo">—</div></div>
+              <div class="row">
+                <button class="sm primary" data-action="bot:start">Start</button>
+                <button class="sm danger" data-action="bot:stop">Stop</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <div><strong>Alt account (selfbot)</strong><div class="muted" id="selfInfo">—</div></div>
+              <div class="row">
+                <button class="sm primary" data-action="self:start">Start</button>
+                <button class="sm danger" data-action="self:stop">Stop</button>
+              </div>
+            </div>
+            <div class="muted" style="margin-top:10px">Discord ToS discourages selfbots. Use an account you don't mind losing.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Guilds ============ -->
+      <section class="pane" data-pane="guilds">
+        <h2 class="sec">Per-server settings</h2>
+        <div class="muted" style="margin-bottom:10px">Prefix, admin/mod roles and AI auto-reply, saved per server.</div>
+        <div id="guilds"></div>
+      </section>
+
+      <!-- ============ Providers ============ -->
+      <section class="pane" data-pane="providers">
+        <h2 class="sec">AI provider routing</h2>
+        <div class="card">
+          <div class="grid two">
+            <div class="field"><label>Preferred provider</label>
+              <select id="preferred">
+                <option value="openrouter">OpenRouter (free models)</option>
+                <option value="ollama">Ollama (local)</option>
+                <option value="groq">Groq</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </div>
+            <div class="field"><label>Enabled providers</label>
+              <div class="checks" id="providerChecks"></div>
+            </div>
+          </div>
+          <button class="primary" id="saveProviders">Save routing</button>
+          <div id="providersOut" class="muted" style="margin-top:10px"></div>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0">Model pool</h3>
+          <button class="sm" id="refreshModels">Refresh</button>
+          <div id="modelsOut" style="margin-top:10px"></div>
+        </div>
+      </section>
+
+      <!-- ============ Commands ============ -->
+      <section class="pane" data-pane="commands">
+        <h2 class="sec">Command registry</h2>
+        <div class="row" style="margin-bottom:12px">
+          <input id="cmdSearch" placeholder="Search commands…" />
+          <span class="pill" id="cmdCount">— commands</span>
+        </div>
+        <div id="cmdList"></div>
+      </section>
+
+      <!-- ============ Computer ============ -->
+      <section class="pane" data-pane="computer">
+        <h2 class="sec">Computer control</h2>
+        <div class="grid two">
+          <div class="card">
+            <strong>System</strong>
+            <pre class="out" id="sysOut">—</pre>
+            <button class="sm" id="sysBtn">Refresh</button>
+          </div>
+          <div class="card">
+            <strong>Malware scan</strong>
+            <div class="muted">Uses ClamAV on Linux, Windows Defender on Windows.</div>
+            <button class="sm primary" id="scanBtn" style="margin-top:10px">Run scan</button>
+            <pre class="out" id="scanOut" style="margin-top:10px">Idle.</pre>
+          </div>
+        </div>
+        <div class="card">
+          <strong>Lockdown</strong>
+          <div class="muted">Encrypts the target folder with AES-256-GCM. Keep the key — it's the only way back.</div>
+          <div class="row" style="margin-top:10px">
+            <button class="sm danger" id="engageBtn">Engage lockdown</button>
+            <input id="releaseKey" placeholder="paste decryption key" />
+            <button class="sm primary" id="releaseBtn">Release</button>
+          </div>
+          <pre class="out" id="lockOut" style="margin-top:10px">—</pre>
+        </div>
+        <div class="card">
+          <strong>Files</strong>
+          <div class="row" style="margin:6px 0 10px">
+            <input id="fsPath" placeholder="/path/to/folder" />
+            <button class="sm" id="fsListBtn">List</button>
+          </div>
+          <pre class="out" id="fsOut">—</pre>
+        </div>
+      </section>
+
+      <!-- ============ Lookups ============ -->
+      <section class="pane" data-pane="lookups">
+        <h2 class="sec">Lookups</h2>
+        <div class="card">
+          <div class="muted">Drop PDF, CSV, TXT or JSON files into <code>agent/lookups/</code>. YORU scans every file for your query.</div>
+          <div id="lookupFiles" style="margin-top:10px"></div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:10px">
+            <input id="lookupQ" placeholder="Search across every lookup file…" />
+            <button class="sm primary" id="lookupBtn">Search</button>
+          </div>
+          <div id="lookupOut"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/assets/owner.js"></script>
+</body>
+</html>
