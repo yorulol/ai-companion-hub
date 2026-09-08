@@ -118,7 +118,7 @@ type Settings = {
 };
 
 function OwnerDashboard({ onLock }: { onLock: () => void }) {
-  const [tab, setTab] = useState<"overview" | "discord" | "servers" | "commands" | "models">("overview");
+  const [tab, setTab] = useState<"overview" | "discord" | "servers" | "commands" | "models" | "computer">("overview");
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [guilds, setGuilds] = useState<GuildConfig[]>([]);
@@ -143,7 +143,7 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
     setTimeout(() => setNote(null), 1800);
   }
 
-  const tabs = ["overview", "discord", "servers", "commands", "models"] as const;
+  const tabs = ["overview", "discord", "servers", "commands", "models", "computer"] as const;
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6">
@@ -298,6 +298,8 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
           </Card>
         </div>
       )}
+
+      {tab === "computer" && <ComputerTab />}
     </main>
   );
 }
