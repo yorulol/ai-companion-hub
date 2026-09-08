@@ -1,6 +1,6 @@
 /**
  * Lookups folder scanner. Put PDF / CSV / TXT / JSON files in agent/lookups/
- * and NOVA can search across all of them for a value (e.g. a username, ID,
+ * and YORU can search across all of them for a value (e.g. a username, ID,
  * email). Returns matching rows/lines with source file names.
  */
 import { promises as fs } from "node:fs";

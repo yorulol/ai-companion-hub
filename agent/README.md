@@ -1,4 +1,4 @@
-# NOVA agent — self-hosted AI service
+# YORU agent — self-hosted AI service
 
 Runs on your PC. Cross-platform: **Linux (Parrot / Debian / Ubuntu / Arch / etc.)**
 and **Windows 10 / 11**.
@@ -40,12 +40,12 @@ Getting updates later: `git pull`, then `npm install` in the root and in
 | **Discord bot**  | ~70 built-in commands, per-server prefix + admin/mod role gating. |
 | **Selfbot**      | Alt-account ping responder. AGAINST DISCORD ToS — use an alt.  |
 | **Computer tools** | System info, file create/read/move/delete, malware scan, encrypt-lockdown with decryption key. |
-| **Lookups**      | Drop PDF / CSV / TXT / JSON in `agent/lookups/`; ask NOVA to search across all of them. |
+| **Lookups**      | Drop PDF / CSV / TXT / JSON in `agent/lookups/`; ask YORU to search across all of them. |
 | **HTTP service** | Local API the web panels use (`http://localhost:8787`).        |
 
 ## Providers
 
-Enable any combination in `.env`. NOVA tries them in this order and only
+Enable any combination in `.env`. YORU tries them in this order and only
 skips a provider if that provider's `_ENABLED` flag is `false` or its key
 is missing:
 
@@ -60,7 +60,7 @@ is missing:
 
 - Master switch: `COMPUTER_CONTROL_ENABLED`.
 - File writes are sandboxed to `COMPUTER_CONTROL_ROOT` (your home folder by default).
-- To let NOVA reach anywhere on disk, set `COMPUTER_CONTROL_UNRESTRICTED=true`.
+- To let YORU reach anywhere on disk, set `COMPUTER_CONTROL_UNRESTRICTED=true`.
 - Destructive tools (`write_file`, `move_file`, `remove_file`, `lockdown_engage`,
   `lockdown_release`, `shell`) require an **owner** request — both DM/panel commands
   and Discord messages verify the requester's ID matches `OWNER_DISCORD_ID`.

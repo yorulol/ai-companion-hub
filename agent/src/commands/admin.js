@@ -1,5 +1,5 @@
 /**
- * Admin command module for NOVA. 28 commands for guild configuration, channel/role
+ * Admin command module for YORU. 28 commands for guild configuration, channel/role
  * management, announcements, autorole/welcome, backups and a settings panel.
  * Destructive actions confirm() first; a couple are locked to the bot owner.
  */

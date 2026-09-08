@@ -24,7 +24,7 @@ export const config = {
       enabled: bool(process.env.OPENROUTER_ENABLED, true),
       key: process.env.OPENROUTER_API_KEY || "",
       siteUrl: process.env.OPENROUTER_SITE_URL || "http://localhost:8787",
-      appName: process.env.OPENROUTER_APP_NAME || "NOVA Agent",
+      appName: process.env.OPENROUTER_APP_NAME || "YORU Agent",
       base: "https://openrouter.ai/api/v1",
     },
     ollama: {

@@ -1,5 +1,5 @@
 /**
- * NOVA leveling commands — XP-based rank cards, leaderboards, level-role
+ * YORU leveling commands — XP-based rank cards, leaderboards, level-role
  * announcements and admin tools. XP is stored via db.js; level-role config,
  * weekly counters and guild settings live in module-level Maps.
  */
@@ -210,13 +210,13 @@ add({
 
 // ------------------------------------------------------------ 11. xpcurve
 add({
-  name: "xpcurve", category: "levels", description: "Explains the XP-to-level math NOVA uses.", usage: "xpcurve", permission: "everyone", aliases: ["curve"],
+  name: "xpcurve", category: "levels", description: "Explains the XP-to-level math YORU uses.", usage: "xpcurve", permission: "everyone", aliases: ["curve"],
   run: async ({ message }) => {
     const sample = [1, 5, 10, 20, 50].map((l) => `Level **${l}** requires **${fmt(xpForLevel(l))}** XP`).join("\n");
     return message.reply({
       embeds: [embed({
         title: "📐 XP Curve",
-        description: `NOVA computes your level as:\n\`level = floor(0.1 * sqrt(xp))\`\n\nWhich inverts to:\n\`xp required = (level * 10)²\`\n\nThis means level requirements grow quadratically — climbing early levels is fast, later ones take much longer.\n\n**Examples:**\n${sample}`,
+        description: `YORU computes your level as:\n\`level = floor(0.1 * sqrt(xp))\`\n\nWhich inverts to:\n\`xp required = (level * 10)²\`\n\nThis means level requirements grow quadratically — climbing early levels is fast, later ones take much longer.\n\n**Examples:**\n${sample}`,
         color: COLORS.info,
       })],
     });
@@ -231,7 +231,7 @@ add({
     const rows = [...m.entries()].sort((a, b) => b[1] - a[1]);
     const medals = ["🥇", "🥈", "🥉"];
     const lines = rows.map(([id, xp], i) => `${medals[i] || `#${i + 1}`} <@${id}> — **${fmt(xp)} XP** this week`);
-    const pages = listPages(lines, { title: "📅 Weekly XP Leaderboard", perPage: 10, footer: "Resets when NOVA restarts or via admin tools" });
+    const pages = listPages(lines, { title: "📅 Weekly XP Leaderboard", perPage: 10, footer: "Resets when YORU restarts or via admin tools" });
     await paginate(message, pages);
   },
 });

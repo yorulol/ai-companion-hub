@@ -1,5 +1,5 @@
 /**
- * Agent tools. NOVA can call these by emitting a fenced JSON block in a reply:
+ * Agent tools. YORU can call these by emitting a fenced JSON block in a reply:
  *
  *   ```tool
  *   { "tool": "list_dir", "args": { "path": "~/Documents" } }

@@ -7,7 +7,7 @@ Drop any of these file types in here:
 - `.txt` / `.log`
 - `.json`
 
-Then ask NOVA anywhere ("do a lookup on jane@example.com", `!lookup 123456789`,
+Then ask YORU anywhere ("do a lookup on jane@example.com", `!lookup 123456789`,
 or the Owner Panel → Computer tab) and it scans every file for matches,
 returning the row / line and the source file.
 

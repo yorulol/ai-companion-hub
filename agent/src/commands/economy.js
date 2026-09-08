@@ -1,5 +1,5 @@
 /**
- * NOVA economy commands — a full coin economy with jobs, gathering, gambling,
+ * YORU economy commands — a full coin economy with jobs, gathering, gambling,
  * a shop, a bank, a lottery and leaderboards. Balances persist via db.js;
  * everything else (inventories, bank, cooldowns, shop, lottery) lives in
  * module-level Maps so we never touch the shared schema.
@@ -349,7 +349,7 @@ add({
   run: async ({ message }) => {
     const options = Object.entries(ITEMS).map(([id, it]) => ({ label: `${it.name} — ${fmt(it.price)} coins`, value: id, description: it.desc, emoji: it.emoji }));
     const desc = Object.entries(ITEMS).map(([id, it]) => `${it.emoji} **${it.name}** — ${fmt(it.price)} ${EMOJI.coin}\n_${it.desc}_`).join("\n\n");
-    const e = embed({ title: "🛒 NOVA Shop", description: desc, color: COLORS.brand, footer: "Select an item below to purchase it" });
+    const e = embed({ title: "🛒 YORU Shop", description: desc, color: COLORS.brand, footer: "Select an item below to purchase it" });
     const sent = await message.reply({ embeds: [e], components: [row(select({ id: "shop:pick", placeholder: "Choose an item to buy", options }))] });
     const cl = sent.createMessageComponentCollector({ time: 60_000, max: 1 });
     cl.on("collect", async (int) => {
