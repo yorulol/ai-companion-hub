@@ -192,26 +192,19 @@ add({
 
 // ----------------------------------------------------- 9. levelup-message
 add({
-  name: "levelup-message", category: "levels", description: "Toggle level-up announcement messages.", usage: "levelup-message <on|off>", permission: "admin", aliases: ["lvlup-toggle"],
+  name: "levelup-message", category: "levels", description: "Toggle level-up announcements or set their channel.", usage: "levelup-message <on|off> | levelup-message channel [#channel]", permission: "admin", aliases: ["lvlup-toggle", "levelup-channel"],
   run: async ({ message, args }) => {
     if (!message.member.permissions.has("Administrator")) return message.reply({ embeds: [errEmbed("No permission", "You need Administrator to do this.")] });
     const s = getSettings(message.guild.id);
-    const choice = (args[0] || "").toLowerCase();
-    if (!["on", "off"].includes(choice)) return message.reply({ embeds: [errEmbed("Invalid usage", "Usage: `levelup-message <on|off>`")] });
-    s.announce = choice === "on";
+    const sub = (args[0] || "").toLowerCase();
+    if (sub === "channel") {
+      const channel = message.mentions.channels.first();
+      s.channelId = channel ? channel.id : null;
+      return message.reply({ embeds: [okEmbed("Updated", channel ? `Level-up messages will be sent in ${channel}.` : "Level-up messages will be sent in the channel where they're triggered.")] });
+    }
+    if (!["on", "off"].includes(sub)) return message.reply({ embeds: [errEmbed("Invalid usage", "Usage: `levelup-message <on|off>` or `levelup-message channel [#channel]`")] });
+    s.announce = sub === "on";
     return message.reply({ embeds: [okEmbed("Updated", `Level-up announcements are now **${s.announce ? "enabled" : "disabled"}**.`)] });
-  },
-});
-
-// -------------------------------------------------------- 10. levelup-channel
-add({
-  name: "levelup-channel", category: "levels", description: "Set the channel level-up messages are sent to.", usage: "levelup-channel [#channel]", permission: "admin", aliases: ["lvlup-channel"],
-  run: async ({ message }) => {
-    if (!message.member.permissions.has("Administrator")) return message.reply({ embeds: [errEmbed("No permission", "You need Administrator to do this.")] });
-    const s = getSettings(message.guild.id);
-    const channel = message.mentions.channels.first();
-    s.channelId = channel ? channel.id : null;
-    return message.reply({ embeds: [okEmbed("Updated", channel ? `Level-up messages will be sent in ${channel}.` : "Level-up messages will be sent in the channel where they're triggered.")] });
   },
 });
 
