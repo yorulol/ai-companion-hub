@@ -1,19 +1,36 @@
 # NOVA agent — self-hosted AI service
 
-Runs on your PC. Powers the two web panels (chat + owner) at http://localhost:8787.
-Cross-platform: **Linux (Parrot / Debian / Ubuntu / Arch / etc.)** and **Windows 10 / 11**.
+Runs on your PC. Cross-platform: **Linux (Parrot / Debian / Ubuntu / Arch / etc.)**
+and **Windows 10 / 11**.
 
-## Setup (one-time)
+## Setup
 
 ```bash
+# terminal 1 — the web interface
+npm install
+npm run dev            # serves the UI on http://localhost:8080
+
+# terminal 2 — the agent
 cd agent
-cp .env.example .env    # fill in what you use
+cp .env.example .env   # fill in what you use
 npm install
 npm start
 ```
 
-That's it. The panels here in Lovable — and the same panels loaded via
-`http://localhost:8787` — both talk to this service.
+## Addresses
+
+| Address                 | What it is                                   |
+| ----------------------- | -------------------------------------------- |
+| http://localhost:8788   | **Chat panel** — talk to your AI agent        |
+| http://localhost:8789   | **Owner panel** — Discord bot + owner controls |
+| http://localhost:8787   | Agent API (the panels use it for you)         |
+
+Each panel is its own port and only shows its own screen — the owner page is
+blocked on the chat port. Change the ports with `CHAT_PANEL_PORT` /
+`OWNER_PANEL_PORT` in `.env`, or turn the panels off with `PANELS_ENABLED=false`.
+
+Getting updates later: `git pull`, then `npm install` in the root and in
+`agent/` if dependencies changed, and restart both terminals.
 
 ## What's inside
 
