@@ -6,9 +6,6 @@ import {
   getOwnerId,
   setOwnerId,
   clearOwnerId,
-  getBaseUrl,
-  setBaseUrl,
-  DEFAULT_BASE,
   type GuildConfig,
   type CommandInfo,
   type HealthInfo,
@@ -39,11 +36,9 @@ function OwnerPanel() {
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [idInput, setIdInput] = useState("");
-  const [base, setBase] = useState(DEFAULT_BASE);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setBase(getBaseUrl());
     const id = getOwnerId();
     if (!id) {
       setChecking(false);
@@ -58,7 +53,6 @@ function OwnerPanel() {
 
   async function unlock() {
     setError(null);
-    setBaseUrl(base);
     const ok = await api.verifyOwner(idInput.trim()).catch(() => false);
     if (!ok) {
       setError("That Discord ID does not match the owner ID in your .env file (or the agent is offline).");

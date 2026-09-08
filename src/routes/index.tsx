@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { RobotMascot } from "@/components/RobotMascot";
-import { api, getBaseUrl, setBaseUrl, DEFAULT_BASE, type ChatMessage, type HealthInfo } from "@/lib/agent-client";
+import { api, type ChatMessage, type HealthInfo } from "@/lib/agent-client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -31,13 +31,11 @@ function ChatPanel() {
   const [busy, setBusy] = useState(false);
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [base, setBase] = useState(DEFAULT_BASE);
   const [lastRoute, setLastRoute] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    setBase(getBaseUrl());
     let alive = true;
     const ping = () =>
       api
@@ -45,7 +43,7 @@ function ChatPanel() {
         .then((h) => alive && setHealth(h))
         .catch(() => alive && setHealth(null));
     ping();
-    const t = setInterval(ping, 10000);
+    const t = setInterval(ping, 5000);
     return () => {
       alive = false;
       clearInterval(t);
@@ -109,28 +107,16 @@ function ChatPanel() {
       </header>
 
       {!online && (
-        <div className="panel space-y-3 p-4">
-          <p className="text-sm text-muted-foreground">
-            Start the agent on your computer, then set its address below. See{" "}
-            <span className="font-mono text-xs">agent/README.md</span> for the two commands.
+        <div className="panel space-y-2 p-4 text-sm text-muted-foreground">
+          <p>
+            <span className="font-semibold text-foreground">Agent offline.</span> Start it on your
+            computer and this panel will connect automatically.
           </p>
-          <div className="flex gap-2">
-            <input
-              value={base}
-              onChange={(e) => setBase(e.target.value)}
-              className="flex-1 rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
-              placeholder={DEFAULT_BASE}
-            />
-            <button
-              onClick={() => {
-                setBaseUrl(base);
-                api.health().then(setHealth).catch(() => setHealth(null));
-              }}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-            >
-              Connect
-            </button>
-          </div>
+          <pre className="overflow-x-auto rounded-lg bg-secondary/60 px-3 py-2 font-mono text-xs">
+{`cd agent
+npm install   # first time only
+npm run yoru`}
+          </pre>
         </div>
       )}
 
