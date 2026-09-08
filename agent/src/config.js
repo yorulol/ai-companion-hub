@@ -11,6 +11,13 @@ export const config = {
   port: Number(process.env.PORT || 8787),
   allowedOrigins: (process.env.ALLOWED_ORIGINS || "*").split(",").map((s) => s.trim()),
 
+  panels: {
+    enabled: bool(process.env.PANELS_ENABLED, true),
+    chatPort: Number(process.env.CHAT_PANEL_PORT || 8788),
+    ownerPort: Number(process.env.OWNER_PANEL_PORT || 8789),
+    siteUrl: (process.env.SITE_URL || "http://localhost:8080").replace(/\/$/, ""),
+  },
+
   providers: {
     preferred: (process.env.PREFERRED_PROVIDER || "openrouter").toLowerCase(),
     openrouter: {

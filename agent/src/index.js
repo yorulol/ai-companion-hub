@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { startServer } from "./server.js";
+import { startPanels } from "./panels.js";
 import { startBot } from "./bot.js";
 import { startSelfbot } from "./selfbot.js";
 import { refreshModels } from "./ai.js";
@@ -13,6 +14,7 @@ console.log(`  ╚════════════════════�
 if (!config.ownerId) console.warn("⚠️  OWNER_DISCORD_ID not set — the owner panel will refuse to unlock.\n");
 
 startServer();
+startPanels();
 refreshModels(true).catch(() => {});
 
 if (config.discord.botAutostart && config.discord.botToken) {
