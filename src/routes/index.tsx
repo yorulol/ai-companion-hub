@@ -69,7 +69,7 @@ function ChatPanel() {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.chat(next, mode);
+      const res = await api.chat(text, mode, "panel:main");
       setMessages([...next, { role: "assistant", content: res.reply }]);
       setLastRoute(`${res.provider} · ${res.model}`);
     } catch (e) {
