@@ -1,6 +1,6 @@
 /** Tiny HTTP service the web panels talk to. No framework — plain node:http. */
 import http from "node:http";
-import { config } from "./config.js";
+import { config, isOwnerId } from "./config.js";
 import { ask, providerStatus, refreshModels, knownModels, ollamaModels } from "./ai.js";
 import { chat } from "./chat-loop.js";
 import { getSettings, setSettings, allGuilds, getGuild, saveGuild } from "./db.js";
@@ -22,7 +22,7 @@ const corsOrigin = () => (config.allowedOrigins.includes("*") ? "*" : config.all
 const requireOwner = (req) => {
   const id = req.headers["x-owner-id"];
   if (!config.ownerId) throw new Error("OWNER_DISCORD_ID not set in .env");
-  if (id !== config.ownerId) throw new Error("Not the owner.");
+  if (!isOwnerId(id)) throw new Error("Not the owner.");
 };
 
 async function readBody(req) {
@@ -48,7 +48,7 @@ const ROUTES = {
   "POST /api/chat": async (req) => {
     const body = await readBody(req);
     const scope = body.scope || `panel:${req.socket.remoteAddress}`;
-    const isOwner = req.headers["x-owner-id"] === config.ownerId;
+    const isOwner = isOwnerId(req.headers["x-owner-id"]);
     if (body.userText) {
       return await chat({ scope, userText: body.userText, mode: body.mode || "general", isOwner });
     }

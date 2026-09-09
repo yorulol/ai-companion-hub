@@ -1,5 +1,5 @@
 import { PermissionsBitField } from "discord.js";
-import { config } from "./config.js";
+import { config, isOwnerId } from "./config.js";
 
 export const LEVELS = { everyone: 0, mod: 1, admin: 2, owner: 3 };
 
@@ -10,7 +10,7 @@ export const LEVELS = { everyone: 0, mod: 1, admin: 2, owner: 3 };
 export function canRun(member, guildConfig, permission) {
   if (permission === "everyone") return true;
   if (!member) return false;
-  if (member.id === config.ownerId) return true;
+  if (isOwnerId(member.id)) return true;
   if (member.guild?.ownerId === member.id) return true;
 
   const roleIds = member.roles?.cache ? [...member.roles.cache.keys()] : [];

@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
-import { config } from "./config.js";
+import { config, isOwnerId } from "./config.js";
 import { COMMANDS, findCommand, commandSummary } from "./commands.js";
 import { canRun } from "./permissions.js";
 import { getGuild, getAfk, clearAfk, addXp } from "./db.js";
@@ -49,7 +49,7 @@ export async function startBot() {
         const text = message.content.replace(/<@!?\d+>/g, "").trim();
         if (text) {
           await message.channel.sendTyping();
-          const isOwner = message.author.id === config.ownerId;
+          const isOwner = isOwnerId(message.author.id);
           const { reply } = await chat({ scope: `g:${message.channel.id}:${message.author.id}`, userText: text, isOwner });
           return void message.reply(reply.slice(0, 1990));
         }
@@ -64,7 +64,7 @@ export async function startBot() {
       }
 
       const member = await message.guild.members.fetch(message.author.id).catch(() => null);
-      const isOwner = message.author.id === config.ownerId;
+      const isOwner = isOwnerId(message.author.id);
       if (!isOwner && !canRun(member, guildCfg, cmd.permission)) {
         return void message.reply({
           embeds: [errEmbed("Not allowed", `\`${cmd.name}\` needs **${cmd.permission}** permission.`)],
