@@ -2,7 +2,7 @@
  * Personal-account responder. Loads discord.js-selfbot-v13 lazily so the main
  * bot works even if the package fails to install. AGAINST DISCORD ToS.
  */
-import { config } from "./config.js";
+import { config, isOwnerId } from "./config.js";
 import { chat } from "./chat-loop.js";
 
 let client = null;
