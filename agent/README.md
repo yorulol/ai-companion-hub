@@ -6,6 +6,15 @@ frontend build, no Lovable, no extra terminals.
 
 ## Setup (standalone)
 
+### Install from npm
+
+```bash
+npm install -g yoru
+yoru
+```
+
+### Or install from the repo folder
+
 ```bash
 cd agent
 cp .env.example .env       # fill in what you use
@@ -18,7 +27,7 @@ both web panels — all as one process, behind a colored terminal dashboard
 with an animated robot mascot.
 
 > `npm run yoru` is the canonical command. `npm start` still works as an
-> alias. If you `npm link` (or install the folder globally) you can just
+> alias. Once installed globally with `npm install -g yoru` you can just
 > type `yoru` from any shell.
 
 ## Addresses
