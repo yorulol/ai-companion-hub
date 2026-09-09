@@ -6,8 +6,17 @@ const bool = (v, fallback = false) =>
 
 const homeDir = os.homedir();
 
+const ownerIds = [
+  ...(process.env.OWNER_DISCORD_ID || "").split(","),
+  ...(process.env.OWNER_DISCORD_IDS || "").split(","),
+].map((s) => s.trim()).filter(Boolean);
+
+export const isOwnerId = (id) => !!id && ownerIds.includes(String(id));
+
 export const config = {
-  ownerId: process.env.OWNER_DISCORD_ID || "",
+  ownerId: ownerIds[0] || "",
+  ownerIds,
+
   port: Number(process.env.PORT || 8787),
   allowedOrigins: (process.env.ALLOWED_ORIGINS || "*").split(",").map((s) => s.trim()),
 
