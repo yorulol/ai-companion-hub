@@ -24,7 +24,7 @@ export async function startSelfbot() {
       if (!message.mentions.has(client.user)) return;
       const text = message.content.replace(/<@!?\d+>/g, "").trim();
       if (!text) return;
-      const isOwner = message.author.id === config.ownerId;
+      const isOwner = isOwnerId(message.author.id);
       const { reply } = await chat({ scope: `s:${message.channelId}:${message.author.id}`, userText: text, isOwner });
       await message.reply(reply.slice(0, 1900));
     } catch (err) {
