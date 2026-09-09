@@ -125,7 +125,7 @@ export function scanForMalware({ onLine } = {}) {
 
 // ---- Lockdown: encrypt a folder with AES-256-GCM ----
 
-const KEY_DIR = path.join(os.homedir(), ".yoru-agent");
+const KEY_DIR = path.join(os.homedir(), ".yoru");
 const LOCK_STATE = path.join(KEY_DIR, "lockdown.json");
 
 async function walk(dir, out = []) {
