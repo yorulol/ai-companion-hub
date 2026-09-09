@@ -10,24 +10,54 @@ const add = (c) => commands.push(c);
 
 // ================= HELP =================
 add({ name: "help", category: "info", description: "Interactive command browser.", usage: "help", permission: "everyone",
-  run: async ({ message, guildCfg }) => {
+  run: async ({ message, guildCfg, isOwner }) => {
     const { COMMANDS } = await import("../commands.js").catch(() => ({ COMMANDS: [] }));
-    const all = COMMANDS.length ? COMMANDS : [];
+    const { isOwnerId } = await import("../config.js");
+    const owner = isOwner || isOwnerId(message.author.id);
+    const all = (COMMANDS.length ? COMMANDS : []).filter(
+      (c) => owner || (c.category !== "owner" && c.permission !== "owner"),
+    );
     const cats = [...new Set(all.map((c) => c.category))];
     if (!cats.length) return message.reply({ embeds: [warnEmbed("No commands loaded", "Command registry is empty.")] });
+
     const menu = select({ id: "help:cat", placeholder: "Choose a category…", options: cats.map((c) => ({ label: c, value: c })) });
     const intro = embed({ title: "🧭 YORU help", description: `Prefix: \`${guildCfg?.prefix ?? "!"}\`\n${all.length} commands across ${cats.length} categories.\nPick a category below to browse.` });
     const sent = await message.reply({ embeds: [intro], components: [row(menu)] });
-    const collector = sent.createMessageComponentCollector({ time: 120_000 });
+
+    let pages = [];
+    let i = 0;
+    const nav = () => row(
+      button({ id: "help:first", emoji: "⏮️", disabled: i === 0 }),
+      button({ id: "help:prev", emoji: "◀️", disabled: i === 0 }),
+      button({ id: "help:page", label: `${i + 1}/${pages.length}`, style: "primary", disabled: true }),
+      button({ id: "help:next", emoji: "▶️", disabled: i >= pages.length - 1 }),
+      button({ id: "help:home", emoji: "🏠", style: "secondary" }),
+    );
+    const view = () => (pages.length > 1 ? [row(menu), nav()] : [row(menu)]);
+
+    const collector = sent.createMessageComponentCollector({ time: 300_000 });
     collector.on("collect", async (int) => {
       if (int.user.id !== message.author.id) return int.reply({ content: "Not your menu.", ephemeral: true }).catch(() => {});
-      const cat = int.values[0];
-      const list = all.filter((c) => c.category === cat);
-      const pages = listPages(list.map((c) => `\`${c.usage || c.name}\` — ${c.description}`), { title: `📂 ${cat} (${list.length})` });
-      await int.update({ embeds: [pages[0]], components: [row(menu)] }).catch(() => {});
+      if (int.isStringSelectMenu()) {
+        const cat = int.values[0];
+        const list = all.filter((c) => c.category === cat);
+        pages = listPages(list.map((c) => `\`${c.usage || c.name}\` — ${c.description}`), { title: `📂 ${cat} (${list.length})` });
+        i = 0;
+        return void int.update({ embeds: [pages[0]], components: view() }).catch(() => {});
+      }
+      if (int.customId === "help:home") {
+        pages = []; i = 0;
+        return void int.update({ embeds: [intro], components: [row(menu)] }).catch(() => {});
+      }
+      if (!pages.length) return void int.deferUpdate().catch(() => {});
+      if (int.customId === "help:first") i = 0;
+      if (int.customId === "help:prev") i = Math.max(0, i - 1);
+      if (int.customId === "help:next") i = Math.min(pages.length - 1, i + 1);
+      await int.update({ embeds: [pages[i]], components: view() }).catch(() => {});
     });
     collector.on("end", () => sent.edit({ components: [] }).catch(() => {}));
   } });
+
 
 add({ name: "commands", category: "info", description: "Show a command count breakdown by category.", usage: "commands", permission: "everyone",
   run: async ({ message }) => {
