@@ -115,11 +115,14 @@ export const api = {
     request<{ query: string; files: number; matches: { file: string; hits?: unknown[]; error?: string }[] }>("/api/owner/lookup", {
       method: "POST", owner: true, body: JSON.stringify({ query }),
     }),
-  // ---- Email Forward ----
-  emailForward: (email: string, op: string = "analyze") =>
-    request<{ op: string; result: unknown }>("/api/email-forward", { method: "POST", body: JSON.stringify({ email, op }) }),
-  emailForwardOps: () =>
-    request<{ ops: string[]; enabled: boolean }>("/api/email-forward/ops"),
+  // ---- Mail Forwarding (mail.thc.org) ----
+  mailFwd: <T = unknown>(op: string, args: Record<string, unknown> = {}) =>
+    request<{ op: string; result: T }>("/api/email-forward", {
+      method: "POST",
+      body: JSON.stringify({ op, ...args }),
+    }),
+  mailFwdOps: () =>
+    request<{ ops: string[]; enabled: boolean; hasKey: boolean; base: string }>("/api/email-forward/ops"),
   // ---- Owner activity feed ----
   activity: (since: number = 0) =>
     request<{ events: { id: number; kind: string; message: string; meta: unknown; at: string }[] }>(
