@@ -1,8 +1,7 @@
-import { api, particles, MASCOT, render, toast } from "./common.js";
+import { api, particles, MASCOT, render, toast, esc } from "./common.js";
 
 particles(document.getElementById("particles"));
 document.getElementById("mascotBig").innerHTML = MASCOT;
-document.getElementById("miniMascot").innerHTML = MASCOT;
 
 const messages = document.getElementById("messages");
 const input = document.getElementById("input");
@@ -14,13 +13,7 @@ const SCOPE = "panel:" + (localStorage.getItem("yoru.scope") || (() => {
   return s;
 })());
 
-let mode = "general";
-document.querySelectorAll(".modes button").forEach((b) =>
-  b.addEventListener("click", () => {
-    mode = b.dataset.mode;
-    document.querySelectorAll(".modes button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-  }),
-);
+const mode = "general";
 
 function bubble(who, text, tools) {
   const el = document.createElement("div");
@@ -117,3 +110,54 @@ setInterval(health, 15000);
     link.classList.add("hidden");
   }
 })();
+
+/* ---------- provider popover ---------- */
+const pill = document.getElementById("pillProvider");
+const pop = document.getElementById("providerPop");
+const PROVIDERS = [
+  ["openrouterEnabled", "OpenRouter", "free models, auto-rotated"],
+  ["ollamaEnabled", "Ollama", "local backup"],
+  ["openaiEnabled", "OpenAI"],
+  ["anthropicEnabled", "Anthropic"],
+  ["groqEnabled", "Groq"],
+  ["openclawEnabled", "OpenClaw"],
+];
+
+async function renderProviders() {
+  pop.innerHTML = `<div class="muted" style="margin-bottom:8px">Loading…</div>`;
+  try {
+    const s = await api("/api/owner/settings");
+    const p = s.provider || {};
+    pop.innerHTML = `
+      <div style="font-weight:600;margin-bottom:8px">AI providers</div>
+      ${PROVIDERS.map(([k, name, note]) => `
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
+          <input type="checkbox" data-k="${k}" ${p[k] ? "checked" : ""}/>
+          <span style="flex:1"><strong>${name}</strong>${note ? ` <span class="muted" style="font-size:.85em">· ${esc(note)}</span>` : ""}</span>
+        </label>`).join("")}
+      <div class="muted" style="font-size:.8em;margin-top:8px">Toggles persist in the agent DB. API keys still come from your <code>.env</code>.</div>`;
+    pop.querySelectorAll("input[data-k]").forEach((i) => {
+      i.addEventListener("change", async () => {
+        const patch = { provider: { [i.dataset.k]: i.checked } };
+        try { await api("/api/owner/settings", { method: "POST", body: patch }); toast("Saved."); }
+        catch (err) { toast(err.message); i.checked = !i.checked; }
+      });
+    });
+  } catch (err) {
+    pop.innerHTML = `<div class="muted">Owner login required to change providers. <a href="#" id="popOwner">Open owner panel →</a></div>`;
+    pop.querySelector("#popOwner")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      document.getElementById("ownerLink")?.click();
+    });
+  }
+}
+
+pill.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const showing = !pop.classList.contains("hidden");
+  pop.classList.toggle("hidden", showing);
+  if (!showing) renderProviders();
+});
+document.addEventListener("click", (e) => {
+  if (!pop.contains(e.target) && e.target !== pill) pop.classList.add("hidden");
+});

@@ -13,7 +13,6 @@
 <div class="shell">
   <header class="bar glass">
     <div class="brand">
-      <div id="miniMascot" style="width:44px"></div>
       <div>
         <h1>YORU</h1>
         <small>self-hosted agent</small>
@@ -21,7 +20,8 @@
     </div>
     <div class="spacer"></div>
     <span class="pill"><span id="dotAgent" class="dot wait"></span><span id="agentText">connecting…</span></span>
-    <span class="pill" id="pillProvider">provider —</span>
+    <button class="pill" id="pillProvider" type="button" style="cursor:pointer;border:0;background:transparent;color:inherit;font:inherit">provider —</button>
+    <div id="providerPop" class="glass hidden" style="position:absolute;right:16px;top:64px;padding:14px;min-width:260px;z-index:50;border-radius:14px"></div>
   </header>
 
   <div class="chat-wrap">
@@ -38,11 +38,7 @@
     </aside>
 
     <main class="stream glass">
-      <div class="row" style="justify-content:space-between;margin-bottom:12px">
-        <div class="modes">
-          <button data-mode="general" aria-pressed="true">General</button>
-          <button data-mode="coding" aria-pressed="false">Coding</button>
-        </div>
+      <div class="row" style="justify-content:flex-end;margin-bottom:12px">
         <a class="btn sm" href="#" id="ownerLink" style="text-decoration:none">Owner panel</a>
       </div>
       <div class="messages" id="messages"></div>

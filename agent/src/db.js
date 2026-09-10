@@ -67,6 +67,11 @@ CREATE TABLE IF NOT EXISTS levels (
   xp INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (guild_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS lookup_whitelist (
+  value TEXT PRIMARY KEY,
+  note TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
 `);
 
 const DEFAULT_SETTINGS = {
@@ -198,3 +203,29 @@ export const getXp = (guild_id, user_id) =>
   db.prepare("SELECT xp FROM levels WHERE guild_id = ? AND user_id = ?").get(guild_id, user_id)?.xp || 0;
 export const topXp = (guild_id, limit = 10) =>
   db.prepare("SELECT user_id, xp FROM levels WHERE guild_id = ? ORDER BY xp DESC LIMIT ?").all(guild_id, limit);
+
+// lookup whitelist — IDs/usernames that must never appear in lookup results
+export const listLookupWhitelist = () =>
+  db.prepare("SELECT value, note, created_at FROM lookup_whitelist ORDER BY created_at DESC").all();
+export const addLookupWhitelist = (value, note = "") => {
+  const v = String(value || "").trim().toLowerCase();
+  if (!v) throw new Error("Empty whitelist value.");
+  db.prepare("INSERT OR REPLACE INTO lookup_whitelist (value, note, created_at) VALUES (?, ?, ?)")
+    .run(v, note, Date.now());
+  return { value: v, note };
+};
+export const removeLookupWhitelist = (value) =>
+  db.prepare("DELETE FROM lookup_whitelist WHERE value = ?").run(String(value || "").trim().toLowerCase());
+export const isLookupWhitelisted = (query) => {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return false;
+  return !!db.prepare("SELECT 1 FROM lookup_whitelist WHERE value = ?").get(q);
+};
+/** Given raw text of matched rows, returns the first whitelisted value found in it, or null. */
+export const findWhitelistHit = (haystack) => {
+  const s = String(haystack || "").toLowerCase();
+  if (!s) return null;
+  const rows = db.prepare("SELECT value FROM lookup_whitelist").all();
+  for (const { value } of rows) if (s.includes(value)) return value;
+  return null;
+};

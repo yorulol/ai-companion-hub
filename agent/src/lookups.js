@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { isLookupWhitelisted, findWhitelistHit } from "./db.js";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,11 @@ async function readPdf(file) {
  */
 export async function lookup(query, { limitPerFile = 25 } = {}) {
   if (!query || query.length < 2) throw new Error("Query must be at least 2 characters.");
+  if (isLookupWhitelisted(query)) {
+    const err = new Error(`"${query}" is whitelisted and cannot be looked up.`);
+    err.whitelisted = true;
+    throw err;
+  }
   const files = await listLookupFiles();
   const needle = query.toLowerCase();
   const results = [];
@@ -114,7 +120,19 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
           }
         }
       }
-      if (hits.length) results.push({ file: name, hits });
+      if (hits.length) {
+        // Filter out any hit that touches a whitelisted value.
+        const filtered = [];
+        let whitelistedCount = 0;
+        for (const h of hits) {
+          const blob = JSON.stringify(h);
+          const w = findWhitelistHit(blob);
+          if (w) { whitelistedCount++; continue; }
+          filtered.push(h);
+        }
+        if (filtered.length) results.push({ file: name, hits: filtered, whitelistedRemoved: whitelistedCount });
+        else if (whitelistedCount) results.push({ file: name, hits: [], whitelistedRemoved: whitelistedCount });
+      }
     } catch (err) {
       results.push({ file: name, error: err.message });
     }

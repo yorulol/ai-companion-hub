@@ -158,7 +158,7 @@ export async function ask({ messages, mode = "general" }) {
   };
 
   tryProvider(P.preferred);
-  ["openrouter", "groq", "openai", "anthropic", "ollama"].forEach(tryProvider);
+  ["openrouter", "groq", "openai", "anthropic", "openclaw", "ollama"].forEach(tryProvider);
 
   const errors = [];
   for (const name of attempts) {
@@ -194,6 +194,10 @@ export async function ask({ messages, mode = "general" }) {
       if (name === "anthropic" && cfg.key) {
         const reply = await callAnthropic(cfg.model, full);
         return { reply, provider: "anthropic", model: cfg.model };
+      }
+      if (name === "openclaw") {
+        const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);
+        return { reply, provider: "openclaw", model: cfg.model };
       }
       if (name === "ollama") {
         return await callOllama(full, mode);
