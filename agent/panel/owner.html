@@ -168,6 +168,78 @@
           <div id="lookupOut"></div>
         </div>
       </section>
+
+      <!-- ============ Automation ============ -->
+      <section class="pane" data-pane="automation">
+        <h2 class="sec">Server automation</h2>
+        <div class="card">
+          <div class="field"><label>Server</label><select id="autoGuild"></select></div>
+          <div class="tabs" style="padding:0;margin-bottom:12px">
+            <button class="sm" data-sub="custom" aria-pressed="true">Custom commands</button>
+            <button class="sm" data-sub="auto">Auto-responder</button>
+            <button class="sm" data-sub="welcome">Welcome / Goodbye</button>
+            <button class="sm" data-sub="react">Reaction roles</button>
+          </div>
+          <div data-subpane="custom">
+            <div class="grid two">
+              <div class="field"><label>Command name</label><input id="ccName" placeholder="rules"/></div>
+              <div class="field"><label>Response text</label><input id="ccContent" placeholder="Server rules: be cool"/></div>
+            </div>
+            <button class="sm primary" id="ccAdd">Add / update</button>
+            <div id="ccList" style="margin-top:12px"></div>
+          </div>
+          <div data-subpane="auto" class="hidden">
+            <div class="grid two">
+              <div class="field"><label>Trigger word/phrase</label><input id="arTrigger" placeholder="hello"/></div>
+              <div class="field"><label>Response</label><input id="arResponse" placeholder="Hey there!"/></div>
+            </div>
+            <button class="sm primary" id="arAdd">Add / update</button>
+            <div id="arList" style="margin-top:12px"></div>
+          </div>
+          <div data-subpane="welcome" class="hidden">
+            <div class="grid two">
+              <div class="field"><label>Welcome channel ID</label><input id="wcChannel" placeholder="123456789"/></div>
+              <div class="field"><label>Welcome message</label><input id="wcMessage" value="Welcome {user} to {server}!"/></div>
+              <div class="field"><label>Goodbye channel ID</label><input id="wcGoodbyeChannel" placeholder="123456789"/></div>
+              <div class="field"><label>Goodbye message</label><input id="wcGoodbyeMessage" value="{user} left {server}."/></div>
+            </div>
+            <button class="sm primary" id="wcSave">Save</button>
+            <div class="muted" style="margin-top:8px">Variables: <code>{user}</code>, <code>{username}</code>, <code>{server}</code>, <code>{count}</code></div>
+          </div>
+          <div data-subpane="react" class="hidden">
+            <div class="grid two">
+              <div class="field"><label>Message ID</label><input id="rrMessage" placeholder="message id"/></div>
+              <div class="field"><label>Emoji</label><input id="rrEmoji" placeholder="🎮"/></div>
+              <div class="field"><label>Role ID</label><input id="rrRole" placeholder="role id"/></div>
+            </div>
+            <button class="sm primary" id="rrAdd">Add mapping</button>
+            <div id="rrList" style="margin-top:12px"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Alt account ============ -->
+      <section class="pane" data-pane="alt">
+        <h2 class="sec">Alt account servers</h2>
+        <div class="card">
+          <div id="altStatus" class="muted">Loading…</div>
+          <div id="altGuilds" style="margin-top:12px"></div>
+        </div>
+      </section>
+
+      <!-- ============ Whitelist ============ -->
+      <section class="pane" data-pane="whitelist">
+        <h2 class="sec">Lookup whitelist</h2>
+        <div class="card">
+          <div class="muted">Any ID or username added here will be blocked from lookup results across Discord, the chat panel, and the owner panel.</div>
+          <div class="row" style="margin-top:12px">
+            <input id="wlValue" placeholder="username or ID"/>
+            <input id="wlNote" placeholder="note (optional)"/>
+            <button class="sm primary" id="wlAdd">Add</button>
+          </div>
+          <div id="wlList" style="margin-top:12px"></div>
+        </div>
+      </section>
     </div>
   </div>
 </div>
