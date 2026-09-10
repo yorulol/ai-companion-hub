@@ -67,6 +67,11 @@ CREATE TABLE IF NOT EXISTS levels (
   xp INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (guild_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS lookup_whitelist (
+  value TEXT PRIMARY KEY,
+  note TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
 `);
 
 const DEFAULT_SETTINGS = {
