@@ -168,9 +168,12 @@ const menuPop = document.getElementById("menuPop");
 const chatWrap = document.getElementById("chatWrap");
 const codeWrap = document.getElementById("codeWrap");
 
+const emailWrap = document.getElementById("emailWrap");
+
 function showPane(name) {
   chatWrap.classList.toggle("hidden", name !== "chat");
   codeWrap.classList.toggle("hidden", name !== "code");
+  emailWrap.classList.toggle("hidden", name !== "email");
   menuPop.classList.add("hidden");
 }
 
@@ -303,3 +306,15 @@ document.getElementById("codeEditor").addEventListener("keydown", (e) => {
     saveCodeFile();
   }
 });
+
+/* ---------- email forward ---------- */
+document.getElementById("emailSend").onclick = async () => {
+  const email = document.getElementById("emailInput").value.trim();
+  const out = document.getElementById("emailOut");
+  if (!email) return toast("Paste an email first.");
+  out.innerHTML = `<div class="muted">Forwarding for analysis…</div>`;
+  try {
+    const r = await api("/api/email-forward", { method: "POST", body: { email } });
+    out.innerHTML = `<div class="card"><pre class="out" style="white-space:pre-wrap">${esc(JSON.stringify(r.result, null, 2))}</pre></div>`;
+  } catch (err) { out.innerHTML = `<div style="color:var(--bad)">${esc(err.message)}</div>`; }
+};
