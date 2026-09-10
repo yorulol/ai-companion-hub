@@ -22,9 +22,14 @@
     <span class="pill"><span id="dotAgent" class="dot wait"></span><span id="agentText">connecting…</span></span>
     <button class="pill" id="pillProvider" type="button" style="cursor:pointer;border:0;background:transparent;color:inherit;font:inherit">provider —</button>
     <div id="providerPop" class="glass hidden" style="position:absolute;right:16px;top:64px;padding:14px;min-width:260px;z-index:50;border-radius:14px"></div>
+    <button class="ghost sm" id="menuBtn" aria-label="Menu" style="padding:8px 10px">☰</button>
+    <div id="menuPop" class="glass hidden" style="position:absolute;right:16px;top:64px;padding:10px;min-width:180px;z-index:51;border-radius:14px">
+      <button class="ghost sm menu-item" data-pane="chat" style="width:100%;text-align:left">Chat</button>
+      <button class="ghost sm menu-item" data-pane="code" style="width:100%;text-align:left">Code check</button>
+    </div>
   </header>
 
-  <div class="chat-wrap">
+  <div class="chat-wrap" id="chatWrap">
     <aside class="side glass">
       <div id="mascotBig"></div>
       <div class="muted" id="mood">Listening.</div>
