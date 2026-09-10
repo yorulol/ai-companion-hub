@@ -158,17 +158,6 @@ npm run yoru`}
 
       <footer className="panel p-3">
         <div className="mb-2 flex gap-2">
-          {(["general", "coding"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition ${
-                mode === m ? "bg-accent text-accent-foreground" : "bg-secondary text-muted-foreground"
-              }`}
-            >
-              {m}
-            </button>
-          ))}
           {messages.length > 0 && (
             <button
               onClick={() => setMessages([])}
