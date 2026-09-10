@@ -168,6 +168,38 @@ const ROUTES = {
   "DELETE /api/owner/lookup-whitelist/:value": async (req, value) => { requireOwner(req); removeLookupWhitelist(value); return { ok: true }; },
 
   // ---- Code check / auditor ----
+  "POST /api/owner/code-files": async (req) => {
+    requireOwner(req);
+    const { path: folder } = await readBody(req);
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const walk = async (dir) => {
+      const files = [];
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (!["node_modules", ".git", "dist", "build", "coverage"].includes(e.name)) files.push(...(await walk(full)));
+        } else if (e.isFile()) {
+          files.push(full);
+        }
+      }
+      return files;
+    };
+    const files = await walk(folder);
+    return { path: folder, files };
+  },
+  "POST /api/owner/code-file": async (req) => {
+    requireOwner(req);
+    const { file, content, save } = await readBody(req);
+    const fs = await import("node:fs/promises");
+    if (save) {
+      await fs.writeFile(file, content, "utf8");
+      return { ok: true };
+    }
+    const data = await fs.readFile(file, "utf8");
+    return { file, content: data };
+  },
   "POST /api/owner/code-audit": async (req) => {
     requireOwner(req);
     const { path: folder } = await readBody(req);
