@@ -9,6 +9,7 @@ import {
 } from "./db.js";
 import { chat } from "./chat-loop.js";
 import { errEmbed, warnEmbed, okEmbed, embed } from "./ui.js";
+import { logActivity } from "./activity.js";
 
 let client = null;
 let running = false;
@@ -30,7 +31,12 @@ export async function startBot() {
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
 
-  client.on(Events.ClientReady, () => console.log(`[bot] ready as ${client.user.tag}`));
+  client.on(Events.ClientReady, () => {
+    console.log(`[bot] ready as ${client.user.tag}`);
+    logActivity("bot", `ready as ${client.user.tag} in ${client.guilds.cache.size} servers`);
+  });
+  client.on(Events.GuildCreate, (g) => logActivity("bot", `joined guild ${g.name}`, { id: g.id }));
+  client.on(Events.GuildDelete, (g) => logActivity("bot", `left guild ${g.name}`, { id: g.id }));
 
   client.on(Events.MessageCreate, async (message) => {
     try {
