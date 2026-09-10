@@ -73,6 +73,7 @@ async function loadSettings() {
   const list = [
     ["openrouterEnabled", "OpenRouter"], ["ollamaEnabled", "Ollama"],
     ["groqEnabled", "Groq"], ["openaiEnabled", "OpenAI"], ["anthropicEnabled", "Anthropic"],
+    ["openclawEnabled", "OpenClaw"],
   ];
   checks.innerHTML = list.map(([k, label]) =>
     `<label><input type="checkbox" data-key="${k}" ${p[k] ? "checked" : ""}/> ${label}</label>`,
