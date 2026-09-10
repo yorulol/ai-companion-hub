@@ -157,6 +157,53 @@ const ROUTES = {
   // ---- Lookups ----
   "GET /api/owner/lookups": async (req) => { requireOwner(req); return { files: await listLookupFiles() }; },
   "POST /api/owner/lookup": async (req) => { requireOwner(req); return await lookup((await readBody(req)).query); },
+
+  // ---- Lookup whitelist ----
+  "GET /api/owner/lookup-whitelist": async (req) => { requireOwner(req); return { items: listLookupWhitelist() }; },
+  "POST /api/owner/lookup-whitelist": async (req) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    return addLookupWhitelist(b.value, b.note);
+  },
+  "DELETE /api/owner/lookup-whitelist/:value": async (req, value) => { requireOwner(req); removeLookupWhitelist(value); return { ok: true }; },
+
+  // ---- Code check / auditor ----
+  "POST /api/owner/code-audit": async (req) => {
+    requireOwner(req);
+    const { path: folder } = await readBody(req);
+    return await auditFolder(folder);
+  },
+
+  // ---- Alt account guilds ----
+  "GET /api/owner/selfbot-guilds": async (req) => { requireOwner(req); return { guilds: selfbotGuilds() }; },
+
+  // ---- Server automation (custom commands, autoresponder, welcome, reaction roles) ----
+  "GET /api/owner/guilds/:id/custom-commands": async (req, id) => { requireOwner(req); return { items: listCustomCommands(id) }; },
+  "POST /api/owner/guilds/:id/custom-commands": async (req, id) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (b.delete) deleteCustomCommand(id, b.name);
+    else setCustomCommand(id, b.name, b.content);
+    return { items: listCustomCommands(id) };
+  },
+  "GET /api/owner/guilds/:id/autoresponder": async (req, id) => { requireOwner(req); return { items: getAutoresponder(id) }; },
+  "POST /api/owner/guilds/:id/autoresponder": async (req, id) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (b.delete) deleteAutoresponder(id, b.trigger);
+    else setAutoresponder(id, b.trigger, b.response);
+    return { items: getAutoresponder(id) };
+  },
+  "GET /api/owner/guilds/:id/welcome": async (req, id) => { requireOwner(req); return getWelcome(id); },
+  "POST /api/owner/guilds/:id/welcome": async (req, id) => { requireOwner(req); return setWelcome(id, await readBody(req)); },
+  "GET /api/owner/guilds/:id/reaction-roles": async (req, id) => { requireOwner(req); return { items: listReactionRoles(id) }; },
+  "POST /api/owner/guilds/:id/reaction-roles": async (req, id) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (b.delete) deleteReactionRole(id, b.message_id, b.emoji);
+    else setReactionRole(id, b.message_id, b.emoji, b.role_id);
+    return { items: listReactionRoles(id) };
+  },
 };
 
 function match(method, url) {
