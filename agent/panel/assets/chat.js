@@ -1,8 +1,7 @@
-import { api, particles, MASCOT, render, toast } from "./common.js";
+import { api, particles, MASCOT, render, toast, esc } from "./common.js";
 
 particles(document.getElementById("particles"));
 document.getElementById("mascotBig").innerHTML = MASCOT;
-document.getElementById("miniMascot").innerHTML = MASCOT;
 
 const messages = document.getElementById("messages");
 const input = document.getElementById("input");
@@ -14,13 +13,7 @@ const SCOPE = "panel:" + (localStorage.getItem("yoru.scope") || (() => {
   return s;
 })());
 
-let mode = "general";
-document.querySelectorAll(".modes button").forEach((b) =>
-  b.addEventListener("click", () => {
-    mode = b.dataset.mode;
-    document.querySelectorAll(".modes button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-  }),
-);
+const mode = "general";
 
 function bubble(who, text, tools) {
   const el = document.createElement("div");
