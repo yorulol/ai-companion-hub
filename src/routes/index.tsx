@@ -211,21 +211,32 @@ function StatusDot({ label, ok }: { label: string; ok: boolean }) {
 
 function HamburgerMenu({ pane, setPane }: { pane: "chat" | "email"; setPane: (p: "chat" | "email") => void }) {
   const [open, setOpen] = useState(false);
-  const item = "block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary";
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [open]);
+  const item = "block w-full rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-secondary";
+  const active = " bg-secondary font-semibold";
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
         className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-secondary"
+        aria-label="Menu"
       >
         ☰
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-border bg-background p-2 shadow-lg">
-          <button className={item} onClick={() => { setPane("chat"); setOpen(false); }}>
+        <div className="absolute right-0 top-full z-[100] mt-2 w-52 rounded-xl border border-border bg-popover p-2 shadow-xl shadow-black/60">
+          <button className={item + (pane === "chat" ? active : "")} onClick={() => { setPane("chat"); setOpen(false); }}>
             Chat
           </button>
-          <button className={item} onClick={() => { setPane("email"); setOpen(false); }}>
+          <button className={item + (pane === "email" ? active : "")} onClick={() => { setPane("email"); setOpen(false); }}>
             Email Forward
           </button>
           <a
