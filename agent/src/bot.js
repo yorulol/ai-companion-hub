@@ -2,9 +2,13 @@ import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
 import { config, isOwnerId } from "./config.js";
 import { COMMANDS, findCommand, commandSummary } from "./commands.js";
 import { canRun } from "./permissions.js";
-import { getGuild, getAfk, clearAfk, addXp } from "./db.js";
+import {
+  getGuild, getAfk, clearAfk, addXp,
+  listCustomCommands, getAutoresponder, getWelcome,
+  listReactionRoles,
+} from "./db.js";
 import { chat } from "./chat-loop.js";
-import { errEmbed, warnEmbed } from "./ui.js";
+import { errEmbed, warnEmbed, okEmbed, embed } from "./ui.js";
 
 let client = null;
 let running = false;
