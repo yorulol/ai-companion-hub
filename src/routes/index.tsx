@@ -81,7 +81,7 @@ function ChatPanel() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 px-4 py-6">
-      <header className="panel flex flex-wrap items-center gap-4 p-4">
+      <header className="panel relative z-[110] flex flex-wrap items-center gap-4 p-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold">YORU</h1>
           <p className="text-sm text-muted-foreground">
