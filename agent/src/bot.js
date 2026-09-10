@@ -96,6 +96,90 @@ export async function startBot() {
     }
   });
 
+  // Custom commands + autoresponder run alongside the prefix command system.
+  client.on(Events.MessageCreate, async (message) => {
+    try {
+      if (message.author.bot || !message.guild) return;
+      const guildCfg = getGuild(message.guild.id, message.guild.name);
+      const content = message.content;
+
+      // custom prefix commands (guild-specific shortcuts)
+      if (content.startsWith(guildCfg.prefix)) {
+        const name = content.slice(guildCfg.prefix.length).trim().split(/\s+/)[0].toLowerCase();
+        const custom = listCustomCommands(message.guild.id).find((c) => c.name === name);
+        if (custom) {
+          return void message.reply({ embeds: [embed({ description: custom.content, footer: "Custom command" })] }).catch(() => {});
+        }
+      }
+
+      // autoresponder triggers (substring match)
+      const triggers = getAutoresponder(message.guild.id);
+      for (const t of triggers) {
+        if (content.toLowerCase().includes(t.trigger.toLowerCase())) {
+          return void message.reply({ embeds: [embed({ description: t.response, footer: "Auto response" })] }).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.error("[bot] automation handler error", err);
+    }
+  });
+
+  // Welcome / goodbye messages
+  client.on(Events.GuildMemberAdd, async (member) => {
+    try {
+      const cfg = getWelcome(member.guild.id);
+      if (!cfg.channel_id) return;
+      const channel = member.guild.channels.cache.get(cfg.channel_id);
+      if (!channel?.isTextBased()) return;
+      const text = cfg.message
+        .replace(/\{user\}/g, `<@${member.id}>`)
+        .replace(/\{username\}/g, member.user.username)
+        .replace(/\{server\}/g, member.guild.name)
+        .replace(/\{count\}/g, String(member.guild.memberCount));
+      await channel.send({ embeds: [embed({ title: "👋 Welcome", description: text, color: COLORS.ok })] });
+    } catch (err) {
+      console.error("[bot] welcome error", err.message);
+    }
+  });
+
+  client.on(Events.GuildMemberRemove, async (member) => {
+    try {
+      const cfg = getWelcome(member.guild.id);
+      if (!cfg.goodbye_channel_id) return;
+      const channel = member.guild.channels.cache.get(cfg.goodbye_channel_id);
+      if (!channel?.isTextBased()) return;
+      const text = cfg.goodbye_message
+        .replace(/\{user\}/g, `<@${member.id}>`)
+        .replace(/\{username\}/g, member.user.username)
+        .replace(/\{server\}/g, member.guild.name)
+        .replace(/\{count\}/g, String(member.guild.memberCount));
+      await channel.send({ embeds: [embed({ title: "😢 Goodbye", description: text, color: COLORS.warn })] });
+    } catch (err) {
+      console.error("[bot] goodbye error", err.message);
+    }
+  });
+
+  // Reaction roles
+  async function handleReaction(reaction, user, add) {
+    try {
+      if (user.bot) return;
+      const message = reaction.partial ? await reaction.message.fetch().catch(() => null) : reaction.message;
+      if (!message?.guild) return;
+      const cfg = listReactionRoles(message.guild.id).find((r) => r.message_id === message.id && r.emoji === reaction.emoji.name);
+      if (!cfg) return;
+      const member = await message.guild.members.fetch(user.id).catch(() => null);
+      if (!member) return;
+      const role = message.guild.roles.cache.get(cfg.role_id);
+      if (!role) return;
+      if (add) await member.roles.add(role).catch(() => {});
+      else await member.roles.remove(role).catch(() => {});
+    } catch (err) {
+      console.error("[bot] reaction role error", err.message);
+    }
+  }
+  client.on(Events.MessageReactionAdd, (reaction, user) => handleReaction(reaction, user, true));
+  client.on(Events.MessageReactionRemove, (reaction, user) => handleReaction(reaction, user, false));
+
   await client.login(config.discord.botToken);
   running = true;
   return { ok: true };
