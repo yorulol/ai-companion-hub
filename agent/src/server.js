@@ -3,11 +3,19 @@ import http from "node:http";
 import { config, isOwnerId } from "./config.js";
 import { ask, providerStatus, refreshModels, knownModels, ollamaModels } from "./ai.js";
 import { chat } from "./chat-loop.js";
-import { getSettings, setSettings, allGuilds, getGuild, saveGuild } from "./db.js";
+import {
+  getSettings, setSettings, allGuilds, getGuild, saveGuild,
+  listLookupWhitelist, addLookupWhitelist, removeLookupWhitelist,
+  listCustomCommands, setCustomCommand, deleteCustomCommand,
+  getAutoresponder, setAutoresponder,
+  getWelcome, setWelcome,
+  listReactionRoles, setReactionRole, deleteReactionRole,
+} from "./db.js";
 import { startBot, stopBot, botStatus, botGuilds, listCommands } from "./bot.js";
-import { startSelfbot, stopSelfbot, selfbotStatus } from "./selfbot.js";
+import { startSelfbot, stopSelfbot, selfbotStatus, selfbotGuilds } from "./selfbot.js";
 import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
+import { auditFolder } from "./code-audit.js";
 
 const json = (res, code, body) => {
   res.writeHead(code, {
