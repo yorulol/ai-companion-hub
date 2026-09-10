@@ -97,12 +97,14 @@ export const config = {
 };
 
 /** Runtime toggle of a provider (also persists to .env when possible). */
-export function setProviderEnabled(name, enabled) {
+export async function setProviderEnabled(name, enabled) {
   const key = `${name.toUpperCase()}_ENABLED`;
+  if (!config.providers[name]) throw new Error(`Unknown provider: ${name}`);
   config.providers[name].enabled = enabled;
   try {
-    const envPath = new URL("../.env", import.meta.url);
-    const fs = await import("node:fs/promises");
+    const { promises: fs } = await import("node:fs");
+    const path = (await import("node:path")).default;
+    const envPath = path.resolve(process.cwd(), ".env");
     let text = await fs.readFile(envPath, "utf8").catch(() => "");
     const lineRe = new RegExp(`^${key}=.*$`, "m");
     if (lineRe.test(text)) {
