@@ -95,3 +95,23 @@ export const config = {
     hostname: os.hostname(),
   },
 };
+
+/** Runtime toggle of a provider (also persists to .env when possible). */
+export function setProviderEnabled(name, enabled) {
+  const key = `${name.toUpperCase()}_ENABLED`;
+  config.providers[name].enabled = enabled;
+  try {
+    const envPath = new URL("../.env", import.meta.url);
+    const fs = await import("node:fs/promises");
+    let text = await fs.readFile(envPath, "utf8").catch(() => "");
+    const lineRe = new RegExp(`^${key}=.*$`, "m");
+    if (lineRe.test(text)) {
+      text = text.replace(lineRe, `${key}=${enabled}`);
+    } else {
+      text += `\n${key}=${enabled}\n`;
+    }
+    await fs.writeFile(envPath, text, "utf8");
+  } catch (err) {
+    console.warn("[config] could not persist provider toggle:", err.message);
+  }
+}
