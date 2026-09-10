@@ -67,10 +67,16 @@ const ROUTES = {
   },
 
   "POST /api/email-forward": async (req) => {
-    const { email, op } = await readBody(req);
-    return await runEmailForward(op || "analyze", email);
+    const body = await readBody(req);
+    const { op, ...rest } = body;
+    return await runEmailForward(op || "domains", rest);
   },
-  "GET /api/email-forward/ops": async () => ({ ops: emailForwardOps(), enabled: config.emailForward.enabled }),
+  "GET /api/email-forward/ops": async () => ({
+    ops: emailForwardOps(),
+    enabled: config.emailForward.enabled,
+    hasKey: !!config.emailForward.key,
+    base: config.emailForward.base,
+  }),
 
   "GET /api/owner/activity": async (req) => {
     requireOwner(req);

@@ -79,7 +79,7 @@ export const config = {
   emailForward: {
     enabled: bool(process.env.EMAIL_FORWARD_ENABLED, false),
     key: process.env.EMAIL_FORWARD_API_KEY || "",
-    base: (process.env.EMAIL_FORWARD_API_URL || "https://reads.phrack.org/api/v1").replace(/\/$/, ""),
+    base: (process.env.EMAIL_FORWARD_API_URL || "https://mail.thc.org/api").replace(/\/$/, ""),
   },
 
   computer: {
