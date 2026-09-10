@@ -237,7 +237,7 @@ function HamburgerMenu({ pane, setPane }: { pane: "chat" | "email"; setPane: (p:
             Chat
           </button>
           <button className={item + (pane === "email" ? active : "")} onClick={() => { setPane("email"); setOpen(false); }}>
-            Email Forward
+            Mail Forwarding
           </button>
           <a
             href="http://localhost:8788"
