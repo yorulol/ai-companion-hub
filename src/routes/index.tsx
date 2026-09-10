@@ -27,7 +27,6 @@ export const Route = createFileRoute("/")({
 function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"general" | "coding">("general");
   const [busy, setBusy] = useState(false);
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
