@@ -70,6 +70,13 @@ const ROUTES = {
     return { ...known, ollama: await ollamaModels() };
   },
 
+  "POST /api/owner/providers/toggle": async (req) => {
+    requireOwner(req);
+    const { name, enabled } = await readBody(req);
+    await setProviderEnabled(name, enabled);
+    return { ok: true, name, enabled };
+  },
+
   "POST /api/owner/verify": async (req) => {
     requireOwner(req);
     return { ok: true };
