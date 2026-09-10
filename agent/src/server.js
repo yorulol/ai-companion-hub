@@ -114,7 +114,23 @@ const ROUTES = {
 
   "POST /api/owner/settings": async (req) => {
     requireOwner(req);
-    return setSettings(await readBody(req));
+    const body = await readBody(req);
+    const provider = body.provider || {};
+    const map = {
+      openrouterEnabled: "openrouter",
+      ollamaEnabled: "ollama",
+      openaiEnabled: "openai",
+      anthropicEnabled: "anthropic",
+      groqEnabled: "groq",
+      openclawEnabled: "openclaw",
+    };
+    for (const [key, name] of Object.entries(map)) {
+      if (typeof provider[key] === "boolean") {
+        await setProviderEnabled(name, provider[key]);
+      }
+    }
+    delete body.provider;
+    return setSettings(body);
   },
 
   "GET /api/owner/guilds": async (req) => {
