@@ -27,6 +27,9 @@ async function init() {
   loadGuilds();
   loadCommands();
   loadLookups();
+  loadWhitelist();
+  loadAltGuilds();
+  loadAutomation();
 
   document.querySelectorAll("[data-action]").forEach((b) =>
     b.addEventListener("click", async () => {
