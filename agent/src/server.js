@@ -16,6 +16,8 @@ import { startSelfbot, stopSelfbot, selfbotStatus, selfbotGuilds } from "./selfb
 import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
 import { auditFolder } from "./code-audit.js";
+import { runEmailForward, supportedOps as emailForwardOps } from "./email-forward.js";
+import { listActivity, logActivity } from "./activity.js";
 
 const json = (res, code, body) => {
   res.writeHead(code, {
@@ -65,21 +67,16 @@ const ROUTES = {
   },
 
   "POST /api/email-forward": async (req) => {
-    const ef = config.emailForward;
-    if (!ef.enabled || !ef.key) throw new Error("Email Forward is disabled. Set EMAIL_FORWARD_ENABLED=true and EMAIL_FORWARD_API_KEY in .env.");
-    const { email } = await readBody(req);
-    if (!email || typeof email !== "string") throw new Error("Paste the raw email content first.");
-    const res = await fetch(`${ef.base}/analyze`, {
-      method: "POST",
-      headers: { "content-type": "application/json", Authorization: `Bearer ${ef.key}`, "x-api-key": ef.key },
-      body: JSON.stringify({ email }),
-      signal: AbortSignal.timeout(60_000),
-    });
-    const text = await res.text();
-    let body;
-    try { body = JSON.parse(text); } catch { body = { raw: text }; }
-    if (!res.ok) throw new Error(body?.error || `Email Forward API ${res.status}`);
-    return { result: body };
+    const { email, op } = await readBody(req);
+    return await runEmailForward(op || "analyze", email);
+  },
+  "GET /api/email-forward/ops": async () => ({ ops: emailForwardOps(), enabled: config.emailForward.enabled }),
+
+  "GET /api/owner/activity": async (req) => {
+    requireOwner(req);
+    const url = new URL(req.url, "http://x");
+    const since = Number(url.searchParams.get("since") || 0);
+    return { events: listActivity({ since, limit: 200 }) };
   },
 
   "GET /api/models": async () => {
