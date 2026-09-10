@@ -53,6 +53,27 @@
       </div>
     </main>
   </div>
+
+  <!-- ============ Code check pane ============ -->
+  <div class="chat-wrap hidden" id="codeWrap">
+    <aside class="side glass" style="width:320px">
+      <div class="field"><label>Project folder</label><input id="codePath" placeholder="/home/user/project"/></div>
+      <button class="sm primary" id="codeOpen">Open / refresh</button>
+      <div style="margin-top:12px;max-height:70vh;overflow:auto" id="codeTree"></div>
+    </aside>
+    <main class="stream glass">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <span class="pill">OpenClaw code auditor</span>
+        <button class="sm primary" id="codeAudit">Audit all files</button>
+      </div>
+      <div id="codeEditor" class="code-editor" style="height:50vh;overflow:auto;border:1px solid var(--glass-strong);border-radius:12px;padding:12px;font-family:ui-monospace,monospace;font-size:13px;white-space:pre-wrap"></div>
+      <div class="composer" style="margin-top:12px">
+        <input id="codeMsg" placeholder="Ask YORU to modify or explain the open file…" style="flex:1"/>
+        <button class="primary" id="codeSend">Send</button>
+      </div>
+      <div id="codeAuditOut" style="margin-top:12px"></div>
+    </main>
+  </div>
 </div>
 
 <script type="module" src="/assets/chat.js"></script>
