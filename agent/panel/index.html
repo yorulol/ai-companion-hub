@@ -26,6 +26,7 @@
     <div id="menuPop" class="glass hidden" style="position:absolute;right:16px;top:64px;padding:10px;min-width:180px;z-index:51;border-radius:14px">
       <button class="ghost sm menu-item" data-pane="chat" style="width:100%;text-align:left">Chat</button>
       <button class="ghost sm menu-item" data-pane="code" style="width:100%;text-align:left">Code check</button>
+      <button class="ghost sm menu-item" data-pane="email" style="width:100%;text-align:left">Email Forward</button>
     </div>
   </header>
 
@@ -72,6 +73,18 @@
         <button class="primary" id="codeSend">Send</button>
       </div>
       <div id="codeAuditOut" style="margin-top:12px"></div>
+    </main>
+  </div>
+  <!-- ============ Email Forward pane ============ -->
+  <div class="chat-wrap hidden" id="emailWrap">
+    <main class="stream glass" style="width:100%">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <span class="pill">Email Forward · reads.phrack.org</span>
+        <button class="sm primary" id="emailSend">Analyze email</button>
+      </div>
+      <p class="muted" style="margin-top:0">Paste the full raw email (headers included if you have them) below.</p>
+      <textarea id="emailInput" rows="12" placeholder="From: …&#10;Subject: …&#10;&#10;(paste the raw email here)" style="width:100%;font-family:ui-monospace,monospace;font-size:13px"></textarea>
+      <div id="emailOut" style="margin-top:12px"></div>
     </main>
   </div>
 </div>
