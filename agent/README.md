@@ -59,11 +59,12 @@ restart the process.
 
 | Piece            | What it does                                                   |
 | ---------------- | -------------------------------------------------------------- |
-| **AI router**    | OpenRouter (every free model, rotates on failure) → Groq → OpenAI → Anthropic → Ollama. Every provider toggled by `_ENABLED` in `.env`. |
-| **Discord bot**  | 250+ built-in commands, per-server prefix + admin/mod role gating. |
-| **Selfbot**      | Alt-account ping responder. AGAINST DISCORD ToS — use an alt.  |
+| **AI router**    | OpenRouter (every free model, rotates on failure) → Groq → OpenAI → Anthropic → OpenClaw → Ollama. Every provider toggled by `_ENABLED` in `.env`. |
+| **Discord bot**  | 250+ built-in commands, per-server prefix + admin/mod role gating, custom commands, auto-responder, welcome/goodbye, reaction roles. |
+| **Selfbot**      | Alt-account ping responder + guild listing. AGAINST DISCORD ToS — use an alt.  |
 | **Computer tools** | System info, file create/read/move/delete, malware scan, encrypt-lockdown with decryption key. |
-| **Lookups**      | Drop PDF / CSV / TXT / JSON in `agent/lookups/`; ask YORU to search across all of them. |
+| **Lookups**      | Drop PDF / CSV / TXT / JSON in `agent/lookups/`; ask YORU to search across all of them. Whitelist values to block from results. |
+| **Code check**   | Open a local folder in the chat panel, edit files, and run an AI code auditor. |
 | **Web panels**   | Two glassy purple panels served straight from `agent/panel/`.  |
 
 ## Providers
@@ -77,7 +78,27 @@ is missing:
 3. `groq`
 4. `openai`
 5. `anthropic`
-6. `ollama` (local, always the last-resort backup)
+6. `openclaw`
+7. `ollama` (local, always the last-resort backup)
+
+You can also enable/disable providers live from the chat panel by clicking
+the provider pill in the top-right corner.
+
+## Code check
+
+In the chat panel, open the hamburger menu (☰) and choose **Code check**.
+Paste a folder path, browse files, edit in the built-in editor
+(`Ctrl/Cmd+S` to save), and click **Audit all files** to have the AI
+review every code file for bugs, security risks, and style issues.
+
+## Server automation
+
+From the owner panel **Automation** tab you can configure per-server:
+
+- **Custom commands** — guild-specific `!command` shortcuts.
+- **Auto-responder** — reply automatically when a trigger phrase is said.
+- **Welcome / goodbye** — send messages when users join or leave.
+- **Reaction roles** — assign/remove roles when users react to a message.
 
 ## Computer control safety
 
