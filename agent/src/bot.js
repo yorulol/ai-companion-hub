@@ -94,6 +94,7 @@ export async function startBot() {
       cooldowns.set(key, Date.now() + 2000);
 
       await cmd.run({ message, args, client, guildCfg, isOwner });
+      logActivity("bot", `${message.author.tag} ran !${cmd.name}`, { guild: message.guild.name });
     } catch (err) {
       console.error("[bot] handler error", err);
       message.reply({
