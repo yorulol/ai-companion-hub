@@ -120,7 +120,19 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
           }
         }
       }
-      if (hits.length) results.push({ file: name, hits });
+      if (hits.length) {
+        // Filter out any hit that touches a whitelisted value.
+        const filtered = [];
+        let whitelistedCount = 0;
+        for (const h of hits) {
+          const blob = JSON.stringify(h);
+          const w = findWhitelistHit(blob);
+          if (w) { whitelistedCount++; continue; }
+          filtered.push(h);
+        }
+        if (filtered.length) results.push({ file: name, hits: filtered, whitelistedRemoved: whitelistedCount });
+        else if (whitelistedCount) results.push({ file: name, hits: [], whitelistedRemoved: whitelistedCount });
+      }
     } catch (err) {
       results.push({ file: name, error: err.message });
     }
