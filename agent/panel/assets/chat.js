@@ -307,15 +307,44 @@ document.getElementById("codeEditor").addEventListener("keydown", (e) => {
   }
 });
 
-/* ---------- email forward ---------- */
-document.getElementById("emailSend").onclick = async () => {
-  const email = document.getElementById("emailInput").value.trim();
-  const op = document.getElementById("emailOp")?.value || "analyze";
-  const out = document.getElementById("emailOut");
-  if (!email) return toast("Paste an email first.");
-  out.innerHTML = `<div class="muted">Running <b>${esc(op)}</b> on reads.phrack.org…</div>`;
-  try {
-    const r = await api("/api/email-forward", { method: "POST", body: { email, op } });
-    out.innerHTML = `<div class="card"><div class="muted" style="margin-bottom:6px">operation: <b>${esc(r.op)}</b></div><pre class="out" style="white-space:pre-wrap;max-height:60vh;overflow:auto">${esc(JSON.stringify(r.result, null, 2))}</pre></div>`;
-  } catch (err) { out.innerHTML = `<div style="color:var(--bad)">${esc(err.message)}</div>`; }
-};
+/* ---------- mail forwarding (mail.thc.org) ---------- */
+const mfPanes = { domains: "mfDomains", alias: "mfAlias", handle: "mfHandle", dns: "mfDns", keys: "mfKeys" };
+document.querySelectorAll(".mf-tab").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".mf-tab").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const target = btn.dataset.mf;
+    Object.entries(mfPanes).forEach(([k, id]) => {
+      document.getElementById(id).classList.toggle("hidden", k !== target);
+    });
+    document.getElementById("mfOut").innerHTML = "";
+  };
+});
+function aliasDeleteArg() {
+  const n = document.getElementById("mfAliasKeyName").value.trim();
+  const d = document.getElementById("mfAliasKeyDomain").value.trim();
+  return { alias: `${n}@${d}` };
+}
+const mfHelpers = { aliasDeleteArg };
+document.querySelectorAll(".mf-run").forEach(btn => {
+  btn.onclick = async () => {
+    const op = btn.dataset.op;
+    const out = document.getElementById("mfOut");
+    let args = {};
+    if (btn.dataset.argsFn) args = mfHelpers[btn.dataset.argsFn]();
+    else if (btn.dataset.args) {
+      const numIds = new Set((btn.dataset.num || "").split(",").filter(Boolean));
+      btn.dataset.args.split(",").forEach(pair => {
+        const [id, key] = pair.split(":");
+        const v = document.getElementById(id)?.value.trim() || "";
+        args[key] = numIds.has(id) ? Number(v) : v;
+      });
+    }
+    if (btn.dataset.extra) Object.assign(args, JSON.parse(btn.dataset.extra));
+    out.innerHTML = `<div class="muted">Running <b>${esc(op)}</b>…</div>`;
+    try {
+      const r = await api("/api/email-forward", { method: "POST", body: { op, args } });
+      out.innerHTML = `<div class="card"><div class="muted" style="margin-bottom:6px">op: <b>${esc(op)}</b></div><pre class="out" style="white-space:pre-wrap;max-height:60vh;overflow:auto">${esc(typeof r.result === "string" ? r.result : JSON.stringify(r.result, null, 2))}</pre></div>`;
+    } catch (err) { out.innerHTML = `<div style="color:var(--bad)">${esc(err.message)}</div>`; }
+  };
+});
