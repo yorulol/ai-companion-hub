@@ -30,6 +30,8 @@ async function init() {
   loadWhitelist();
   loadAltGuilds();
   loadAutomation();
+  startActivity();
+
 
   document.querySelectorAll("[data-action]").forEach((b) =>
     b.addEventListener("click", async () => {
