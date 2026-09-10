@@ -132,6 +132,7 @@ function providerRows() {
     ["openai", `${stripAnsi(on(p.openai.enabled))}  ${stripAnsi(key(!!p.openai.key))}`],
     ["anthropic", `${stripAnsi(on(p.anthropic.enabled))}  ${stripAnsi(key(!!p.anthropic.key))}`],
     ["groq", `${stripAnsi(on(p.groq.enabled))}  ${stripAnsi(key(!!p.groq.key))}`],
+    ["openclaw", `${stripAnsi(on(p.openclaw.enabled))}  ${p.openclaw.base}`],
   ];
 }
 
