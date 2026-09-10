@@ -65,6 +65,11 @@ async function readPdf(file) {
  */
 export async function lookup(query, { limitPerFile = 25 } = {}) {
   if (!query || query.length < 2) throw new Error("Query must be at least 2 characters.");
+  if (isLookupWhitelisted(query)) {
+    const err = new Error(`"${query}" is whitelisted and cannot be looked up.`);
+    err.whitelisted = true;
+    throw err;
+  }
   const files = await listLookupFiles();
   const needle = query.toLowerCase();
   const results = [];
