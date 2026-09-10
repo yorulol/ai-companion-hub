@@ -72,6 +72,32 @@ CREATE TABLE IF NOT EXISTS lookup_whitelist (
   note TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS custom_commands (
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  content TEXT NOT NULL,
+  PRIMARY KEY (guild_id, name)
+);
+CREATE TABLE IF NOT EXISTS autoresponder (
+  guild_id TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  response TEXT NOT NULL,
+  PRIMARY KEY (guild_id, trigger)
+);
+CREATE TABLE IF NOT EXISTS welcome_config (
+  guild_id TEXT PRIMARY KEY,
+  channel_id TEXT,
+  message TEXT NOT NULL DEFAULT 'Welcome {user} to {server}!',
+  goodbye_channel_id TEXT,
+  goodbye_message TEXT NOT NULL DEFAULT '{user} left {server}.'
+);
+CREATE TABLE IF NOT EXISTS reaction_roles (
+  guild_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  emoji TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  PRIMARY KEY (guild_id, message_id, emoji)
+);
 `);
 
 const DEFAULT_SETTINGS = {
