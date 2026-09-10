@@ -254,86 +254,255 @@ function HamburgerMenu({ pane, setPane }: { pane: "chat" | "email"; setPane: (p:
   );
 }
 
-const EMAIL_OPS: { value: string; label: string }[] = [
-  { value: "analyze", label: "Analyze (full report)" },
-  { value: "headers", label: "Parse headers" },
-  { value: "urls", label: "Extract URLs" },
-  { value: "attachments", label: "List attachments" },
-  { value: "threat", label: "Threat score" },
-  { value: "parse", label: "Parse structure" },
-];
+type MailTab = "domains" | "alias" | "handle" | "dns" | "keys";
 
-function EmailForwardPane() {
-  const [email, setEmail] = useState("");
-  const [op, setOp] = useState("analyze");
+function MailForwardPane() {
+  const [tab, setTab] = useState<MailTab>("domains");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [ranOp, setRanOp] = useState<string | null>(null);
+  const [result, setResult] = useState<unknown>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  async function analyze() {
-    if (!email.trim() || busy) return;
-    setBusy(true);
-    setErr(null);
-    setResult(null);
+  async function run(op: string, args: Record<string, unknown> = {}) {
+    setBusy(true); setErr(null); setResult(null);
     try {
-      const r = await api.emailForward(email, op);
-      setRanOp(r.op);
-      setResult(JSON.stringify(r.result, null, 2));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Request failed");
-    } finally {
-      setBusy(false);
-    }
+      const r = await api.mailFwd(op, args);
+      setResult(r.result);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Request failed"); }
+    finally { setBusy(false); }
   }
 
   return (
-    <section className="panel space-y-3 p-4 md:p-6">
+    <section className="panel space-y-4 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
-          Email Forward · reads.phrack.org
+        <span className="font-mono text-xs text-[#4ade80]">
+          ⟩_ mail.thc.org
         </span>
-        <div className="flex items-center gap-2">
-          <select
-            value={op}
-            onChange={(e) => setOp(e.target.value)}
-            className="rounded-full border border-input bg-background px-3 py-1 text-xs"
-          >
-            {EMAIL_OPS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => void analyze()}
-            disabled={busy || !email.trim()}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-          >
-            {busy ? "Running…" : "Run"}
-          </button>
-        </div>
+        <a href="https://reads.phrack.org/docs/" target="_blank" rel="noreferrer"
+          className="text-xs text-muted-foreground underline-offset-2 hover:underline">API docs ↗</a>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Paste the full raw email (headers included if you have them). Pick an operation and hit <b>Run</b>.
-      </p>
-      <textarea
-        rows={12}
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder={"From: …\nSubject: …\n\n(paste the raw email here)"}
-        className="w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
-      />
+
+      {/* Tab bar */}
+      <div className="flex gap-1 overflow-x-auto rounded-lg bg-secondary/40 p-1">
+        {([
+          ["domains", "Domains"],
+          ["alias", "Aliases"],
+          ["handle", "Handles"],
+          ["dns", "DNS Check"],
+          ["keys", "API Keys"],
+        ] as const).map(([k, label]) => (
+          <button key={k} onClick={() => { setTab(k); setResult(null); setErr(null); }}
+            className={`whitespace-nowrap rounded-md px-3 py-1.5 font-mono text-xs transition-colors ${tab === k ? "bg-[#4ade80]/15 text-[#4ade80] font-semibold" : "text-muted-foreground hover:text-foreground"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {tab === "domains" && <MailDomains run={run} busy={busy} />}
+      {tab === "alias" && <MailAliases run={run} busy={busy} />}
+      {tab === "handle" && <MailHandles run={run} busy={busy} />}
+      {tab === "dns" && <MailDns run={run} busy={busy} />}
+      {tab === "keys" && <MailKeys run={run} busy={busy} />}
+
       {err && (
-        <p className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive-foreground">
-          {err}
-        </p>
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive-foreground">{err}</p>
       )}
-      {result && (
-        <div className="space-y-1">
-          {ranOp && <p className="text-xs text-muted-foreground">operation: <b>{ranOp}</b></p>}
-          <pre className="max-h-[60vh] overflow-auto rounded-xl bg-secondary/60 p-3 font-mono text-xs">{result}</pre>
-        </div>
+      {result !== null && (
+        <pre className="max-h-[50vh] overflow-auto rounded-xl bg-secondary/60 p-3 font-mono text-xs text-foreground">
+          {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
+        </pre>
       )}
     </section>
+  );
+}
+
+function MfInput({ label, value, onChange, placeholder, type = "text" }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="font-mono text-[11px] text-muted-foreground">{label}</span>
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        className="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-[#4ade80]/50" />
+    </label>
+  );
+}
+
+function MfBtn({ onClick, busy, children }: { onClick: () => void; busy: boolean; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} disabled={busy}
+      className="rounded-lg border border-[#4ade80]/30 bg-[#4ade80]/10 px-4 py-2 font-mono text-xs font-semibold text-[#4ade80] transition-colors hover:bg-[#4ade80]/20 disabled:opacity-40">
+      {busy ? "…" : children}
+    </button>
+  );
+}
+
+function MailDomains({ run, busy }: { run: (op: string, a?: Record<string, unknown>) => void; busy: boolean }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">List all public mail domains and live stats.</p>
+      <div className="flex gap-2">
+        <MfBtn onClick={() => run("domains")} busy={busy}>List domains</MfBtn>
+        <MfBtn onClick={() => run("stats")} busy={busy}>Stats</MfBtn>
+      </div>
+    </div>
+  );
+}
+
+function MailAliases({ run, busy }: { run: (op: string, a?: Record<string, unknown>) => void; busy: boolean }) {
+  const [name, setName] = useState("");
+  const [domain, setDomain] = useState("");
+  const [to, setTo] = useState("");
+  const [alias, setAlias] = useState("");
+  const [token, setToken] = useState("");
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Create or remove email aliases. Confirmation tokens are sent to the destination email.</p>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Create alias</span>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <MfInput label="Name" value={name} onChange={setName} placeholder="research" />
+          <MfInput label="Domain" value={domain} onChange={setDomain} placeholder="reads.phrack.org" />
+          <MfInput label="Forward to" value={to} onChange={setTo} placeholder="you@example.com" />
+        </div>
+        <MfBtn onClick={() => run("alias-subscribe", { name, domain, to })} busy={busy}>Subscribe</MfBtn>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Remove alias</span>
+        <MfInput label="Alias address" value={alias} onChange={setAlias} placeholder="research@reads.phrack.org" />
+        <MfBtn onClick={() => run("alias-unsubscribe", { alias })} busy={busy}>Unsubscribe</MfBtn>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Confirm (6-digit token from email)</span>
+        <MfInput label="Token" value={token} onChange={setToken} placeholder="123456" />
+        <MfBtn onClick={() => run("alias-confirm", { token })} busy={busy}>Confirm</MfBtn>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">API-key operations</span>
+        <div className="flex flex-wrap gap-2">
+          <MfBtn onClick={() => run("alias-list")} busy={busy}>List my aliases</MfBtn>
+          <MfBtn onClick={() => run("alias-stats")} busy={busy}>My stats</MfBtn>
+          <MfBtn onClick={() => run("alias-activity")} busy={busy}>Activity log</MfBtn>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MfInput label="Handle (create)" value={name} onChange={setName} placeholder="research" />
+          <MfInput label="Domain (create)" value={domain} onChange={setDomain} placeholder="reads.phrack.org" />
+        </div>
+        <div className="flex gap-2">
+          <MfBtn onClick={() => run("alias-create", { alias_handle: name, alias_domain: domain })} busy={busy}>Create (API key)</MfBtn>
+          <MfBtn onClick={() => run("alias-delete", { alias: `${name}@${domain}` })} busy={busy}>Delete (API key)</MfBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MailHandles({ run, busy }: { run: (op: string, a?: Record<string, unknown>) => void; busy: boolean }) {
+  const [handle, setHandle] = useState("");
+  const [to, setTo] = useState("");
+  const [domain, setDomain] = useState("");
+  const [token, setToken] = useState("");
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">A handle reserves one local part across <b>all</b> managed domains.</p>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Create handle</span>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MfInput label="Handle" value={handle} onChange={setHandle} placeholder="alice" />
+          <MfInput label="Forward to" value={to} onChange={setTo} placeholder="you@example.com" />
+        </div>
+        <MfBtn onClick={() => run("handle-subscribe", { handle, to })} busy={busy}>Subscribe</MfBtn>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Remove handle</span>
+        <MfInput label="Handle" value={handle} onChange={setHandle} placeholder="alice" />
+        <MfBtn onClick={() => run("handle-unsubscribe", { handle })} busy={busy}>Unsubscribe</MfBtn>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Confirm (6-digit token)</span>
+        <MfInput label="Token" value={token} onChange={setToken} placeholder="123456" />
+        <MfBtn onClick={() => run("handle-confirm", { token })} busy={busy}>Confirm</MfBtn>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Domain control</span>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MfInput label="Handle" value={handle} onChange={setHandle} placeholder="alice" />
+          <MfInput label="Domain" value={domain} onChange={setDomain} placeholder="thc.org" />
+        </div>
+        <div className="flex gap-2">
+          <MfBtn onClick={() => run("handle-domain-disable", { handle, domain })} busy={busy}>Disable domain</MfBtn>
+          <MfBtn onClick={() => run("handle-domain-enable", { handle, domain })} busy={busy}>Enable domain</MfBtn>
+        </div>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">API-key operations</span>
+        <div className="flex gap-2">
+          <MfBtn onClick={() => run("handle-create", { handle })} busy={busy}>Create (API key)</MfBtn>
+          <MfBtn onClick={() => run("handle-delete", { handle })} busy={busy}>Delete (API key)</MfBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MailDns({ run, busy }: { run: (op: string, a?: Record<string, unknown>) => void; busy: boolean }) {
+  const [target, setTarget] = useState("");
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">Check DNS verification status for a domain.</p>
+      <MfInput label="Domain" value={target} onChange={setTarget} placeholder="example.com" />
+      <MfBtn onClick={() => run("check-dns", { target })} busy={busy}>Check DNS</MfBtn>
+    </div>
+  );
+}
+
+function MailKeys({ run, busy }: { run: (op: string, a?: Record<string, unknown>) => void; busy: boolean }) {
+  const [email, setEmail] = useState("");
+  const [days, setDays] = useState("30");
+  const [token, setToken] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Request, renew, and manage API keys. Keys are shown <b>once</b> at confirmation — save them immediately.</p>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Request new key</span>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MfInput label="Email" value={email} onChange={setEmail} placeholder="you@example.com" />
+          <MfInput label="Days" value={days} onChange={setDays} placeholder="30" type="number" />
+        </div>
+        <MfBtn onClick={() => run("credentials-create", { email, days: Number(days) })} busy={busy}>Request API key</MfBtn>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Confirm key (6-digit token)</span>
+        <MfInput label="Token" value={token} onChange={setToken} placeholder="123456" />
+        <div className="flex gap-2">
+          <MfBtn onClick={() => run("credentials-confirm-preview", { token })} busy={busy}>Preview</MfBtn>
+          <MfBtn onClick={() => run("credentials-confirm", { token })} busy={busy}>Issue key</MfBtn>
+        </div>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border/50 p-3">
+        <span className="font-mono text-[11px] text-[#4ade80]">Manage existing key</span>
+        <MfInput label="API key (64 chars)" value={apiKey} onChange={setApiKey} placeholder="0123456789abcdef…" />
+        <div className="flex flex-wrap gap-2">
+          <MfBtn onClick={() => run("credentials-renew", { api_key: apiKey, days: Number(days) })} busy={busy}>Renew (+{days}d)</MfBtn>
+          <MfBtn onClick={() => run("credentials-auto-renew", { api_key: apiKey, automatic_renew: true })} busy={busy}>Auto-renew ON</MfBtn>
+          <MfBtn onClick={() => run("credentials-auto-renew", { api_key: apiKey, automatic_renew: false })} busy={busy}>Auto-renew OFF</MfBtn>
+          <MfBtn onClick={() => run("credentials-destroy", { api_key: apiKey })} busy={busy}>Destroy key</MfBtn>
+        </div>
+      </div>
+    </div>
   );
 }
 
