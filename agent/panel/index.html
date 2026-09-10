@@ -26,7 +26,7 @@
     <div id="menuPop" class="glass hidden" style="position:absolute;right:16px;top:64px;padding:10px;min-width:180px;z-index:51;border-radius:14px">
       <button class="ghost sm menu-item" data-pane="chat" style="width:100%;text-align:left">Chat</button>
       <button class="ghost sm menu-item" data-pane="code" style="width:100%;text-align:left">Code check</button>
-      <button class="ghost sm menu-item" data-pane="email" style="width:100%;text-align:left">Email Forward</button>
+      <button class="ghost sm menu-item" data-pane="email" style="width:100%;text-align:left">Mail Forwarding</button>
     </div>
   </header>
 
@@ -75,26 +75,146 @@
       <div id="codeAuditOut" style="margin-top:12px"></div>
     </main>
   </div>
-  <!-- ============ Email Forward pane ============ -->
+  <!-- ============ Mail Forwarding pane ============ -->
   <div class="chat-wrap hidden" id="emailWrap">
     <main class="stream glass" style="width:100%">
       <div class="row" style="justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">
-        <span class="pill">Email Forward · reads.phrack.org</span>
-        <div class="row" style="gap:6px">
-          <select id="emailOp" class="pill" style="padding:6px 10px;background:transparent;color:inherit;border:1px solid var(--glass-strong);border-radius:999px">
-            <option value="analyze">Analyze (full report)</option>
-            <option value="headers">Parse headers</option>
-            <option value="urls">Extract URLs</option>
-            <option value="attachments">List attachments</option>
-            <option value="threat">Threat score</option>
-            <option value="parse">Parse structure</option>
-          </select>
-          <button class="sm primary" id="emailSend">Run</button>
+        <span class="pill" style="font-family:monospace;color:#4ade80">⟩_ mail.thc.org</span>
+        <a href="https://reads.phrack.org/docs/" target="_blank" rel="noreferrer" class="muted" style="font-size:12px;text-decoration:underline">API docs ↗</a>
+      </div>
+      <!-- Tab bar -->
+      <div class="row" id="mfTabs" style="gap:4px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="ghost sm mf-tab active" data-mf="domains">Domains</button>
+        <button class="ghost sm mf-tab" data-mf="alias">Aliases</button>
+        <button class="ghost sm mf-tab" data-mf="handle">Handles</button>
+        <button class="ghost sm mf-tab" data-mf="dns">DNS Check</button>
+        <button class="ghost sm mf-tab" data-mf="keys">API Keys</button>
+      </div>
+      <!-- Domains -->
+      <div class="mf-pane" id="mfDomains">
+        <p class="muted">List all public mail domains and live stats.</p>
+        <div class="row" style="gap:6px;margin-top:8px">
+          <button class="sm primary mf-run" data-op="domains">List domains</button>
+          <button class="sm primary mf-run" data-op="stats">Stats</button>
         </div>
       </div>
-      <p class="muted" style="margin-top:0">Paste the full raw email (headers included if you have them). Pick an operation, hit <b>Run</b>.</p>
-      <textarea id="emailInput" rows="12" placeholder="From: …&#10;Subject: …&#10;&#10;(paste the raw email here)" style="width:100%;font-family:ui-monospace,monospace;font-size:13px"></textarea>
-      <div id="emailOut" style="margin-top:12px"></div>
+      <!-- Aliases -->
+      <div class="mf-pane hidden" id="mfAlias">
+        <p class="muted">Create or remove email aliases. Confirmation tokens are sent to the destination email.</p>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Create alias</legend>
+          <div class="row" style="gap:6px;flex-wrap:wrap">
+            <input id="mfAliasName" placeholder="name" style="flex:1;min-width:100px">
+            <input id="mfAliasDomain" placeholder="reads.phrack.org" style="flex:1;min-width:120px">
+            <input id="mfAliasTo" placeholder="you@example.com" style="flex:1;min-width:140px">
+          </div>
+          <button class="sm primary mf-run" data-op="alias-subscribe" data-args="mfAliasName:name,mfAliasDomain:domain,mfAliasTo:to" style="margin-top:8px">Subscribe</button>
+        </fieldset>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Remove alias</legend>
+          <input id="mfAliasAddr" placeholder="research@reads.phrack.org" style="width:100%">
+          <button class="sm primary mf-run" data-op="alias-unsubscribe" data-args="mfAliasAddr:alias" style="margin-top:8px">Unsubscribe</button>
+        </fieldset>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Confirm (6-digit token)</legend>
+          <input id="mfAliasToken" placeholder="123456" style="width:180px">
+          <button class="sm primary mf-run" data-op="alias-confirm" data-args="mfAliasToken:token" style="margin-top:8px">Confirm</button>
+        </fieldset>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">API-key operations</legend>
+          <div class="row" style="gap:6px;flex-wrap:wrap">
+            <button class="sm primary mf-run" data-op="alias-list">List my aliases</button>
+            <button class="sm primary mf-run" data-op="alias-stats">My stats</button>
+            <button class="sm primary mf-run" data-op="alias-activity">Activity log</button>
+          </div>
+          <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+            <input id="mfAliasKeyName" placeholder="handle" style="flex:1;min-width:100px">
+            <input id="mfAliasKeyDomain" placeholder="domain" style="flex:1;min-width:100px">
+          </div>
+          <div class="row" style="gap:6px;margin-top:8px">
+            <button class="sm primary mf-run" data-op="alias-create" data-args="mfAliasKeyName:alias_handle,mfAliasKeyDomain:alias_domain">Create</button>
+            <button class="sm primary mf-run" data-op="alias-delete" data-args-fn="aliasDeleteArg">Delete</button>
+          </div>
+        </fieldset>
+      </div>
+      <!-- Handles -->
+      <div class="mf-pane hidden" id="mfHandle">
+        <p class="muted">A handle reserves one local part across all managed domains.</p>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Create handle</legend>
+          <div class="row" style="gap:6px;flex-wrap:wrap">
+            <input id="mfHandleName" placeholder="alice" style="flex:1">
+            <input id="mfHandleTo" placeholder="you@example.com" style="flex:1">
+          </div>
+          <button class="sm primary mf-run" data-op="handle-subscribe" data-args="mfHandleName:handle,mfHandleTo:to" style="margin-top:8px">Subscribe</button>
+        </fieldset>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Remove handle</legend>
+          <input id="mfHandleRm" placeholder="alice" style="width:180px">
+          <button class="sm primary mf-run" data-op="handle-unsubscribe" data-args="mfHandleRm:handle" style="margin-top:8px">Unsubscribe</button>
+        </fieldset>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Confirm (6-digit token)</legend>
+          <input id="mfHandleToken" placeholder="123456" style="width:180px">
+          <button class="sm primary mf-run" data-op="handle-confirm" data-args="mfHandleToken:token" style="margin-top:8px">Confirm</button>
+        </fieldset>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Domain control</legend>
+          <div class="row" style="gap:6px;flex-wrap:wrap">
+            <input id="mfHandleDomH" placeholder="handle" style="flex:1">
+            <input id="mfHandleDomD" placeholder="thc.org" style="flex:1">
+          </div>
+          <div class="row" style="gap:6px;margin-top:8px">
+            <button class="sm primary mf-run" data-op="handle-domain-disable" data-args="mfHandleDomH:handle,mfHandleDomD:domain">Disable</button>
+            <button class="sm primary mf-run" data-op="handle-domain-enable" data-args="mfHandleDomH:handle,mfHandleDomD:domain">Enable</button>
+          </div>
+        </fieldset>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">API-key operations</legend>
+          <div class="row" style="gap:6px">
+            <button class="sm primary mf-run" data-op="handle-create" data-args="mfHandleName:handle">Create</button>
+            <button class="sm primary mf-run" data-op="handle-delete" data-args="mfHandleName:handle">Delete</button>
+          </div>
+        </fieldset>
+      </div>
+      <!-- DNS -->
+      <div class="mf-pane hidden" id="mfDns">
+        <p class="muted">Check DNS verification status for a domain.</p>
+        <input id="mfDnsTarget" placeholder="example.com" style="width:260px;margin-top:8px">
+        <button class="sm primary mf-run" data-op="check-dns" data-args="mfDnsTarget:target" style="margin-top:8px">Check DNS</button>
+      </div>
+      <!-- API Keys -->
+      <div class="mf-pane hidden" id="mfKeys">
+        <p class="muted">Request, renew, and manage API keys. Keys are shown <b>once</b> — save them immediately.</p>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Request new key</legend>
+          <div class="row" style="gap:6px;flex-wrap:wrap">
+            <input id="mfKeyEmail" placeholder="you@example.com" style="flex:1;min-width:160px">
+            <input id="mfKeyDays" type="number" value="30" style="width:80px" placeholder="days">
+          </div>
+          <button class="sm primary mf-run" data-op="credentials-create" data-args="mfKeyEmail:email,mfKeyDays:days" data-num="mfKeyDays" style="margin-top:8px">Request</button>
+        </fieldset>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Confirm (6-digit token)</legend>
+          <input id="mfKeyToken" placeholder="123456" style="width:180px">
+          <div class="row" style="gap:6px;margin-top:8px">
+            <button class="sm primary mf-run" data-op="credentials-confirm-preview" data-args="mfKeyToken:token">Preview</button>
+            <button class="sm primary mf-run" data-op="credentials-confirm" data-args="mfKeyToken:token">Issue key</button>
+          </div>
+        </fieldset>
+        <fieldset style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;margin-top:8px">
+          <legend style="font-family:monospace;font-size:11px;color:#4ade80">Manage existing key</legend>
+          <input id="mfKeyVal" placeholder="64-char API key" style="width:100%;font-family:monospace;font-size:12px">
+          <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+            <button class="sm primary mf-run" data-op="credentials-renew" data-args="mfKeyVal:api_key,mfKeyDays:days" data-num="mfKeyDays">Renew</button>
+            <button class="sm primary mf-run" data-op="credentials-auto-renew" data-args="mfKeyVal:api_key" data-extra='{"automatic_renew":true}'>Auto ON</button>
+            <button class="sm primary mf-run" data-op="credentials-auto-renew" data-args="mfKeyVal:api_key" data-extra='{"automatic_renew":false}'>Auto OFF</button>
+            <button class="sm primary mf-run" data-op="credentials-destroy" data-args="mfKeyVal:api_key">Destroy</button>
+          </div>
+        </fieldset>
+      </div>
+      <!-- Output -->
+      <div id="mfOut" style="margin-top:16px"></div>
     </main>
   </div>
 </div>
