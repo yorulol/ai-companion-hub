@@ -161,3 +161,145 @@ pill.addEventListener("click", (e) => {
 document.addEventListener("click", (e) => {
   if (!pop.contains(e.target) && e.target !== pill) pop.classList.add("hidden");
 });
+
+/* ---------- hamburger menu / pane switching ---------- */
+const menuBtn = document.getElementById("menuBtn");
+const menuPop = document.getElementById("menuPop");
+const chatWrap = document.getElementById("chatWrap");
+const codeWrap = document.getElementById("codeWrap");
+
+function showPane(name) {
+  chatWrap.classList.toggle("hidden", name !== "chat");
+  codeWrap.classList.toggle("hidden", name !== "code");
+  menuPop.classList.add("hidden");
+}
+
+menuBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  menuPop.classList.toggle("hidden");
+});
+menuPop.querySelectorAll(".menu-item").forEach((b) => b.addEventListener("click", () => showPane(b.dataset.pane)));
+document.addEventListener("click", (e) => { if (!menuPop.contains(e.target) && e.target !== menuBtn) menuPop.classList.add("hidden"); });
+
+/* ---------- code check ---------- */
+let CODE_PATH = "";
+let CODE_FILES = [];
+let CODE_OPEN = "";
+
+function buildTree(files, prefix = "") {
+  const dirs = new Map();
+  files.forEach((f) => {
+    const rel = f.replace(prefix, "").replace(/^\//, "");
+    const parts = rel.split("/").filter(Boolean);
+    if (!parts.length) return;
+    let cur = dirs;
+    parts.forEach((part, idx) => {
+      const isLast = idx === parts.length - 1;
+      if (isLast) {
+        cur.set(part, { file: f, name: part });
+      } else {
+        if (!cur.has(part) || typeof cur.get(part) !== "object" || Array.isArray(cur.get(part))) cur.set(part, new Map());
+        cur = cur.get(part);
+      }
+    });
+  });
+
+  function render(node) {
+    let html = `<ul style="list-style:none;margin:4px 0;padding-left:12px">`;
+    const entries = [...node.entries()].sort((a, b) => {
+      const aIsFile = a[1].file;
+      const bIsFile = b[1].file;
+      if (aIsFile !== bIsFile) return aIsFile ? 1 : -1;
+      return a[0].localeCompare(b[0]);
+    });
+    for (const [name, val] of entries) {
+      if (val.file) {
+        html += `<li><button class="ghost sm code-file" data-file="${esc(val.file)}" style="width:100%;text-align:left;font-family:ui-monospace,monospace">📄 ${esc(val.name)}</button></li>`;
+      } else {
+        html += `<li><details open><summary style="cursor:pointer">📁 ${esc(name)}</summary>${render(val)}</details></li>`;
+      }
+    }
+    html += `</ul>`;
+    return html;
+  }
+  return render(dirs);
+}
+
+async function openCodeFolder() {
+  const path = document.getElementById("codePath").value.trim();
+  if (!path) return toast("Enter a folder path.");
+  try {
+    const r = await api("/api/owner/code-files", { method: "POST", body: { path } });
+    CODE_PATH = r.path;
+    CODE_FILES = r.files;
+    document.getElementById("codeTree").innerHTML = buildTree(r.files, r.path);
+    document.querySelectorAll(".code-file").forEach((b) => b.onclick = () => loadCodeFile(b.dataset.file));
+    toast(`${r.files.length} files found.`);
+  } catch (err) { toast(err.message); }
+}
+
+async function loadCodeFile(file) {
+  CODE_OPEN = file;
+  const editor = document.getElementById("codeEditor");
+  editor.textContent = "Loading…";
+  try {
+    const r = await api("/api/owner/code-file", { method: "POST", body: { file } });
+    editor.textContent = r.content;
+    editor.contentEditable = "true";
+    editor.dataset.dirty = "false";
+  } catch (err) { editor.textContent = err.message; }
+}
+
+async function saveCodeFile() {
+  if (!CODE_OPEN) return;
+  const editor = document.getElementById("codeEditor");
+  try {
+    await api("/api/owner/code-file", { method: "POST", body: { file: CODE_OPEN, content: editor.textContent, save: true } });
+    editor.dataset.dirty = "false";
+    toast("Saved.");
+  } catch (err) { toast(err.message); }
+}
+
+async function runCodeAudit() {
+  const out = document.getElementById("codeAuditOut");
+  if (!CODE_PATH) return toast("Open a folder first.");
+  out.innerHTML = `<div class="muted">Auditing with OpenClaw…</div>`;
+  try {
+    const r = await api("/api/owner/code-audit", { method: "POST", body: { path: CODE_PATH } });
+    out.innerHTML = r.reports.length
+      ? r.reports.map((rep) => `
+        <div class="card" style="margin-bottom:10px">
+          <strong>${esc(rep.file)}</strong>
+          ${rep.issues.map((i) => `<div class="pill" style="margin:4px 0">${esc(i.severity)} · ${esc(i.line ? `L${i.line}` : "general")}</div><pre class="out">${esc(i.message)}</pre>`).join("")}
+        </div>`).join("")
+      : `<div class="muted">No issues found. Great job.</div>`;
+  } catch (err) { out.innerHTML = `<div style="color:var(--bad)">${esc(err.message)}</div>`; }
+}
+
+async function sendCodeChat() {
+  const input = document.getElementById("codeMsg");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  const out = document.getElementById("codeAuditOut");
+  const ctx = CODE_OPEN ? `Open file: ${CODE_OPEN}\n\n${document.getElementById("codeEditor").textContent.slice(0, 4000)}` : "";
+  out.innerHTML += `<div class="card"><strong>you</strong><div>${esc(text)}</div></div>`;
+  try {
+    const r = await api("/api/chat", { method: "POST", body: { userText: `${ctx ? ctx + "\n\n---\n\n" : ""}${text}`, mode: "code", scope: SCOPE } });
+    out.innerHTML += `<div class="card"><strong>yoru</strong><div>${render(r.reply)}</div></div>`;
+  } catch (err) { out.innerHTML += `<div class="card" style="color:var(--bad)">${esc(err.message)}</div>`; }
+  out.scrollTop = out.scrollHeight;
+}
+
+document.getElementById("codeOpen").onclick = openCodeFolder;
+document.getElementById("codeAudit").onclick = runCodeAudit;
+document.getElementById("codeSend").onclick = sendCodeChat;
+document.getElementById("codeMsg").addEventListener("keydown", (e) => { if (e.key === "Enter") sendCodeChat(); });
+
+// Ctrl/Cmd+S to save the open file
+document.getElementById("codeEditor").addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    saveCodeFile();
+  }
+});

@@ -1,13 +1,21 @@
 /** Tiny HTTP service the web panels talk to. No framework — plain node:http. */
 import http from "node:http";
-import { config, isOwnerId } from "./config.js";
+import { config, isOwnerId, setProviderEnabled } from "./config.js";
 import { ask, providerStatus, refreshModels, knownModels, ollamaModels } from "./ai.js";
 import { chat } from "./chat-loop.js";
-import { getSettings, setSettings, allGuilds, getGuild, saveGuild } from "./db.js";
+import {
+  getSettings, setSettings, allGuilds, getGuild, saveGuild,
+  listLookupWhitelist, addLookupWhitelist, removeLookupWhitelist,
+  listCustomCommands, setCustomCommand, deleteCustomCommand,
+  getAutoresponder, setAutoresponder,
+  getWelcome, setWelcome,
+  listReactionRoles, setReactionRole, deleteReactionRole,
+} from "./db.js";
 import { startBot, stopBot, botStatus, botGuilds, listCommands } from "./bot.js";
-import { startSelfbot, stopSelfbot, selfbotStatus } from "./selfbot.js";
+import { startSelfbot, stopSelfbot, selfbotStatus, selfbotGuilds } from "./selfbot.js";
 import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
+import { auditFolder } from "./code-audit.js";
 
 const json = (res, code, body) => {
   res.writeHead(code, {
@@ -62,6 +70,13 @@ const ROUTES = {
     return { ...known, ollama: await ollamaModels() };
   },
 
+  "POST /api/owner/providers/toggle": async (req) => {
+    requireOwner(req);
+    const { name, enabled } = await readBody(req);
+    await setProviderEnabled(name, enabled);
+    return { ok: true, name, enabled };
+  },
+
   "POST /api/owner/verify": async (req) => {
     requireOwner(req);
     return { ok: true };
@@ -99,7 +114,23 @@ const ROUTES = {
 
   "POST /api/owner/settings": async (req) => {
     requireOwner(req);
-    return setSettings(await readBody(req));
+    const body = await readBody(req);
+    const provider = body.provider || {};
+    const map = {
+      openrouterEnabled: "openrouter",
+      ollamaEnabled: "ollama",
+      openaiEnabled: "openai",
+      anthropicEnabled: "anthropic",
+      groqEnabled: "groq",
+      openclawEnabled: "openclaw",
+    };
+    for (const [key, name] of Object.entries(map)) {
+      if (typeof provider[key] === "boolean") {
+        await setProviderEnabled(name, provider[key]);
+      }
+    }
+    delete body.provider;
+    return setSettings(body);
   },
 
   "GET /api/owner/guilds": async (req) => {
@@ -149,6 +180,85 @@ const ROUTES = {
   // ---- Lookups ----
   "GET /api/owner/lookups": async (req) => { requireOwner(req); return { files: await listLookupFiles() }; },
   "POST /api/owner/lookup": async (req) => { requireOwner(req); return await lookup((await readBody(req)).query); },
+
+  // ---- Lookup whitelist ----
+  "GET /api/owner/lookup-whitelist": async (req) => { requireOwner(req); return { items: listLookupWhitelist() }; },
+  "POST /api/owner/lookup-whitelist": async (req) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    return addLookupWhitelist(b.value, b.note);
+  },
+  "DELETE /api/owner/lookup-whitelist/:value": async (req, value) => { requireOwner(req); removeLookupWhitelist(value); return { ok: true }; },
+
+  // ---- Code check / auditor ----
+  "POST /api/owner/code-files": async (req) => {
+    requireOwner(req);
+    const { path: folder } = await readBody(req);
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const walk = async (dir) => {
+      const files = [];
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (!["node_modules", ".git", "dist", "build", "coverage"].includes(e.name)) files.push(...(await walk(full)));
+        } else if (e.isFile()) {
+          files.push(full);
+        }
+      }
+      return files;
+    };
+    const files = await walk(folder);
+    return { path: folder, files };
+  },
+  "POST /api/owner/code-file": async (req) => {
+    requireOwner(req);
+    const { file, content, save } = await readBody(req);
+    const fs = await import("node:fs/promises");
+    if (save) {
+      await fs.writeFile(file, content, "utf8");
+      return { ok: true };
+    }
+    const data = await fs.readFile(file, "utf8");
+    return { file, content: data };
+  },
+  "POST /api/owner/code-audit": async (req) => {
+    requireOwner(req);
+    const { path: folder } = await readBody(req);
+    return await auditFolder(folder);
+  },
+
+  // ---- Alt account guilds ----
+  "GET /api/owner/selfbot-guilds": async (req) => { requireOwner(req); return { guilds: selfbotGuilds() }; },
+
+  // ---- Server automation (custom commands, autoresponder, welcome, reaction roles) ----
+  "GET /api/owner/guilds/:id/custom-commands": async (req, id) => { requireOwner(req); return { items: listCustomCommands(id) }; },
+  "POST /api/owner/guilds/:id/custom-commands": async (req, id) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (b.delete) deleteCustomCommand(id, b.name);
+    else setCustomCommand(id, b.name, b.content);
+    return { items: listCustomCommands(id) };
+  },
+  "GET /api/owner/guilds/:id/autoresponder": async (req, id) => { requireOwner(req); return { items: getAutoresponder(id) }; },
+  "POST /api/owner/guilds/:id/autoresponder": async (req, id) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (b.delete) deleteAutoresponder(id, b.trigger);
+    else setAutoresponder(id, b.trigger, b.response);
+    return { items: getAutoresponder(id) };
+  },
+  "GET /api/owner/guilds/:id/welcome": async (req, id) => { requireOwner(req); return getWelcome(id); },
+  "POST /api/owner/guilds/:id/welcome": async (req, id) => { requireOwner(req); return setWelcome(id, await readBody(req)); },
+  "GET /api/owner/guilds/:id/reaction-roles": async (req, id) => { requireOwner(req); return { items: listReactionRoles(id) }; },
+  "POST /api/owner/guilds/:id/reaction-roles": async (req, id) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (b.delete) deleteReactionRole(id, b.message_id, b.emoji);
+    else setReactionRole(id, b.message_id, b.emoji, b.role_id);
+    return { items: listReactionRoles(id) };
+  },
 };
 
 function match(method, url) {

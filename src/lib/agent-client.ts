@@ -41,6 +41,7 @@ export type HealthInfo = {
   openai: boolean;
   anthropic: boolean;
   groq: boolean;
+  openclaw: boolean;
   freeModels: number;
   bot: { running: boolean; tag: string | null; guilds: number };
   selfbot: { running: boolean; tag: string | null };

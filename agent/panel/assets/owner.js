@@ -27,6 +27,9 @@ async function init() {
   loadGuilds();
   loadCommands();
   loadLookups();
+  loadWhitelist();
+  loadAltGuilds();
+  loadAutomation();
 
   document.querySelectorAll("[data-action]").forEach((b) =>
     b.addEventListener("click", async () => {
@@ -73,6 +76,7 @@ async function loadSettings() {
   const list = [
     ["openrouterEnabled", "OpenRouter"], ["ollamaEnabled", "Ollama"],
     ["groqEnabled", "Groq"], ["openaiEnabled", "OpenAI"], ["anthropicEnabled", "Anthropic"],
+    ["openclawEnabled", "OpenClaw"],
   ];
   checks.innerHTML = list.map(([k, label]) =>
     `<label><input type="checkbox" data-key="${k}" ${p[k] ? "checked" : ""}/> ${label}</label>`,
@@ -229,4 +233,147 @@ async function runLookup() {
         ${(m.hits || []).slice(0, 20).map((h) => `<pre class="out" style="margin-top:8px">${esc(typeof h === "string" ? h : JSON.stringify(h, null, 2))}</pre>`).join("")}
       </div>`).join("");
   } catch (err) { out.innerHTML = `<div style="color:var(--bad)">${esc(err.message)}</div>`; }
+}
+
+/* ---------- lookup whitelist ---------- */
+async function loadWhitelist() {
+  const list = document.getElementById("wlList");
+  try {
+    const r = await api("/api/owner/lookup-whitelist");
+    list.innerHTML = r.items.length
+      ? r.items.map((i) => `
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
+          <div><strong>${esc(i.value)}</strong>${i.note ? ` <span class="muted">· ${esc(i.note)}</span>` : ""}</div>
+          <button class="sm danger" data-wl-del="${esc(i.value)}">Remove</button>
+        </div>`).join("")
+      : `<div class="muted">No whitelisted values yet.</div>`;
+    list.querySelectorAll("[data-wl-del]").forEach((b) => b.onclick = async () => {
+      try { await api(`/api/owner/lookup-whitelist/${encodeURIComponent(b.dataset.wlDel)}`, { method: "DELETE" }); toast("Removed."); loadWhitelist(); }
+      catch (err) { toast(err.message); }
+    });
+  } catch (err) { list.textContent = err.message; }
+}
+async function addWhitelist() {
+  const value = document.getElementById("wlValue").value.trim();
+  const note = document.getElementById("wlNote").value.trim();
+  if (!value) return;
+  try { await api("/api/owner/lookup-whitelist", { method: "POST", body: { value, note } }); toast("Added."); loadWhitelist(); document.getElementById("wlValue").value = ""; }
+  catch (err) { toast(err.message); }
+}
+
+/* ---------- alt account guilds ---------- */
+async function loadAltGuilds() {
+  const wrap = document.getElementById("altGuilds");
+  const status = document.getElementById("altStatus");
+  try {
+    const r = await api("/api/owner/selfbot-guilds");
+    status.innerHTML = r.guilds.length
+      ? `<span class="pill">${r.guilds.length} servers found</span>`
+      : `<span class="muted">Alt account is not connected or not in any servers.</span>`;
+    wrap.innerHTML = r.guilds.map((g) => `
+      <div class="card" style="display:flex;align-items:center;gap:12px">
+        ${g.icon ? `<img src="${esc(g.icon)}" style="width:40px;height:40px;border-radius:50%" alt=""/>` : `<div style="width:40px;height:40px;border-radius:50%;background:var(--glass-strong);display:grid;place-items:center;font-size:18px">🖥</div>`}
+        <div><strong>${esc(g.name)}</strong><div class="muted">${g.memberCount.toLocaleString()} members · ${g.id}</div></div>
+      </div>`).join("");
+  } catch (err) { status.textContent = err.message; wrap.innerHTML = ""; }
+}
+
+/* ---------- automation ---------- */
+let AUTO_GUILDS = [];
+let AUTO_GUILD = "";
+function initAutomation() {
+  const subTabs = document.querySelectorAll("[data-sub]");
+  subTabs.forEach((b) => b.onclick = () => {
+    subTabs.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    document.querySelectorAll("[data-subpane]").forEach((p) => p.classList.toggle("hidden", p.dataset.subpane !== b.dataset.sub));
+  });
+
+  document.getElementById("autoGuild").addEventListener("change", () => {
+    AUTO_GUILD = document.getElementById("autoGuild").value;
+    loadAutomation();
+  });
+  document.getElementById("ccAdd").onclick = async () => {
+    const name = document.getElementById("ccName").value.trim().toLowerCase();
+    const content = document.getElementById("ccContent").value.trim();
+    if (!name || !content || !AUTO_GUILD) return;
+    try { await api(`/api/owner/guilds/${AUTO_GUILD}/custom-commands`, { method: "POST", body: { name, content } }); toast("Saved."); loadAutomation(); }
+    catch (err) { toast(err.message); }
+  };
+  document.getElementById("arAdd").onclick = async () => {
+    const trigger = document.getElementById("arTrigger").value.trim().toLowerCase();
+    const response = document.getElementById("arResponse").value.trim();
+    if (!trigger || !response || !AUTO_GUILD) return;
+    try { await api(`/api/owner/guilds/${AUTO_GUILD}/autoresponder`, { method: "POST", body: { trigger, response } }); toast("Saved."); loadAutomation(); }
+    catch (err) { toast(err.message); }
+  };
+  document.getElementById("wcSave").onclick = async () => {
+    if (!AUTO_GUILD) return;
+    try {
+      await api(`/api/owner/guilds/${AUTO_GUILD}/welcome`, {
+        method: "POST",
+        body: {
+          channel_id: document.getElementById("wcChannel").value.trim() || null,
+          message: document.getElementById("wcMessage").value.trim(),
+          goodbye_channel_id: document.getElementById("wcGoodbyeChannel").value.trim() || null,
+          goodbye_message: document.getElementById("wcGoodbyeMessage").value.trim(),
+        },
+      });
+      toast("Saved.");
+    } catch (err) { toast(err.message); }
+  };
+  document.getElementById("rrAdd").onclick = async () => {
+    const message_id = document.getElementById("rrMessage").value.trim();
+    const emoji = document.getElementById("rrEmoji").value.trim();
+    const role_id = document.getElementById("rrRole").value.trim();
+    if (!message_id || !emoji || !role_id || !AUTO_GUILD) return;
+    try { await api(`/api/owner/guilds/${AUTO_GUILD}/reaction-roles`, { method: "POST", body: { message_id, emoji, role_id } }); toast("Saved."); loadAutomation(); }
+    catch (err) { toast(err.message); }
+  };
+}
+
+async function loadAutomation() {
+  const select = document.getElementById("autoGuild");
+  if (!AUTO_GUILDS.length) {
+    try { AUTO_GUILDS = (await api("/api/owner/guilds")).guilds; } catch { return; }
+    select.innerHTML = AUTO_GUILDS.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join("");
+    if (!AUTO_GUILD && AUTO_GUILDS.length) { AUTO_GUILD = AUTO_GUILDS[0].id; select.value = AUTO_GUILD; }
+  }
+  if (!AUTO_GUILD) return;
+
+  try {
+    const cc = await api(`/api/owner/guilds/${AUTO_GUILD}/custom-commands`);
+    document.getElementById("ccList").innerHTML = cc.items.length
+      ? cc.items.map((c) => `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between"><code>!${esc(c.name)}</code><span>${esc(c.content)}</span><button class="sm danger" data-cc="${esc(c.name)}">Delete</button></div>`).join("")
+      : `<div class="muted">No custom commands yet.</div>`;
+    document.querySelectorAll("[data-cc]").forEach((b) => b.onclick = async () => {
+      try { await api(`/api/owner/guilds/${AUTO_GUILD}/custom-commands`, { method: "POST", body: { delete: true, name: b.dataset.cc } }); toast("Deleted."); loadAutomation(); }
+      catch (err) { toast(err.message); }
+    });
+
+    const ar = await api(`/api/owner/guilds/${AUTO_GUILD}/autoresponder`);
+    document.getElementById("arList").innerHTML = ar.items.length
+      ? ar.items.map((a) => `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between"><span><strong>${esc(a.trigger)}</strong> → ${esc(a.response)}</span><button class="sm danger" data-ar="${esc(a.trigger)}">Delete</button></div>`).join("")
+      : `<div class="muted">No auto-responder triggers yet.</div>`;
+    document.querySelectorAll("[data-ar]").forEach((b) => b.onclick = async () => {
+      try { await api(`/api/owner/guilds/${AUTO_GUILD}/autoresponder`, { method: "POST", body: { delete: true, trigger: b.dataset.ar } }); toast("Deleted."); loadAutomation(); }
+      catch (err) { toast(err.message); }
+    });
+
+    const wc = await api(`/api/owner/guilds/${AUTO_GUILD}/welcome`);
+    document.getElementById("wcChannel").value = wc.channel_id || "";
+    document.getElementById("wcMessage").value = wc.message;
+    document.getElementById("wcGoodbyeChannel").value = wc.goodbye_channel_id || "";
+    document.getElementById("wcGoodbyeMessage").value = wc.goodbye_message;
+
+    const rr = await api(`/api/owner/guilds/${AUTO_GUILD}/reaction-roles`);
+    document.getElementById("rrList").innerHTML = rr.items.length
+      ? rr.items.map((r) => `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between"><span>${esc(r.emoji)} on <code>${esc(r.message_id)}</code> → <code>${esc(r.role_id)}</code></span><button class="sm danger" data-rr-msg="${esc(r.message_id)}" data-rr-emoji="${esc(r.emoji)}">Delete</button></div>`).join("")
+      : `<div class="muted">No reaction role mappings yet.</div>`;
+    document.querySelectorAll("[data-rr-msg]").forEach((b) => b.onclick = async () => {
+      try { await api(`/api/owner/guilds/${AUTO_GUILD}/reaction-roles`, { method: "POST", body: { delete: true, message_id: b.dataset.rrMsg, emoji: b.dataset.rrEmoji } }); toast("Deleted."); loadAutomation(); }
+      catch (err) { toast(err.message); }
+    });
+  } catch (err) {
+    toast(err.message);
+  }
 }

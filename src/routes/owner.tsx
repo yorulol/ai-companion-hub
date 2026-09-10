@@ -107,7 +107,7 @@ type Settings = {
 };
 
 function OwnerDashboard({ onLock }: { onLock: () => void }) {
-  const [tab, setTab] = useState<"overview" | "discord" | "servers" | "commands" | "models" | "computer">("overview");
+  const [tab, setTab] = useState<"overview" | "discord" | "servers" | "automation" | "alt" | "whitelist" | "commands" | "models" | "computer">("overview");
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [guilds, setGuilds] = useState<GuildConfig[]>([]);
@@ -132,7 +132,7 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
     setTimeout(() => setNote(null), 1800);
   }
 
-  const tabs = ["overview", "discord", "servers", "commands", "models", "computer"] as const;
+  const tabs = ["overview", "discord", "servers", "automation", "alt", "whitelist", "commands", "models", "computer"] as const;
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6">
@@ -286,6 +286,39 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
             )}
           </Card>
         </div>
+      )}
+
+      {tab === "automation" && (
+        <Card title="Server automation">
+          <p className="text-sm text-muted-foreground">
+            Custom commands, auto-responder, welcome/goodbye messages, and reaction roles are available in the local owner panel.
+          </p>
+          <a href="http://localhost:8789" target="_blank" rel="noreferrer" className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Open local owner panel
+          </a>
+        </Card>
+      )}
+
+      {tab === "alt" && (
+        <Card title="Alt account servers">
+          <p className="text-sm text-muted-foreground">
+            View the Discord servers your alt account is in from the local owner panel.
+          </p>
+          <a href="http://localhost:8789" target="_blank" rel="noreferrer" className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Open local owner panel
+          </a>
+        </Card>
+      )}
+
+      {tab === "whitelist" && (
+        <Card title="Lookup whitelist">
+          <p className="text-sm text-muted-foreground">
+            Manage IDs and usenames that should be excluded from lookup results in the local owner panel.
+          </p>
+          <a href="http://localhost:8789" target="_blank" rel="noreferrer" className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Open local owner panel
+          </a>
+        </Card>
       )}
 
       {tab === "computer" && <ComputerTab />}

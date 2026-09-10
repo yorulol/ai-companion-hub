@@ -72,6 +72,32 @@ CREATE TABLE IF NOT EXISTS lookup_whitelist (
   note TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS custom_commands (
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  content TEXT NOT NULL,
+  PRIMARY KEY (guild_id, name)
+);
+CREATE TABLE IF NOT EXISTS autoresponder (
+  guild_id TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  response TEXT NOT NULL,
+  PRIMARY KEY (guild_id, trigger)
+);
+CREATE TABLE IF NOT EXISTS welcome_config (
+  guild_id TEXT PRIMARY KEY,
+  channel_id TEXT,
+  message TEXT NOT NULL DEFAULT 'Welcome {user} to {server}!',
+  goodbye_channel_id TEXT,
+  goodbye_message TEXT NOT NULL DEFAULT '{user} left {server}.'
+);
+CREATE TABLE IF NOT EXISTS reaction_roles (
+  guild_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  emoji TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  PRIMARY KEY (guild_id, message_id, emoji)
+);
 `);
 
 const DEFAULT_SETTINGS = {
@@ -229,3 +255,45 @@ export const findWhitelistHit = (haystack) => {
   for (const { value } of rows) if (s.includes(value)) return value;
   return null;
 };
+
+// custom commands
+export const listCustomCommands = (guild_id) =>
+  db.prepare("SELECT name, content FROM custom_commands WHERE guild_id = ? ORDER BY name").all(guild_id);
+export const setCustomCommand = (guild_id, name, content) =>
+  db.prepare("INSERT OR REPLACE INTO custom_commands (guild_id, name, content) VALUES (?, ?, ?)").run(guild_id, name, content);
+export const deleteCustomCommand = (guild_id, name) =>
+  db.prepare("DELETE FROM custom_commands WHERE guild_id = ? AND name = ?").run(guild_id, name);
+
+// autoresponder
+export const getAutoresponder = (guild_id) =>
+  db.prepare("SELECT trigger, response FROM autoresponder WHERE guild_id = ? ORDER BY trigger").all(guild_id);
+export const setAutoresponder = (guild_id, trigger, response) =>
+  db.prepare("INSERT OR REPLACE INTO autoresponder (guild_id, trigger, response) VALUES (?, ?, ?)").run(guild_id, trigger, response);
+export const deleteAutoresponder = (guild_id, trigger) =>
+  db.prepare("DELETE FROM autoresponder WHERE guild_id = ? AND trigger = ?").run(guild_id, trigger);
+
+// welcome / goodbye
+export const getWelcome = (guild_id) =>
+  db.prepare("SELECT * FROM welcome_config WHERE guild_id = ?").get(guild_id) || {
+    guild_id,
+    channel_id: null,
+    message: "Welcome {user} to {server}!",
+    goodbye_channel_id: null,
+    goodbye_message: "{user} left {server}.",
+  };
+export const setWelcome = (guild_id, patch) => {
+  const cur = getWelcome(guild_id);
+  const next = { ...cur, ...patch };
+  db.prepare(
+    "INSERT OR REPLACE INTO welcome_config (guild_id, channel_id, message, goodbye_channel_id, goodbye_message) VALUES (?, ?, ?, ?, ?)",
+  ).run(guild_id, next.channel_id || null, next.message, next.goodbye_channel_id || null, next.goodbye_message);
+  return next;
+};
+
+// reaction roles
+export const listReactionRoles = (guild_id) =>
+  db.prepare("SELECT message_id, emoji, role_id FROM reaction_roles WHERE guild_id = ? ORDER BY message_id, emoji").all(guild_id);
+export const setReactionRole = (guild_id, message_id, emoji, role_id) =>
+  db.prepare("INSERT OR REPLACE INTO reaction_roles (guild_id, message_id, emoji, role_id) VALUES (?, ?, ?, ?)").run(guild_id, message_id, emoji, role_id);
+export const deleteReactionRole = (guild_id, message_id, emoji) =>
+  db.prepare("DELETE FROM reaction_roles WHERE guild_id = ? AND message_id = ? AND emoji = ?").run(guild_id, message_id, emoji);

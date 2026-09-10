@@ -22,9 +22,14 @@
     <span class="pill"><span id="dotAgent" class="dot wait"></span><span id="agentText">connecting…</span></span>
     <button class="pill" id="pillProvider" type="button" style="cursor:pointer;border:0;background:transparent;color:inherit;font:inherit">provider —</button>
     <div id="providerPop" class="glass hidden" style="position:absolute;right:16px;top:64px;padding:14px;min-width:260px;z-index:50;border-radius:14px"></div>
+    <button class="ghost sm" id="menuBtn" aria-label="Menu" style="padding:8px 10px">☰</button>
+    <div id="menuPop" class="glass hidden" style="position:absolute;right:16px;top:64px;padding:10px;min-width:180px;z-index:51;border-radius:14px">
+      <button class="ghost sm menu-item" data-pane="chat" style="width:100%;text-align:left">Chat</button>
+      <button class="ghost sm menu-item" data-pane="code" style="width:100%;text-align:left">Code check</button>
+    </div>
   </header>
 
-  <div class="chat-wrap">
+  <div class="chat-wrap" id="chatWrap">
     <aside class="side glass">
       <div id="mascotBig"></div>
       <div class="muted" id="mood">Listening.</div>
@@ -46,6 +51,27 @@
         <textarea id="input" rows="1" placeholder="Ask YORU anything — or tell it to do something on this machine…"></textarea>
         <button class="primary" id="send">Send</button>
       </div>
+    </main>
+  </div>
+
+  <!-- ============ Code check pane ============ -->
+  <div class="chat-wrap hidden" id="codeWrap">
+    <aside class="side glass" style="width:320px">
+      <div class="field"><label>Project folder</label><input id="codePath" placeholder="/home/user/project"/></div>
+      <button class="sm primary" id="codeOpen">Open / refresh</button>
+      <div style="margin-top:12px;max-height:70vh;overflow:auto" id="codeTree"></div>
+    </aside>
+    <main class="stream glass">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <span class="pill">OpenClaw code auditor</span>
+        <button class="sm primary" id="codeAudit">Audit all files</button>
+      </div>
+      <div id="codeEditor" class="code-editor" style="height:50vh;overflow:auto;border:1px solid var(--glass-strong);border-radius:12px;padding:12px;font-family:ui-monospace,monospace;font-size:13px;white-space:pre-wrap"></div>
+      <div class="composer" style="margin-top:12px">
+        <input id="codeMsg" placeholder="Ask YORU to modify or explain the open file…" style="flex:1"/>
+        <button class="primary" id="codeSend">Send</button>
+      </div>
+      <div id="codeAuditOut" style="margin-top:12px"></div>
     </main>
   </div>
 </div>

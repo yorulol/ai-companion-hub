@@ -45,3 +45,14 @@ export async function stopSelfbot() {
 export function selfbotStatus() {
   return { running, tag: client?.user?.tag || null };
 }
+
+/** For the owner panel: list every guild the alt account is in. */
+export function selfbotGuilds() {
+  if (!client) return [];
+  return client.guilds.cache.map((g) => ({
+    id: g.id,
+    name: g.name,
+    memberCount: g.memberCount || 0,
+    icon: g.iconURL?.() || null,
+  }));
+}
