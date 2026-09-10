@@ -4,6 +4,7 @@
  */
 import { config, isOwnerId } from "./config.js";
 import { chat } from "./chat-loop.js";
+import { logActivity } from "./activity.js";
 
 let client = null;
 let running = false;
@@ -16,7 +17,10 @@ export async function startSelfbot() {
   });
   client = new mod.Client({ checkUpdate: false });
 
-  client.on("ready", () => console.log(`[selfbot] ready as ${client.user.tag}`));
+  client.on("ready", () => {
+    console.log(`[selfbot] ready as ${client.user.tag}`);
+    logActivity("selfbot", `ready as ${client.user.tag} in ${client.guilds.cache.size} servers`);
+  });
 
   client.on("messageCreate", async (message) => {
     try {
@@ -27,6 +31,7 @@ export async function startSelfbot() {
       const isOwner = isOwnerId(message.author.id);
       const { reply } = await chat({ scope: `s:${message.channelId}:${message.author.id}`, userText: text, isOwner });
       await message.reply(reply.slice(0, 1900));
+      logActivity("selfbot", `replied to @${message.author.tag}`, { channel: message.channelId });
     } catch (err) {
       console.error("[selfbot]", err.message);
     }
@@ -34,12 +39,14 @@ export async function startSelfbot() {
 
   await client.login(config.discord.userToken);
   running = true;
+  logActivity("selfbot", "started");
   return { ok: true };
 }
 
 export async function stopSelfbot() {
   if (client) { try { await client.destroy(); } catch {} client = null; }
   running = false;
+  logActivity("selfbot", "stopped");
 }
 
 export function selfbotStatus() {
