@@ -189,12 +189,14 @@ export async function startBot() {
 
   await client.login(config.discord.botToken);
   running = true;
+  logActivity("bot", "started");
   return { ok: true };
 }
 
 export async function stopBot() {
   if (client) { await client.destroy(); client = null; }
   running = false;
+  logActivity("bot", "stopped");
   return { ok: true };
 }
 
