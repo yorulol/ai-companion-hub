@@ -387,3 +387,38 @@ add({ name: "about", category: "info", description: "Learn about YORU.", usage: 
     })], components: [links] });
   } });
 
+// ================= AI PROVIDER STATUS =================
+add({ name: "providers", category: "info", description: "Show which AI providers are online and how many OpenRouter free models are loaded.", usage: "providers", permission: "everyone", aliases: ["aistatus", "models"],
+  run: async ({ message }) => {
+    const { providerStatus } = await import("../ai.js");
+    const s = await providerStatus();
+    const status = (ok) => ok ? "🟢 online" : "🔴 offline";
+    message.reply({ embeds: [embed({
+      title: "🧠 AI provider status",
+      fields: [
+        { name: "Preferred", value: s.preferred || "—", inline: true },
+        { name: "OpenRouter", value: `${status(s.openrouter)} · ${s.freeModels} free models`, inline: true },
+        { name: "Ollama", value: status(s.ollama), inline: true },
+        { name: "OpenAI", value: status(s.openai), inline: true },
+        { name: "Anthropic", value: status(s.anthropic), inline: true },
+        { name: "Groq", value: status(s.groq), inline: true },
+        { name: "OpenClaw", value: status(s.openclaw), inline: true },
+      ],
+    })] });
+  } });
+
+// ================= POLL =================
+add({ name: "poll", category: "info", description: "Create a reaction poll with up to 10 options.", usage: "poll \"Question\" \"Option 1\" \"Option 2\" ...", permission: "everyone",
+  run: async ({ message, args }) => {
+    const parsed = args.join(" ").match(/"([^"]+)"/g);
+    const items = parsed ? parsed.map((x) => x.replace(/"/g, "")) : [];
+    if (items.length < 2) return message.reply({ embeds: [warnEmbed("Usage", "`!poll \"Question\" \"Option 1\" \"Option 2\" ...`")] });
+    const [question, ...opts] = items;
+    if (opts.length > 10) return message.reply({ embeds: [warnEmbed("Too many options", "Maximum 10 options.")] });
+    const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+    const description = opts.map((o, i) => `${emojis[i]} ${o}`).join("\n");
+    const sent = await message.reply({ embeds: [embed({ title: `📊 ${question}`, description })] });
+    for (let i = 0; i < opts.length; i++) await sent.react(emojis[i]);
+  } });
+
+
