@@ -204,3 +204,12 @@ th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: upp
 .gate h2 { margin: 14px 0 6px; letter-spacing: 3px; }
 .hidden { display: none !important; }
 .toast { position: fixed; right: 20px; bottom: 20px; z-index: 9; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: rgba(20, 10, 40, 0.95); animation: rise 0.2s ease both; }
+
+.menu-item { border: 0; background: transparent; border-radius: 8px; }
+.menu-item:hover { background: rgba(126, 61, 255, 0.18); }
+
+.code-editor { tab-size: 2; }
+.code-editor:focus { outline: none; border-color: var(--violet); box-shadow: 0 0 0 3px rgba(140, 80, 255, 0.18); }
+
+#codeTree details > summary { list-style: none; }
+#codeTree details > summary::-webkit-details-marker { display: none; }
