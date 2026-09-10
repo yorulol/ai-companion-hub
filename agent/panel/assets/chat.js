@@ -310,11 +310,12 @@ document.getElementById("codeEditor").addEventListener("keydown", (e) => {
 /* ---------- email forward ---------- */
 document.getElementById("emailSend").onclick = async () => {
   const email = document.getElementById("emailInput").value.trim();
+  const op = document.getElementById("emailOp")?.value || "analyze";
   const out = document.getElementById("emailOut");
   if (!email) return toast("Paste an email first.");
-  out.innerHTML = `<div class="muted">Forwarding for analysis…</div>`;
+  out.innerHTML = `<div class="muted">Running <b>${esc(op)}</b> on reads.phrack.org…</div>`;
   try {
-    const r = await api("/api/email-forward", { method: "POST", body: { email } });
-    out.innerHTML = `<div class="card"><pre class="out" style="white-space:pre-wrap">${esc(JSON.stringify(r.result, null, 2))}</pre></div>`;
+    const r = await api("/api/email-forward", { method: "POST", body: { email, op } });
+    out.innerHTML = `<div class="card"><div class="muted" style="margin-bottom:6px">operation: <b>${esc(r.op)}</b></div><pre class="out" style="white-space:pre-wrap;max-height:60vh;overflow:auto">${esc(JSON.stringify(r.result, null, 2))}</pre></div>`;
   } catch (err) { out.innerHTML = `<div style="color:var(--bad)">${esc(err.message)}</div>`; }
 };

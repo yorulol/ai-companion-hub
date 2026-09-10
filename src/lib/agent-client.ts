@@ -116,6 +116,13 @@ export const api = {
       method: "POST", owner: true, body: JSON.stringify({ query }),
     }),
   // ---- Email Forward ----
-  emailForward: (email: string) =>
-    request<{ result: unknown }>("/api/email-forward", { method: "POST", body: JSON.stringify({ email }) }),
+  emailForward: (email: string, op: string = "analyze") =>
+    request<{ op: string; result: unknown }>("/api/email-forward", { method: "POST", body: JSON.stringify({ email, op }) }),
+  emailForwardOps: () =>
+    request<{ ops: string[]; enabled: boolean }>("/api/email-forward/ops"),
+  // ---- Owner activity feed ----
+  activity: (since: number = 0) =>
+    request<{ events: { id: number; kind: string; message: string; meta: unknown; at: string }[] }>(
+      `/api/owner/activity?since=${since}`, { owner: true },
+    ),
 };

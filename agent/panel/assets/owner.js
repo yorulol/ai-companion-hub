@@ -30,6 +30,8 @@ async function init() {
   loadWhitelist();
   loadAltGuilds();
   loadAutomation();
+  startActivity();
+
 
   document.querySelectorAll("[data-action]").forEach((b) =>
     b.addEventListener("click", async () => {
@@ -376,4 +378,44 @@ async function loadAutomation() {
   } catch (err) {
     toast(err.message);
   }
+}
+
+/* ---------- Live activity feed ---------- */
+let actSince = 0;
+const actEvents = [];
+async function startActivity() {
+  const list = document.getElementById("actList");
+  const filter = document.getElementById("actFilter");
+  const clear = document.getElementById("actClear");
+  if (!list) return;
+
+  const render = () => {
+    const kind = filter.value;
+    const rows = actEvents
+      .filter((e) => !kind || e.kind === kind)
+      .slice(-200)
+      .map((e) => `<div style="padding:6px 0;border-bottom:1px solid var(--glass-strong)">
+        <span class="muted">${esc(new Date(e.at).toLocaleTimeString())}</span>
+        <span class="pill" style="margin:0 6px;padding:1px 8px;font-size:11px">${esc(e.kind)}</span>
+        ${esc(e.message)}
+      </div>`).join("");
+    list.innerHTML = rows || `<div class="muted">No events yet.</div>`;
+    list.scrollTop = list.scrollHeight;
+  };
+  filter.onchange = render;
+  clear.onclick = () => { actEvents.length = 0; render(); };
+
+  const poll = async () => {
+    try {
+      const r = await api(`/api/owner/activity?since=${actSince}`);
+      for (const e of r.events || []) {
+        actEvents.push(e);
+        if (e.id > actSince) actSince = e.id;
+      }
+      if (actEvents.length > 500) actEvents.splice(0, actEvents.length - 500);
+      render();
+    } catch {}
+  };
+  poll();
+  setInterval(poll, 2500);
 }

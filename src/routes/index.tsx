@@ -243,10 +243,21 @@ function HamburgerMenu({ pane, setPane }: { pane: "chat" | "email"; setPane: (p:
   );
 }
 
+const EMAIL_OPS: { value: string; label: string }[] = [
+  { value: "analyze", label: "Analyze (full report)" },
+  { value: "headers", label: "Parse headers" },
+  { value: "urls", label: "Extract URLs" },
+  { value: "attachments", label: "List attachments" },
+  { value: "threat", label: "Threat score" },
+  { value: "parse", label: "Parse structure" },
+];
+
 function EmailForwardPane() {
   const [email, setEmail] = useState("");
+  const [op, setOp] = useState("analyze");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [ranOp, setRanOp] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   async function analyze() {
@@ -255,7 +266,8 @@ function EmailForwardPane() {
     setErr(null);
     setResult(null);
     try {
-      const r = await api.emailForward(email);
+      const r = await api.emailForward(email, op);
+      setRanOp(r.op);
       setResult(JSON.stringify(r.result, null, 2));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Request failed");
@@ -266,20 +278,31 @@ function EmailForwardPane() {
 
   return (
     <section className="panel space-y-3 p-4 md:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
           Email Forward · reads.phrack.org
         </span>
-        <button
-          onClick={() => void analyze()}
-          disabled={busy || !email.trim()}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-        >
-          {busy ? "Analyzing…" : "Analyze email"}
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={op}
+            onChange={(e) => setOp(e.target.value)}
+            className="rounded-full border border-input bg-background px-3 py-1 text-xs"
+          >
+            {EMAIL_OPS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => void analyze()}
+            disabled={busy || !email.trim()}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+          >
+            {busy ? "Running…" : "Run"}
+          </button>
+        </div>
       </div>
       <p className="text-sm text-muted-foreground">
-        Paste the full raw email (headers included if you have them) below.
+        Paste the full raw email (headers included if you have them). Pick an operation and hit <b>Run</b>.
       </p>
       <textarea
         rows={12}
@@ -294,7 +317,10 @@ function EmailForwardPane() {
         </p>
       )}
       {result && (
-        <pre className="max-h-96 overflow-auto rounded-xl bg-secondary/60 p-3 font-mono text-xs">{result}</pre>
+        <div className="space-y-1">
+          {ranOp && <p className="text-xs text-muted-foreground">operation: <b>{ranOp}</b></p>}
+          <pre className="max-h-[60vh] overflow-auto rounded-xl bg-secondary/60 p-3 font-mono text-xs">{result}</pre>
+        </div>
       )}
     </section>
   );

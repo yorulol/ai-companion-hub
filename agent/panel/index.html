@@ -78,11 +78,21 @@
   <!-- ============ Email Forward pane ============ -->
   <div class="chat-wrap hidden" id="emailWrap">
     <main class="stream glass" style="width:100%">
-      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">
         <span class="pill">Email Forward · reads.phrack.org</span>
-        <button class="sm primary" id="emailSend">Analyze email</button>
+        <div class="row" style="gap:6px">
+          <select id="emailOp" class="pill" style="padding:6px 10px;background:transparent;color:inherit;border:1px solid var(--glass-strong);border-radius:999px">
+            <option value="analyze">Analyze (full report)</option>
+            <option value="headers">Parse headers</option>
+            <option value="urls">Extract URLs</option>
+            <option value="attachments">List attachments</option>
+            <option value="threat">Threat score</option>
+            <option value="parse">Parse structure</option>
+          </select>
+          <button class="sm primary" id="emailSend">Run</button>
+        </div>
       </div>
-      <p class="muted" style="margin-top:0">Paste the full raw email (headers included if you have them) below.</p>
+      <p class="muted" style="margin-top:0">Paste the full raw email (headers included if you have them). Pick an operation, hit <b>Run</b>.</p>
       <textarea id="emailInput" rows="12" placeholder="From: …&#10;Subject: …&#10;&#10;(paste the raw email here)" style="width:100%;font-family:ui-monospace,monospace;font-size:13px"></textarea>
       <div id="emailOut" style="margin-top:12px"></div>
     </main>
