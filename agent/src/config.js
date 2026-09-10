@@ -76,6 +76,12 @@ export const config = {
     selfbotAutostart: bool(process.env.SELFBOT_AUTOSTART, false),
   },
 
+  emailForward: {
+    enabled: bool(process.env.EMAIL_FORWARD_ENABLED, false),
+    key: process.env.EMAIL_FORWARD_API_KEY || "",
+    base: (process.env.EMAIL_FORWARD_API_URL || "https://reads.phrack.org/api/v1").replace(/\/$/, ""),
+  },
+
   computer: {
     enabled: bool(process.env.COMPUTER_CONTROL_ENABLED, true),
     root: process.env.COMPUTER_CONTROL_ROOT || homeDir,

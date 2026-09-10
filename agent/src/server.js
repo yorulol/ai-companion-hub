@@ -64,6 +64,24 @@ const ROUTES = {
     return await ask({ messages: body.messages || [], mode: body.mode || "general" });
   },
 
+  "POST /api/email-forward": async (req) => {
+    const ef = config.emailForward;
+    if (!ef.enabled || !ef.key) throw new Error("Email Forward is disabled. Set EMAIL_FORWARD_ENABLED=true and EMAIL_FORWARD_API_KEY in .env.");
+    const { email } = await readBody(req);
+    if (!email || typeof email !== "string") throw new Error("Paste the raw email content first.");
+    const res = await fetch(`${ef.base}/analyze`, {
+      method: "POST",
+      headers: { "content-type": "application/json", Authorization: `Bearer ${ef.key}`, "x-api-key": ef.key },
+      body: JSON.stringify({ email }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const text = await res.text();
+    let body;
+    try { body = JSON.parse(text); } catch { body = { raw: text }; }
+    if (!res.ok) throw new Error(body?.error || `Email Forward API ${res.status}`);
+    return { result: body };
+  },
+
   "GET /api/models": async () => {
     await refreshModels();
     const known = knownModels();
