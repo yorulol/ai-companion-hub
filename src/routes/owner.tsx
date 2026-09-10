@@ -288,6 +288,39 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
         </div>
       )}
 
+      {tab === "automation" && (
+        <Card title="Server automation">
+          <p className="text-sm text-muted-foreground">
+            Custom commands, auto-responder, welcome/goodbye messages, and reaction roles are available in the local owner panel.
+          </p>
+          <a href="http://localhost:8789" target="_blank" rel="noreferrer" className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Open local owner panel
+          </a>
+        </Card>
+      )}
+
+      {tab === "alt" && (
+        <Card title="Alt account servers">
+          <p className="text-sm text-muted-foreground">
+            View the Discord servers your alt account is in from the local owner panel.
+          </p>
+          <a href="http://localhost:8789" target="_blank" rel="noreferrer" className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Open local owner panel
+          </a>
+        </Card>
+      )}
+
+      {tab === "whitelist" && (
+        <Card title="Lookup whitelist">
+          <p className="text-sm text-muted-foreground">
+            Manage IDs and usenames that should be excluded from lookup results in the local owner panel.
+          </p>
+          <a href="http://localhost:8789" target="_blank" rel="noreferrer" className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Open local owner panel
+          </a>
+        </Card>
+      )}
+
       {tab === "computer" && <ComputerTab />}
     </main>
   );
