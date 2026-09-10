@@ -115,4 +115,7 @@ export const api = {
     request<{ query: string; files: number; matches: { file: string; hits?: unknown[]; error?: string }[] }>("/api/owner/lookup", {
       method: "POST", owner: true, body: JSON.stringify({ query }),
     }),
+  // ---- Email Forward ----
+  emailForward: (email: string) =>
+    request<{ result: unknown }>("/api/email-forward", { method: "POST", body: JSON.stringify({ email }) }),
 };

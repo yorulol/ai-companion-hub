@@ -155,6 +155,7 @@ function systemRows() {
     ["hostname", o.hostname, C.cyan],
     ["computer control", config.computer.enabled ? paint(C.green, "enabled") : paint(C.grey, "off"), C.reset],
     ["sandbox root", config.computer.unrestricted ? paint(C.yellow, "UNRESTRICTED (whole disk)") : config.computer.root, C.reset],
+    ["email forward", config.emailForward.enabled ? (config.emailForward.key ? paint(C.green, "enabled · key set") : paint(C.yellow, "enabled · no key")) : paint(C.grey, "off"), C.reset],
   ];
 }
 

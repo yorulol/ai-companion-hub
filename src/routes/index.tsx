@@ -31,6 +31,7 @@ function ChatPanel() {
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastRoute, setLastRoute] = useState<string | null>(null);
+  const [pane, setPane] = useState<"chat" | "email">("chat");
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -96,7 +97,7 @@ function ChatPanel() {
           >
             Owner panel
           </Link>
-          <HamburgerMenu />
+          <HamburgerMenu pane={pane} setPane={setPane} />
         </div>
       </header>
 
@@ -114,7 +115,9 @@ npm run yoru`}
         </div>
       )}
 
-      <section ref={boxRef} className="panel flex-1 space-y-4 overflow-y-auto p-4 md:p-6">
+      {pane === "email" && <EmailForwardPane />}
+
+      <section ref={boxRef} className={`panel flex-1 space-y-4 overflow-y-auto p-4 md:p-6 ${pane !== "chat" ? "hidden" : ""}`}>
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-14 text-center">
             <RobotMascot state={online ? "idle" : "offline"} className="h-28 w-28" />
@@ -206,8 +209,9 @@ function StatusDot({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
-function HamburgerMenu() {
+function HamburgerMenu({ pane, setPane }: { pane: "chat" | "email"; setPane: (p: "chat" | "email") => void }) {
   const [open, setOpen] = useState(false);
+  const item = "block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary";
   return (
     <div className="relative">
       <button
@@ -218,18 +222,17 @@ function HamburgerMenu() {
       </button>
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-border bg-background p-2 shadow-lg">
-          <Link
-            to="/"
-            className="block rounded-lg px-3 py-2 text-sm hover:bg-secondary"
-            onClick={() => setOpen(false)}
-          >
+          <button className={item} onClick={() => { setPane("chat"); setOpen(false); }}>
             Chat
-          </Link>
+          </button>
+          <button className={item} onClick={() => { setPane("email"); setOpen(false); }}>
+            Email Forward
+          </button>
           <a
             href="http://localhost:8788"
             target="_blank"
             rel="noreferrer"
-            className="block rounded-lg px-3 py-2 text-sm hover:bg-secondary"
+            className={item}
             onClick={() => setOpen(false)}
           >
             Code check (local)
@@ -237,6 +240,63 @@ function HamburgerMenu() {
         </div>
       )}
     </div>
+  );
+}
+
+function EmailForwardPane() {
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function analyze() {
+    if (!email.trim() || busy) return;
+    setBusy(true);
+    setErr(null);
+    setResult(null);
+    try {
+      const r = await api.emailForward(email);
+      setResult(JSON.stringify(r.result, null, 2));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Request failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel space-y-3 p-4 md:p-6">
+      <div className="flex items-center justify-between">
+        <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
+          Email Forward · reads.phrack.org
+        </span>
+        <button
+          onClick={() => void analyze()}
+          disabled={busy || !email.trim()}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+        >
+          {busy ? "Analyzing…" : "Analyze email"}
+        </button>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Paste the full raw email (headers included if you have them) below.
+      </p>
+      <textarea
+        rows={12}
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder={"From: …\nSubject: …\n\n(paste the raw email here)"}
+        className="w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
+      />
+      {err && (
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive-foreground">
+          {err}
+        </p>
+      )}
+      {result && (
+        <pre className="max-h-96 overflow-auto rounded-xl bg-secondary/60 p-3 font-mono text-xs">{result}</pre>
+      )}
+    </section>
   );
 }
 
