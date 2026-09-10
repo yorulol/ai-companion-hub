@@ -115,7 +115,7 @@ npm run yoru`}
         </div>
       )}
 
-      {pane === "email" && <EmailForwardPane />}
+      {pane === "email" && <MailForwardPane />}
 
       <section ref={boxRef} className={`panel flex-1 space-y-4 overflow-y-auto p-4 md:p-6 ${pane !== "chat" ? "hidden" : ""}`}>
         {messages.length === 0 && (
