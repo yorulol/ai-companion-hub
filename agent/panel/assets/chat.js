@@ -114,41 +114,54 @@ setInterval(health, 15000);
 /* ---------- provider popover ---------- */
 const pill = document.getElementById("pillProvider");
 const pop = document.getElementById("providerPop");
-const PROVIDERS = [
-  ["openrouterEnabled", "OpenRouter", "free models, auto-rotated"],
-  ["ollamaEnabled", "Ollama", "local backup"],
-  ["openaiEnabled", "OpenAI"],
-  ["anthropicEnabled", "Anthropic"],
-  ["groqEnabled", "Groq"],
-  ["openclawEnabled", "OpenClaw"],
-];
+const PLABEL = { openrouter: "OpenRouter", ollama: "Ollama", openai: "OpenAI", anthropic: "Anthropic", groq: "Groq", openclaw: "OpenClaw" };
+const PNOTE = {
+  openrouter: "Rotates every free model automatically.",
+  ollama: "Local models — no API key needed.",
+  openclaw: "Self-hosted (github.com/openclaw/openclaw). Key optional.",
+};
 
 async function renderProviders() {
   pop.innerHTML = `<div class="muted" style="margin-bottom:8px">Loading…</div>`;
   try {
-    const s = await api("/api/owner/settings");
-    const p = s.provider || {};
+    const data = await api("/api/providers", { owner: false });
+    const save = async (patch, ck) => {
+      try { await api("/api/providers", { method: "POST", body: patch }); toast("Saved to .env"); renderProviders(); }
+      catch (err) { toast(err.message); if (ck) ck.checked = !ck.checked; }
+    };
     pop.innerHTML = `
       <div style="font-weight:600;margin-bottom:8px">AI providers</div>
-      ${PROVIDERS.map(([k, name, note]) => `
-        <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
-          <input type="checkbox" data-k="${k}" ${p[k] ? "checked" : ""}/>
-          <span style="flex:1"><strong>${name}</strong>${note ? ` <span class="muted" style="font-size:.85em">· ${esc(note)}</span>` : ""}</span>
-        </label>`).join("")}
-      <div class="muted" style="font-size:.8em;margin-top:8px">Toggles persist in the agent DB. API keys still come from your <code>.env</code>.</div>`;
-    pop.querySelectorAll("input[data-k]").forEach((i) => {
-      i.addEventListener("change", async () => {
-        const patch = { provider: { [i.dataset.k]: i.checked } };
-        try { await api("/api/owner/settings", { method: "POST", body: patch }); toast("Saved."); }
-        catch (err) { toast(err.message); i.checked = !i.checked; }
-      });
-    });
+      <div class="card" style="padding:8px;margin-bottom:8px">
+        <div class="muted" style="font-size:.75em;text-transform:uppercase;margin-bottom:4px">Preferred (tried first)</div>
+        <select id="prefSel" style="width:100%;padding:6px;background:var(--bg-2,#111);color:inherit;border:1px solid var(--border,#333);border-radius:6px">
+          ${data.providers.map(p => `<option value="${p.name}" ${p.name===data.preferred?"selected":""}>${PLABEL[p.name]}</option>`).join("")}
+        </select>
+      </div>
+      ${data.providers.map(p => `
+        <div class="card" style="padding:8px;margin-bottom:6px">
+          <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" data-name="${p.name}" ${p.enabled?"checked":""}/>
+            <span style="flex:1;font-weight:600">${PLABEL[p.name]}</span>
+            ${p.keyRequired ? `<span class="muted" style="font-size:.7em;color:${p.hasKey?"#4ade80":"#fbbf24"}">${p.hasKey?"key set":"no key"}</span>` : ""}
+          </label>
+          ${PNOTE[p.name] ? `<div class="muted" style="font-size:.75em;margin-top:4px">${esc(PNOTE[p.name])}</div>` : ""}
+          ${(p.keyRequired || p.name === "openclaw") ? `
+            <div style="display:flex;gap:4px;margin-top:6px">
+              <input type="password" data-key="${p.name}" placeholder="${p.hasKey?"•••••••• (replace)":"Paste API key"}" style="flex:1;padding:4px 6px;font-size:.8em;background:var(--bg-2,#111);color:inherit;border:1px solid var(--border,#333);border-radius:6px"/>
+              <button class="ghost sm" data-savekey="${p.name}">Save</button>
+            </div>` : ""}
+        </div>`).join("")}
+      <div class="muted" style="font-size:.75em;margin-top:8px">Changes write to <code>agent/.env</code>. OpenClaw is a self-hosted OSS server — leave the key blank unless your instance requires one.</div>`;
+    pop.querySelector("#prefSel").addEventListener("change", (e) => save({ preferred: e.target.value }));
+    pop.querySelectorAll("input[data-name]").forEach(cb => cb.addEventListener("change", () =>
+      save({ providers: { [cb.dataset.name]: { enabled: cb.checked } } }, cb)));
+    pop.querySelectorAll("button[data-savekey]").forEach(btn => btn.addEventListener("click", () => {
+      const name = btn.dataset.savekey;
+      const val = pop.querySelector(`input[data-key="${name}"]`).value;
+      save({ providers: { [name]: { key: val } } });
+    }));
   } catch (err) {
-    pop.innerHTML = `<div class="muted">Owner login required to change providers. <a href="#" id="popOwner">Open owner panel →</a></div>`;
-    pop.querySelector("#popOwner")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      document.getElementById("ownerLink")?.click();
-    });
+    pop.innerHTML = `<div class="muted">Could not load providers: ${esc(err.message)}</div>`;
   }
 }
 
