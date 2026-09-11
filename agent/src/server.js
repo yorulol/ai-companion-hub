@@ -1,6 +1,6 @@
 /** Tiny HTTP service the web panels talk to. No framework — plain node:http. */
 import http from "node:http";
-import { config, isOwnerId, setProviderEnabled } from "./config.js";
+import { config, isOwnerId, setProviderEnabled, setProviderKey, setPreferredProvider } from "./config.js";
 import { ask, providerStatus, refreshModels, knownModels, ollamaModels } from "./ai.js";
 import { chat } from "./chat-loop.js";
 import {
@@ -96,6 +96,32 @@ const ROUTES = {
     const { name, enabled } = await readBody(req);
     await setProviderEnabled(name, enabled);
     return { ok: true, name, enabled };
+  },
+
+  "GET /api/providers": async () => {
+    const list = ["openrouter", "ollama", "openai", "anthropic", "groq", "openclaw"];
+    const KEY_REQUIRED = { openrouter: true, openai: true, anthropic: true, groq: true, openclaw: false, ollama: false };
+    return {
+      preferred: config.providers.preferred,
+      providers: list.map((name) => ({
+        name,
+        enabled: !!config.providers[name].enabled,
+        hasKey: !!config.providers[name].key,
+        keyRequired: KEY_REQUIRED[name],
+        model: config.providers[name].model || null,
+      })),
+    };
+  },
+  "POST /api/providers": async (req) => {
+    const body = await readBody(req);
+    if (body.preferred) await setPreferredProvider(body.preferred);
+    if (body.providers && typeof body.providers === "object") {
+      for (const [name, patch] of Object.entries(body.providers)) {
+        if (typeof patch.enabled === "boolean") await setProviderEnabled(name, patch.enabled);
+        if (typeof patch.key === "string") await setProviderKey(name, patch.key);
+      }
+    }
+    return { ok: true };
   },
 
   "POST /api/owner/verify": async (req) => {

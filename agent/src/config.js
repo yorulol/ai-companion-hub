@@ -102,24 +102,50 @@ export const config = {
   },
 };
 
-/** Runtime toggle of a provider (also persists to .env when possible). */
-export async function setProviderEnabled(name, enabled) {
-  const key = `${name.toUpperCase()}_ENABLED`;
-  if (!config.providers[name]) throw new Error(`Unknown provider: ${name}`);
-  config.providers[name].enabled = enabled;
+async function writeEnv(updates) {
   try {
     const { promises: fs } = await import("node:fs");
     const path = (await import("node:path")).default;
     const envPath = path.resolve(process.cwd(), ".env");
     let text = await fs.readFile(envPath, "utf8").catch(() => "");
-    const lineRe = new RegExp(`^${key}=.*$`, "m");
-    if (lineRe.test(text)) {
-      text = text.replace(lineRe, `${key}=${enabled}`);
-    } else {
-      text += `\n${key}=${enabled}\n`;
+    for (const [key, value] of Object.entries(updates)) {
+      const lineRe = new RegExp(`^${key}=.*$`, "m");
+      const line = `${key}=${value}`;
+      if (lineRe.test(text)) text = text.replace(lineRe, line);
+      else text += (text === "" || text.endsWith("\n") ? "" : "\n") + line + "\n";
     }
     await fs.writeFile(envPath, text, "utf8");
   } catch (err) {
-    console.warn("[config] could not persist provider toggle:", err.message);
+    console.warn("[config] could not persist env changes:", err.message);
   }
+}
+
+/** Runtime toggle of a provider (also persists to .env when possible). */
+export async function setProviderEnabled(name, enabled) {
+  if (!config.providers[name]) throw new Error(`Unknown provider: ${name}`);
+  config.providers[name].enabled = enabled;
+  await writeEnv({ [`${name.toUpperCase()}_ENABLED`]: enabled });
+}
+
+const KEY_ENV = {
+  openrouter: "OPENROUTER_API_KEY",
+  openai: "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+  groq: "GROQ_API_KEY",
+  openclaw: "OPENCLAW_API_KEY",
+};
+
+/** Update a provider's API key (persisted to .env). */
+export async function setProviderKey(name, key) {
+  if (!config.providers[name]) throw new Error(`Unknown provider: ${name}`);
+  if (!KEY_ENV[name]) throw new Error(`${name} does not use an API key`);
+  config.providers[name].key = key || "";
+  await writeEnv({ [KEY_ENV[name]]: key || "" });
+}
+
+/** Set the preferred provider (persisted to .env). */
+export async function setPreferredProvider(name) {
+  if (!config.providers[name]) throw new Error(`Unknown provider: ${name}`);
+  config.providers.preferred = name;
+  await writeEnv({ PREFERRED_PROVIDER: name });
 }

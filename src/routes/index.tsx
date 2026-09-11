@@ -506,21 +506,46 @@ function MailKeys({ run, busy }: { run: (op: string, a?: Record<string, unknown>
   );
 }
 
+type ProviderRow = { name: string; enabled: boolean; hasKey: boolean; keyRequired: boolean; model: string | null };
+const PROVIDER_LABEL: Record<string, string> = {
+  openrouter: "OpenRouter",
+  ollama: "Ollama",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  groq: "Groq",
+  openclaw: "OpenClaw",
+};
+const PROVIDER_NOTE: Record<string, string> = {
+  openrouter: "Rotates every free model automatically.",
+  ollama: "Local models — no API key needed.",
+  openclaw: "Self-hosted (github.com/openclaw/openclaw). Key optional.",
+  openai: "",
+  anthropic: "",
+  groq: "",
+};
+
 function ProviderToggle({ health }: { health: HealthInfo | null }) {
   const [open, setOpen] = useState(false);
-  const providers = [
-    { key: "openrouter", label: "OpenRouter" },
-    { key: "ollama", label: "Ollama" },
-    { key: "openai", label: "OpenAI" },
-    { key: "anthropic", label: "Anthropic" },
-    { key: "groq", label: "Groq" },
-    { key: "openclaw", label: "OpenClaw" },
-  ];
+  const [data, setData] = useState<{ preferred: string; providers: ProviderRow[] } | null>(null);
+  const [keys, setKeys] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = () => api.providers().then(setData).catch(() => setData(null));
+  useEffect(() => { if (open) load(); }, [open]);
+
+  const save = async (patch: Parameters<typeof api.saveProviders>[0], label: string) => {
+    setSaving(label); setMsg(null);
+    try { await api.saveProviders(patch); await load(); setMsg("Saved to .env"); }
+    catch (e) { setMsg(e instanceof Error ? e.message : "Failed"); }
+    finally { setSaving(null); setTimeout(() => setMsg(null), 2000); }
+  };
+
   return (
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="hidden items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex"
+        className="hidden items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex hover:text-foreground"
       >
         <span
           className="h-2 w-2 rounded-full"
@@ -529,15 +554,71 @@ function ProviderToggle({ health }: { health: HealthInfo | null }) {
         {health?.preferred || "provider"}
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-border bg-background p-3 shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-2 w-80 max-h-[70vh] overflow-auto rounded-xl border border-border bg-background p-3 shadow-lg">
           <div className="mb-2 text-xs font-semibold text-muted-foreground">AI providers</div>
-          {providers.map((p) => (
-            <label key={p.key} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-secondary">
-              <input type="checkbox" defaultChecked={!!(health as any)?.[p.key]} className="rounded" />
-              {p.label}
-            </label>
-          ))}
-          <div className="mt-2 text-[10px] text-muted-foreground">Open toggles in the local owner panel to persist changes.</div>
+          {!data && <div className="text-xs text-muted-foreground">Loading…</div>}
+          {data && (
+            <>
+              <div className="mb-3 rounded-lg border border-border/50 p-2">
+                <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Preferred (tried first)</div>
+                <select
+                  value={data.preferred}
+                  onChange={(e) => save({ preferred: e.target.value }, "preferred")}
+                  disabled={saving === "preferred"}
+                  className="w-full rounded-md border border-border bg-secondary px-2 py-1 text-sm"
+                >
+                  {data.providers.map((p) => (
+                    <option key={p.name} value={p.name}>{PROVIDER_LABEL[p.name]}</option>
+                  ))}
+                </select>
+              </div>
+
+              {data.providers.map((p) => (
+                <div key={p.name} className="mb-2 rounded-lg border border-border/50 p-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={p.enabled}
+                      onChange={(e) => save({ providers: { [p.name]: { enabled: e.target.checked } } }, p.name)}
+                      disabled={saving === p.name}
+                      className="rounded"
+                    />
+                    <span className="flex-1 font-medium">{PROVIDER_LABEL[p.name]}</span>
+                    {p.keyRequired && (
+                      <span className={`text-[10px] ${p.hasKey ? "text-emerald-400" : "text-amber-400"}`}>
+                        {p.hasKey ? "key set" : "no key"}
+                      </span>
+                    )}
+                  </label>
+                  {PROVIDER_NOTE[p.name] && (
+                    <div className="mt-1 text-[10px] text-muted-foreground">{PROVIDER_NOTE[p.name]}</div>
+                  )}
+                  {(p.keyRequired || p.name === "openclaw") && (
+                    <div className="mt-2 flex gap-1">
+                      <input
+                        type="password"
+                        placeholder={p.hasKey ? "•••••••• (replace)" : "Paste API key"}
+                        value={keys[p.name] ?? ""}
+                        onChange={(e) => setKeys({ ...keys, [p.name]: e.target.value })}
+                        className="flex-1 rounded-md border border-border bg-secondary px-2 py-1 text-xs"
+                      />
+                      <button
+                        onClick={() => { save({ providers: { [p.name]: { key: keys[p.name] ?? "" } } }, p.name + ":key"); setKeys({ ...keys, [p.name]: "" }); }}
+                        disabled={saving === p.name + ":key"}
+                        className="rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div className="mt-2 text-[10px] text-muted-foreground">
+                Changes write to <code>agent/.env</code>. OpenClaw is a self-hosted OSS server — leave the key blank unless your instance requires one.
+              </div>
+              {msg && <div className="mt-1 text-[10px] text-emerald-400">{msg}</div>}
+            </>
+          )}
         </div>
       )}
     </div>

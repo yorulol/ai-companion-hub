@@ -94,6 +94,14 @@ export const api = {
 
   commands: () => request<{ commands: CommandInfo[]; total: number }>("/api/commands"),
 
+  providers: () =>
+    request<{
+      preferred: string;
+      providers: { name: string; enabled: boolean; hasKey: boolean; keyRequired: boolean; model: string | null }[];
+    }>("/api/providers"),
+  saveProviders: (patch: { preferred?: string; providers?: Record<string, { enabled?: boolean; key?: string }> }) =>
+    request<{ ok: true }>("/api/providers", { method: "POST", body: JSON.stringify(patch) }),
+
   control: (action: "bot:start" | "bot:stop" | "self:start" | "self:stop") =>
     request<{ ok: true }>("/api/owner/control", { method: "POST", owner: true, body: JSON.stringify({ action }) }),
 
