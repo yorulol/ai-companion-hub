@@ -80,8 +80,8 @@ function ChatPanel() {
   const online = !!health?.ok;
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 px-4 py-6">
-      <header className="panel relative z-[110] flex flex-wrap items-center gap-4 p-4">
+    <main className="relative isolate mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 px-4 py-6">
+      <header className="panel relative z-[1000] flex flex-wrap items-center gap-4 overflow-visible p-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold">YORU</h1>
           <p className="text-sm text-muted-foreground">
@@ -232,7 +232,7 @@ function HamburgerMenu({ pane, setPane }: { pane: "chat" | "email"; setPane: (p:
         ☰
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-[100] mt-2 w-52 rounded-xl border border-border bg-popover p-2 shadow-xl shadow-black/60">
+        <div className="absolute right-0 top-full z-[1100] mt-2 w-52 rounded-xl border border-border bg-popover p-2 shadow-xl shadow-black/60">
           <button className={item + (pane === "chat" ? active : "")} onClick={() => { setPane("chat"); setOpen(false); }}>
             Chat
           </button>
@@ -554,7 +554,7 @@ function ProviderToggle({ health }: { health: HealthInfo | null }) {
         {health?.preferred || "provider"}
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 max-h-[70vh] overflow-auto rounded-xl border border-border bg-background p-3 shadow-lg">
+        <div className="absolute right-0 top-full z-[1100] mt-2 max-h-[70vh] w-80 overflow-auto rounded-xl border border-border bg-popover p-3 shadow-xl shadow-black/60">
           <div className="mb-2 text-xs font-semibold text-muted-foreground">AI providers</div>
           {!data && <div className="text-xs text-muted-foreground">Loading…</div>}
           {data && (
