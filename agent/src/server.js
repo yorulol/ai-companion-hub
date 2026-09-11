@@ -1,6 +1,6 @@
 /** Tiny HTTP service the web panels talk to. No framework — plain node:http. */
 import http from "node:http";
-import { config, isOwnerId, setProviderEnabled } from "./config.js";
+import { config, isOwnerId, setProviderEnabled, setProviderKey, setPreferredProvider } from "./config.js";
 import { ask, providerStatus, refreshModels, knownModels, ollamaModels } from "./ai.js";
 import { chat } from "./chat-loop.js";
 import {
