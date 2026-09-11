@@ -98,6 +98,32 @@ const ROUTES = {
     return { ok: true, name, enabled };
   },
 
+  "GET /api/providers": async () => {
+    const list = ["openrouter", "ollama", "openai", "anthropic", "groq", "openclaw"];
+    const KEY_REQUIRED = { openrouter: true, openai: true, anthropic: true, groq: true, openclaw: false, ollama: false };
+    return {
+      preferred: config.providers.preferred,
+      providers: list.map((name) => ({
+        name,
+        enabled: !!config.providers[name].enabled,
+        hasKey: !!config.providers[name].key,
+        keyRequired: KEY_REQUIRED[name],
+        model: config.providers[name].model || null,
+      })),
+    };
+  },
+  "POST /api/providers": async (req) => {
+    const body = await readBody(req);
+    if (body.preferred) await setPreferredProvider(body.preferred);
+    if (body.providers && typeof body.providers === "object") {
+      for (const [name, patch] of Object.entries(body.providers)) {
+        if (typeof patch.enabled === "boolean") await setProviderEnabled(name, patch.enabled);
+        if (typeof patch.key === "string") await setProviderKey(name, patch.key);
+      }
+    }
+    return { ok: true };
+  },
+
   "POST /api/owner/verify": async (req) => {
     requireOwner(req);
     return { ok: true };
