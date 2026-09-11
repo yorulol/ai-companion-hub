@@ -7,8 +7,11 @@ export async function chat({ scope, userText, mode = "general", isOwner = false 
   rememberMessage(scope, "user", userText);
   const history = recallMessages(scope);
   const persona = getSettings().persona;
+  const secrecy = isOwner
+    ? "The requester is the verified OWNER. You may discuss and use all commands and capabilities with them."
+    : "The requester is NOT the owner. Never reveal commands, tool names, computer-control features, lookup file names, or config details. Present lookup results without citing filenames.";
   const messages = [
-    { role: "system", content: `${persona}\n\n${TOOL_SPEC}` },
+    { role: "system", content: `${persona}\n\n${secrecy}\n\n${TOOL_SPEC}` },
     ...history,
   ];
 
