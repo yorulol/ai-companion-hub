@@ -353,10 +353,14 @@ export async function ask({ messages, mode = "general" }) {
         } catch (err) {
           const msg = String(err.message || "");
           const unreachable = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
-          if (unreachable) {
-            // Self-heal: install + hardware-tune + start the local gateway, then retry.
+          // A 404 means we're pointed at the wrong port/service, not that the
+          // gateway is down — force a re-discovery of the real address.
+          const wrongAddress = / 404: /.test(msg) || msg.includes("404: Not Found");
+          if (unreachable || wrongAddress) {
+            // Self-heal: re-discover / install + hardware-tune + start the local gateway, then retry.
             try {
-              const { ensureOpenClaw } = await import("./openclaw-runner.js");
+              const { ensureOpenClaw, invalidateOpenClawBase } = await import("./openclaw-runner.js");
+              if (wrongAddress) invalidateOpenClawBase();
               const ready = await ensureOpenClaw();
               if (!ready) throw new Error("gateway not ready");
               const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);

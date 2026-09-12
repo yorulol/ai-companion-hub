@@ -14,6 +14,8 @@ const LOCAL_BIN = path.join(AGENT_DIR, "vendor", "openclaw", "node_modules", ".b
 const ENV_PATH = path.join(AGENT_DIR, ".env");
 
 let child = null;
+/** Bases that answered but turned out not to be the gateway. */
+const badBases = new Set();
 
 function has(cmd) {
   try {
@@ -39,11 +41,23 @@ async function fetchTimeout(url, ms = 2500) {
 
 /** Is an OpenAI-compatible gateway answering at this base (…/v1)? */
 async function probe(base) {
-  const root = base.replace(/\/v1$/, "");
-  const h = await fetchTimeout(root + "/health");
-  if (h && h.ok) return true;
+  if (badBases.has(base)) return false;
+  // Must expose OpenAI-shaped /v1/models AND /v1/chat/completions — a bare
+  // /health or a random JSON server is not enough (we've adopted wrong ports
+  // before, e.g. an unrelated service on 18789 that 404s on completions).
   const m = await fetchTimeout(base + "/models");
-  return !!(m && (m.ok || m.status === 401));
+  if (!m) return false;
+  if (m.status === 401) return true; // auth-gated but real
+  if (!m.ok) return false;
+  const ct = m.headers.get("content-type") || "";
+  if (!ct.includes("json")) return false;
+  const body = await m.json().catch(() => null);
+  const looksOpenAI = body && (Array.isArray(body.data) || Array.isArray(body.models));
+  if (!looksOpenAI) return false;
+  // Confirm the completions route exists (OPTIONS/HEAD → 200/204/401/405 all fine; 404 = wrong service).
+  const cc = await fetchTimeout(base + "/chat/completions");
+  if (!cc) return true; // network hiccup, trust /models
+  return cc.status !== 404;
 }
 
 async function pingBase() {
@@ -217,6 +231,12 @@ export async function startOpenClaw({ force = false, autoInstall = false } = {})
  * for the machine if needed, then starts and waits for readiness.
  */
 let ensuring = null;
+
+/** Forget the current base URL so the next ensure() hunts for the real one. */
+export function invalidateOpenClawBase() {
+  badBases.add(config.providers.openclaw.base);
+}
+
 export async function ensureOpenClaw() {
   if (await pingBase()) return true;
   if (await discoverBase(resolveBin())) return true;
