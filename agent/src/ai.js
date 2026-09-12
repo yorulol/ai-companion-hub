@@ -357,7 +357,7 @@ export async function ask({ messages, mode = "general" }) {
             // Try to (re)start the local gateway on-demand, then retry once.
             try {
               const { startOpenClaw } = await import("./openclaw-runner.js");
-              await startOpenClaw();
+              await startOpenClaw({ force: true });
               const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);
               openclawDownUntil = 0;
               return { reply, provider: "openclaw", model: cfg.model };
