@@ -55,13 +55,18 @@ setInterval(() => refreshModels(true).catch(() => {}), 60 * 1000).unref?.();
  */
 const cooldown = new Map();
 const COOLDOWN_MS = {
-  429: 10 * 60 * 1000, // rate limited — park for 10 min
+  429: 90 * 1000,      // rate limited — short park so we cycle back quickly
   402: 60 * 60 * 1000, // out of credits — park for 1 hr
   403: 60 * 60 * 1000, // blocked — park for 1 hr
-  500: 5 * 60 * 1000,
-  502: 5 * 60 * 1000,
-  503: 5 * 60 * 1000,
-  504: 5 * 60 * 1000,
+  500: 3 * 60 * 1000,
+  502: 3 * 60 * 1000,
+  503: 3 * 60 * 1000,
+  504: 3 * 60 * 1000,
+};
+/** Evict the N models whose cooldown ends soonest so we can retry. */
+const evictSoonestCooldowns = (n = 5) => {
+  const entries = [...cooldown.entries()].sort((a, b) => a[1] - b[1]);
+  for (const [id] of entries.slice(0, n)) cooldown.delete(id);
 };
 const parkModel = (id, status) => {
   const ms = COOLDOWN_MS[status] ?? 5 * 60 * 1000;
