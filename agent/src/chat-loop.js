@@ -1,6 +1,6 @@
 /** Chat with tool-use loop. Handles up to 5 sequential tool calls per reply. */
 import { ask } from "./ai.js";
-import { extractToolCall, executeTool, TOOL_SPEC } from "./tools.js";
+import { extractToolCall, executeTool, stripToolArtifacts, TOOL_SPEC } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
 
 /**
