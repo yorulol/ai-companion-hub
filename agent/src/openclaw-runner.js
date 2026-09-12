@@ -14,7 +14,7 @@ const LOCAL_BIN = path.join(AGENT_DIR, "vendor", "openclaw", "node_modules", ".b
 const ENV_PATH = path.join(AGENT_DIR, ".env");
 
 let child = null;
-let restartedForConfig = false;
+let startupAttempt = null;
 function has(cmd) {
   try {
     execSync(platform() === "win32" ? `where ${cmd}` : `command -v ${cmd}`, { stdio: "ignore" });
@@ -50,7 +50,15 @@ async function probe(base) {
   const body = await m.json().catch(() => null);
   const looksOpenAI = body && (Array.isArray(body.data) || Array.isArray(body.models));
   if (!looksOpenAI) return false;
-  return Boolean(looksOpenAI);
+  // A different service can expose /v1/models. Confirm OpenClaw's optional
+  // chat route exists without causing a real generation: an empty request
+  // should be rejected as bad input/auth, but must not be a 404.
+  const chat = await fetchTimeout(base + "/chat/completions", 4000, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: "{}",
+  });
+  return Boolean(chat && chat.status !== 404);
 }
 
 async function pingBase() {
@@ -121,7 +129,25 @@ async function discoverBase(bin) {
   return false;
 }
 
-export async function startOpenClaw({ force = false, autoInstall = false } = {}) {
+async function stopUnhealthyService(bin) {
+  const output = await run(bin, ["gateway", "stop", "--force", "--json"], {
+    timeout: 30000,
+    windowsHide: true,
+  }).then((r) => `${r.stdout || ""}${r.stderr || ""}`).catch((e) => `${e?.stdout || ""}${e?.stderr || ""}`);
+
+  // OpenClaw owns the native service, so let its service command clean up its
+  // own PID and registration. Never scrape a PID and kill an unrelated process.
+  for (let i = 0; i < 10; i++) {
+    if (await pingBase()) return false;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (/error|failed|refus/i.test(output)) {
+    log.warn("openclaw", "the stale managed service could not be stopped; starting an isolated foreground gateway instead");
+  }
+  return true;
+}
+
+async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   if (!config.providers.openclaw.enabled) return false;
   if (!force && (!process.env.OPENCLAW_AUTOSTART || process.env.OPENCLAW_AUTOSTART === "false")) return false;
 
@@ -154,15 +180,26 @@ export async function startOpenClaw({ force = false, autoInstall = false } = {})
   // A daemon may already be up on a port we don't know about.
   if (await discoverBase(bin)) return true;
 
+  // `gateway start` controls an installed native service and is idempotent: it
+  // will keep reporting an unhealthy registered PID forever. Yoru instead owns
+  // one foreground `gateway run` process. Stop the stale service once, then run
+  // a fresh process directly and wait for its actual HTTP API.
+  await stopUnhealthyService(bin);
+
   if (child && !child.killed && child.exitCode === null) {
     // Already spawned; just wait for readiness below.
   } else {
-    log.info("openclaw", `starting local gateway (${bin === "openclaw" ? "openclaw" : "local install"})…`);
+    log.info("openclaw", `starting one local gateway (${bin === "openclaw" ? "openclaw" : "local install"})…`);
     try {
-      child = spawn(bin, ["gateway", "start"], {
+      const port = new URL(config.providers.openclaw.base).port || "18789";
+      child = spawn(bin, ["gateway", "run", "--port", port, "--bind", "loopback"], {
         stdio: ["ignore", "pipe", "pipe"],
         shell: platform() === "win32",
         detached: false,
+        env: {
+          ...process.env,
+          OPENCLAW_GATEWAY_TOKEN: config.providers.openclaw.key || process.env.OPENCLAW_GATEWAY_TOKEN || "",
+        },
       });
       child.stdout.on("data", (b) => {
         const line = b.toString().trim();
@@ -184,20 +221,23 @@ export async function startOpenClaw({ force = false, autoInstall = false } = {})
     }
   }
 
-  // OpenClaw owns its service lifecycle. Wait for its endpoint instead of
-  // repeatedly fighting the registered daemon with stop/restart calls.
+  // Wait for the one process above. Do not restart inside this loop: a failure
+  // is surfaced once and OpenRouter/Ollama remain available as fallbacks.
   for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     if (await pingBase()) { log.ok("openclaw", "gateway ready"); return true; }
     if (i === 8 && (await discoverBase(bin))) return true;
-    if (i === 10 && !restartedForConfig) {
-      restartedForConfig = true;
-      log.info("openclaw", "applying the corrected gateway configuration…");
-      await run(bin, ["gateway", "restart"], { timeout: 30000, windowsHide: true }).catch(() => null);
-    }
+    if (!child || child.exitCode !== null) break;
   }
-  log.warn("openclaw", "gateway service is running but the chat endpoint is not ready; run `npm run openclaw:status`");
+  log.warn("openclaw", "gateway did not become ready; OpenRouter/Ollama will continue working. Run `npm run openclaw:status` for details");
   return false;
+}
+
+export async function startOpenClaw(options = {}) {
+  if (!startupAttempt) {
+    startupAttempt = startOpenClawOnce(options).finally(() => { startupAttempt = null; });
+  }
+  return startupAttempt;
 }
 
 /**
@@ -205,8 +245,6 @@ export async function startOpenClaw({ force = false, autoInstall = false } = {})
  * the AI router when a request hits an unreachable gateway. Installs + tunes
  * for the machine if needed, then starts and waits for readiness.
  */
-let ensuring = null;
-
 /** Forget the current base URL so the next ensure() hunts for the real one. */
 export function invalidateOpenClawBase() {
   // Compatibility hook: the configured loopback gateway remains authoritative.
@@ -215,12 +253,7 @@ export function invalidateOpenClawBase() {
 export async function ensureOpenClaw() {
   if (await pingBase()) return true;
   if (await discoverBase(resolveBin())) return true;
-  if (!ensuring) {
-    ensuring = startOpenClaw({ force: true, autoInstall: true })
-      .catch(() => false)
-      .finally(() => { ensuring = null; });
-  }
-  return ensuring;
+  return startOpenClaw({ force: true, autoInstall: true }).catch(() => false);
 }
 
 process.on("exit", () => { try { child?.kill(); } catch {} });

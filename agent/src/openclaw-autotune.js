@@ -190,9 +190,9 @@ export async function autotuneOpenClaw({ force = false } = {}) {
   try {
     const gateway = await writeOpenclawConfig(profile);
     const base = `http://127.0.0.1:${gateway.port}/v1`;
-    await patchEnv({ OPENCLAW_AUTOSTART: "true", OPENCLAW_MODEL: "openclaw/default", OPENCLAW_API_KEY: gateway.token, OPENCLAW_BASE_URL: base });
+    await patchEnv({ OPENCLAW_AUTOSTART: "true", OPENCLAW_MODEL: "openclaw/default", OPENCLAW_API_KEY: gateway.token, OPENCLAW_GATEWAY_TOKEN: gateway.token, OPENCLAW_BASE_URL: base });
     Object.assign(config.providers.openclaw, { model: "openclaw/default", key: gateway.token, base });
-    Object.assign(process.env, { OPENCLAW_MODEL: "openclaw/default", OPENCLAW_API_KEY: gateway.token, OPENCLAW_BASE_URL: base });
+    Object.assign(process.env, { OPENCLAW_MODEL: "openclaw/default", OPENCLAW_API_KEY: gateway.token, OPENCLAW_GATEWAY_TOKEN: gateway.token, OPENCLAW_BASE_URL: base });
   } catch (e) { log.warn("openclaw", `could not write OpenClaw config: ${e.message}`); }
 
   // Auto-install if missing (silent, no interactive onboarding).
