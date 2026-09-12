@@ -4,6 +4,7 @@ import { startPanels } from "./panels.js";
 import { startBot } from "./bot.js";
 import { startSelfbot } from "./selfbot.js";
 import { refreshModels } from "./ai.js";
+import { startOpenClaw } from "./openclaw-runner.js";
 import { bootUI, log } from "./boot-ui.js";
 
 await bootUI();
@@ -22,6 +23,8 @@ if (config.panels.enabled) {
 refreshModels(true)
   .then((n) => log.ok("ai", `${n ?? 0} free OpenRouter models cached`))
   .catch((e) => log.warn("ai", `model scan failed: ${e.message}`));
+
+startOpenClaw().catch((e) => log.warn("openclaw", e.message));
 
 if (config.discord.botAutostart && config.discord.botToken) {
   startBot()
