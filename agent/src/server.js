@@ -251,7 +251,14 @@ const ROUTES = {
   "POST /api/owner/lookup-whitelist": async (req) => {
     requireOwner(req);
     const b = await readBody(req);
-    return await addWhitelistIdentity(b.value, b.note);
+    try {
+      const saved = await addWhitelistIdentity(b.value, b.note);
+      console.log(`[whitelist] saved "${saved.value}" (+${saved.aliases.length} alias${saved.aliases.length === 1 ? "" : "es"})`);
+      return saved;
+    } catch (err) {
+      console.error(`[whitelist] save failed for "${b.value}": ${err.stack || err.message}`);
+      throw err;
+    }
   },
   "DELETE /api/owner/lookup-whitelist/:value": async (req, value) => { requireOwner(req); removeLookupWhitelist(decodeURIComponent(value)); return { ok: true }; },
 

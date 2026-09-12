@@ -7,7 +7,7 @@ export async function api(path, { method = "GET", body, owner = true } = {}) {
   const headers = { "content-type": "application/json" };
   const id = localStorage.getItem(OWNER_KEY);
   if (owner && id) headers["x-owner-id"] = id;
-  const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
   const text = await res.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }

@@ -169,42 +169,120 @@ function collectLinkedIdentities(value, hit) {
   return [...identities];
 }
 
-/** Add an identity and any Discord-like IDs found in the same local records. */
+/**
+ * Add an identity and every alias we can find for it:
+ *  - Discord IDs and usernames sitting in the same row of a local lookup file.
+ *  - The counterpart (ID <-> username) resolved live from the running bot or
+ *    alt-account client, so protecting "123..." also protects "someuser" and
+ *    vice-versa without needing a file to link them.
+ */
 export async function addWhitelistIdentity(value, note = "") {
   const normalized = String(value || "").trim().toLowerCase();
   if (!normalized) throw new Error("Enter a Discord username or ID.");
   const aliases = new Set();
-  const files = await listLookupFiles();
-  const needle = normalized.toLowerCase();
-  for (const name of files) {
-    const full = path.join(LOOKUPS_DIR, name);
-    const ext = path.extname(name).toLowerCase();
-    try {
-      if (ext === ".csv" || ext === ".tsv") {
-        const lines = (await fs.readFile(full, "utf8")).split(/\r?\n/).filter(Boolean);
-        const header = lines.length ? parseCsvLine(lines[0]) : [];
-        for (let i = 1; i < lines.length; i++) if (lines[i].toLowerCase().includes(needle)) {
-          const cols = parseCsvLine(lines[i]);
-          const row = {};
-          header.forEach((h, k) => { row[h || `col_${k}`] = cols[k] ?? ""; });
-          collectLinkedIdentities(normalized, row).forEach((id) => aliases.add(id));
-        }
-      } else if (ext === ".json") {
-        const parsed = JSON.parse(await fs.readFile(full, "utf8"));
-        const visit = (item) => {
-          if (item && typeof item === "object") {
-            if (JSON.stringify(item).toLowerCase().includes(needle)) collectLinkedIdentities(normalized, item).forEach((identity) => aliases.add(identity));
-            Object.values(item).forEach(visit);
+
+  // 1) Live Discord resolution (bot first, then alt account).
+  try {
+    const discordAliases = await resolveDiscordAliases(normalized);
+    discordAliases.forEach((a) => aliases.add(a));
+  } catch (err) {
+    console.warn(`[whitelist] discord resolve for "${normalized}" failed: ${err.message}`);
+  }
+
+  // 2) Local lookup-file scan — link identities that appear together in a row.
+  try {
+    const files = await listLookupFiles();
+    const needle = normalized;
+    for (const name of files) {
+      const full = path.join(LOOKUPS_DIR, name);
+      const ext = path.extname(name).toLowerCase();
+      try {
+        if (ext === ".csv" || ext === ".tsv") {
+          const lines = (await fs.readFile(full, "utf8")).split(/\r?\n/).filter(Boolean);
+          const header = lines.length ? parseCsvLine(lines[0]) : [];
+          for (let i = 1; i < lines.length; i++) if (lines[i].toLowerCase().includes(needle)) {
+            const cols = parseCsvLine(lines[i]);
+            const row = {};
+            header.forEach((h, k) => { row[h || `col_${k}`] = cols[k] ?? ""; });
+            collectLinkedIdentities(normalized, row).forEach((id) => aliases.add(id));
           }
-        };
-        visit(parsed);
+        } else if (ext === ".json") {
+          const parsed = JSON.parse(await fs.readFile(full, "utf8"));
+          const visit = (item) => {
+            if (item && typeof item === "object") {
+              if (JSON.stringify(item).toLowerCase().includes(needle)) collectLinkedIdentities(normalized, item).forEach((id) => aliases.add(id));
+              Object.values(item).forEach(visit);
+            }
+          };
+          visit(parsed);
+        } else {
+          const text = ext === ".pdf" ? await readPdf(full) : await fs.readFile(full, "utf8");
+          for (const line of text.split(/\r?\n/)) if (line.toLowerCase().includes(needle)) {
+            collectLinkedIdentities(normalized, line).forEach((id) => aliases.add(id));
+          }
+        }
+      } catch (err) {
+        console.warn(`[whitelist] scan ${name}: ${err.message}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[whitelist] file scan failed: ${err.message}`);
+  }
+
+  aliases.delete(normalized);
+  return addLookupWhitelist(normalized, note, [...aliases]);
+}
+
+/** Ask the running Discord clients to translate an ID into a username or vice-versa. */
+async function resolveDiscordAliases(value) {
+  const aliases = new Set();
+  const isId = /^\d{15,22}$/.test(value);
+  const clients = [];
+  try { const { getBotClient } = await import("./bot.js"); const c = getBotClient?.(); if (c?.user) clients.push(c); } catch {}
+  try { const { getSelfbotClient } = await import("./selfbot.js"); const c = getSelfbotClient?.(); if (c?.user) clients.push(c); } catch {}
+
+  const push = (u) => {
+    if (!u) return;
+    if (u.id) aliases.add(String(u.id).toLowerCase());
+    if (u.username) aliases.add(String(u.username).toLowerCase());
+    if (u.globalName) aliases.add(String(u.globalName).toLowerCase());
+    if (u.tag) aliases.add(String(u.tag).toLowerCase());
+  };
+
+  for (const client of clients) {
+    try {
+      if (isId) {
+        const user = await client.users.fetch(value).catch(() => null);
+        push(user);
       } else {
-        const text = ext === ".pdf" ? await readPdf(full) : await fs.readFile(full, "utf8");
-        for (const line of text.split(/\r?\n/)) if (line.toLowerCase().includes(needle)) {
-          collectLinkedIdentities(normalized, line).forEach((id) => aliases.add(id));
+        // Search cached users across every guild this client sees.
+        for (const guild of client.guilds.cache.values()) {
+          const cached = guild.members.cache.find((m) => {
+            const u = m.user;
+            return (
+              u.username?.toLowerCase() === value ||
+              u.globalName?.toLowerCase() === value ||
+              u.tag?.toLowerCase() === value
+            );
+          });
+          if (cached) push(cached.user);
+          // Best-effort live search when the guild supports it.
+          try {
+            const results = await guild.members.search({ query: value, limit: 5 });
+            results.forEach((m) => {
+              const u = m.user;
+              const hit =
+                u.username?.toLowerCase() === value ||
+                u.globalName?.toLowerCase() === value ||
+                u.tag?.toLowerCase() === value;
+              if (hit) push(u);
+            });
+          } catch {}
         }
       }
-    } catch {}
+    } catch (err) {
+      console.warn(`[whitelist] client resolve failed: ${err.message}`);
+    }
   }
-  return addLookupWhitelist(normalized, note, [...aliases]);
+  return [...aliases];
 }

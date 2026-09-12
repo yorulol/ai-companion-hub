@@ -100,3 +100,5 @@ export function selfbotGuilds() {
     icon: g.iconURL?.() || null,
   }));
 }
+
+export const getSelfbotClient = () => client;
