@@ -57,6 +57,19 @@ export async function startOllama() {
   const installed = await listInstalled();
   const need = [p.model, p.codeModel].filter((m) => !installed.some((i) => i === m || i.startsWith(m.split(":")[0] + ":")));
 
+  // Pre-warm the chat model into VRAM so the first chat reply isn't slow.
+  if (!need.includes(p.model)) {
+    try {
+      await fetch(`${p.url}/api/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: p.model, messages: [], keep_alive: "24h" }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      log.ok("ollama", `${p.model} pre-loaded into memory`);
+    } catch { /* non-fatal */ }
+  }
+
   if (!need.length) {
     log.ok("ollama", `ready (chat=${p.model}, code=${p.codeModel})`);
     return;
