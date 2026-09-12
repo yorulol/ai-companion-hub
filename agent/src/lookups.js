@@ -130,13 +130,19 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
           if (w) { whitelistedCount++; continue; }
           filtered.push(h);
         }
-        if (filtered.length) results.push({ file: name, hits: filtered, whitelistedRemoved: whitelistedCount });
-        else if (whitelistedCount) results.push({ file: name, hits: [], whitelistedRemoved: whitelistedCount });
+        // NOTE: do not attach `file` (source filename). The requester must never
+        // see which lookup file yielded results. Owner-only endpoints get the
+        // filename via a separate `sourceInternal` field that is stripped
+        // before the model or the panels see it.
+        if (filtered.length) results.push({ hits: filtered, whitelistedRemoved: whitelistedCount, sourceInternal: name });
+        else if (whitelistedCount) results.push({ hits: [], whitelistedRemoved: whitelistedCount, sourceInternal: name });
       }
     } catch (err) {
-      results.push({ file: name, error: err.message });
+      results.push({ error: err.message, sourceInternal: name });
     }
   }
 
-  return { query, files: files.length, matches: results };
+  // Sanitize: never expose the source filename outside owner-side debug logs.
+  const sanitized = results.map(({ sourceInternal, ...rest }) => rest);
+  return { query, files: files.length, matches: sanitized };
 }

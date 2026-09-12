@@ -29,20 +29,44 @@ body::before {
   position: fixed;
   inset: -20%;
   background:
-    radial-gradient(45% 40% at 20% 15%, rgba(124, 58, 237, 0.30), transparent 70%),
-    radial-gradient(40% 45% at 85% 80%, rgba(76, 29, 149, 0.34), transparent 72%),
-    radial-gradient(35% 35% at 60% 40%, rgba(167, 99, 255, 0.13), transparent 70%);
-  filter: blur(30px);
+    radial-gradient(45% 40% at 20% 15%, rgba(124, 58, 237, 0.38), transparent 70%),
+    radial-gradient(40% 45% at 85% 80%, rgba(76, 29, 149, 0.42), transparent 72%),
+    radial-gradient(35% 35% at 60% 40%, rgba(167, 99, 255, 0.18), transparent 70%);
+  filter: blur(34px);
   pointer-events: none;
   animation: drift 26s ease-in-out infinite alternate;
 }
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(168,118,255,.025) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at top, transparent 60%, rgba(0,0,0,.5));
+  mix-blend-mode: overlay;
+  z-index: 0;
+}
 
 @keyframes drift {
-  from { transform: translate3d(-2%, -1%, 0) scale(1); }
-  to   { transform: translate3d(2%, 2%, 0) scale(1.08); }
+  from { transform: translate3d(-2%, -1%, 0) scale(1) rotate(0deg); }
+  to   { transform: translate3d(2%, 2%, 0) scale(1.1) rotate(3deg); }
 }
 
 #particles { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+
+.glass { position: relative; }
+.glass::before {
+  content: "";
+  position: absolute; inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, rgba(200,160,255,.35), transparent 40%, transparent 60%, rgba(126,61,255,.35));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none;
+  opacity: .8;
+}
 
 .shell {
   position: relative;

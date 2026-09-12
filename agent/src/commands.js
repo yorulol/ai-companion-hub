@@ -16,6 +16,7 @@ import { commands as economyCommands } from "./commands/economy.js";
 import { commands as levelsCommands } from "./commands/levels.js";
 import { commands as aiCommands } from "./commands/ai.js";
 import { commands as ownerCommands } from "./commands/owner.js";
+import { commands as verifyCommands } from "./commands/verify.js";
 
 const SOURCES = [
   ["info", infoCommands],
@@ -28,6 +29,7 @@ const SOURCES = [
   ["admin", adminCommands],
   ["ai", aiCommands],
   ["owner", ownerCommands],
+  ["verify", verifyCommands],
 ];
 
 /** @type {Array<{name:string,category:string,description:string,usage:string,permission:'everyone'|'mod'|'admin'|'owner',run:Function,aliases?:string[]}>} */

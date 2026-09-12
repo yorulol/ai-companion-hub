@@ -182,12 +182,15 @@ const chatWrap = document.getElementById("chatWrap");
 const codeWrap = document.getElementById("codeWrap");
 
 const emailWrap = document.getElementById("emailWrap");
+const personaWrap = document.getElementById("personaWrap");
 
 function showPane(name) {
   chatWrap.classList.toggle("hidden", name !== "chat");
   codeWrap.classList.toggle("hidden", name !== "code");
   emailWrap.classList.toggle("hidden", name !== "email");
+  personaWrap.classList.toggle("hidden", name !== "persona");
   menuPop.classList.add("hidden");
+  if (name === "persona") loadPersona();
 }
 
 menuBtn.addEventListener("click", (e) => {
@@ -196,6 +199,26 @@ menuBtn.addEventListener("click", (e) => {
 });
 menuPop.querySelectorAll(".menu-item").forEach((b) => b.addEventListener("click", () => showPane(b.dataset.pane)));
 document.addEventListener("click", (e) => { if (!menuPop.contains(e.target) && e.target !== menuBtn) menuPop.classList.add("hidden"); });
+
+/* ---------- persona editor ---------- */
+async function loadPersona() {
+  const ta = document.getElementById("personaText");
+  ta.value = "Loading…";
+  try {
+    const r = await api("/api/persona", { owner: false });
+    ta.value = r.persona || "";
+  } catch (err) { ta.value = ""; document.getElementById("personaOut").textContent = err.message; }
+}
+document.getElementById("personaReload").onclick = loadPersona;
+document.getElementById("personaSave").onclick = async () => {
+  const out = document.getElementById("personaOut");
+  const persona = document.getElementById("personaText").value;
+  try {
+    await api("/api/persona", { method: "POST", body: { persona } });
+    out.innerHTML = `<span style="color:var(--ok)">Saved. New conversations will use this persona.</span>`;
+    toast("Persona saved.");
+  } catch (err) { out.innerHTML = `<span style="color:var(--bad)">${esc(err.message)}</span>`; }
+};
 
 /* ---------- code check ---------- */
 let CODE_PATH = "";

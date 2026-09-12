@@ -25,13 +25,20 @@ export async function startSelfbot() {
   client.on("messageCreate", async (message) => {
     try {
       if (message.author.id === client.user.id) return;
-      if (!message.mentions.has(client.user)) return;
+      // In DMs: always respond (no ping needed). In servers: only respond
+      // when the account is explicitly @mentioned.
+      const isDm = !message.guild;
+      if (!isDm && !message.mentions.has(client.user)) return;
       const text = message.content.replace(/<@!?\d+>/g, "").trim();
       if (!text) return;
       const isOwner = isOwnerId(message.author.id);
-      const { reply } = await chat({ scope: `s:${message.channelId}:${message.author.id}`, userText: text, isOwner });
+      const { reply } = await chat({
+        scope: `s:${isDm ? "dm" : message.channelId}:${message.author.id}`,
+        userText: text,
+        isOwner,
+      });
       await message.reply(reply.slice(0, 1900));
-      logActivity("selfbot", `replied to @${message.author.tag}`, { channel: message.channelId });
+      logActivity("selfbot", `replied to @${message.author.tag}${isDm ? " (DM)" : ""}`, { channel: message.channelId });
     } catch (err) {
       console.error("[selfbot]", err.message);
     }

@@ -10,6 +10,8 @@ import {
 import { chat } from "./chat-loop.js";
 import { errEmbed, warnEmbed, okEmbed, embed } from "./ui.js";
 import { logActivity } from "./activity.js";
+import { checkMessage as automodMessage, checkJoin as automodJoin, getAutomod } from "./automod.js";
+import { newToken as newVerifyToken, verifyUrl } from "./verify.js";
 
 let client = null;
 let running = false;
@@ -38,10 +40,15 @@ export async function startBot() {
   client.on(Events.GuildCreate, (g) => logActivity("bot", `joined guild ${g.name}`, { id: g.id }));
   client.on(Events.GuildDelete, (g) => logActivity("bot", `left guild ${g.name}`, { id: g.id }));
 
+  client.on(Events.GuildMemberAdd, (member) => automodJoin(member));
+
   client.on(Events.MessageCreate, async (message) => {
     try {
       if (message.author.bot || !message.guild) return;
+      // auto-mod runs first; if it deleted the message, stop.
+      if (await automodMessage(message)) return;
       const guildCfg = getGuild(message.guild.id, message.guild.name);
+
 
       // AFK auto-clear on activity
       if (getAfk(message.guild.id, message.author.id)) {
@@ -220,3 +227,6 @@ export function botGuilds() {
 
 export const listCommands = commandSummary;
 export const allCommands = COMMANDS;
+export const getBotClient = () => client;
+export { newVerifyToken, verifyUrl };
+export { getAutomod };
