@@ -43,8 +43,36 @@ export async function refreshModels(force = false) {
   return { free: freeModels, coding: codingModels };
 }
 
-// Background rescanner: keeps the pool fresh so new free models appear automatically.
-setInterval(() => refreshModels(true).catch(() => {}), 10 * 60 * 1000).unref?.();
+// Background rescanner: every minute, so newly-listed free models appear fast
+// and rate-limited ones get replaced automatically.
+setInterval(() => refreshModels(true).catch(() => {}), 60 * 1000).unref?.();
+
+/**
+ * Cooldown map: model id → epoch ms when it becomes eligible again.
+ * Any model that returns 429 / 402 / 403 / 5xx is parked here so the rotator
+ * skips it entirely until the cooldown expires. This is what keeps the loop
+ * from hammering the same dead free models over and over.
+ */
+const cooldown = new Map();
+const COOLDOWN_MS = {
+  429: 10 * 60 * 1000, // rate limited — park for 10 min
+  402: 60 * 60 * 1000, // out of credits — park for 1 hr
+  403: 60 * 60 * 1000, // blocked — park for 1 hr
+  500: 5 * 60 * 1000,
+  502: 5 * 60 * 1000,
+  503: 5 * 60 * 1000,
+  504: 5 * 60 * 1000,
+};
+const parkModel = (id, status) => {
+  const ms = COOLDOWN_MS[status] ?? 5 * 60 * 1000;
+  cooldown.set(id, Date.now() + ms);
+};
+const isParked = (id) => {
+  const until = cooldown.get(id);
+  if (!until) return false;
+  if (Date.now() >= until) { cooldown.delete(id); return false; }
+  return true;
+};
 
 export const knownModels = () => ({ free: freeModels, coding: codingModels });
 
