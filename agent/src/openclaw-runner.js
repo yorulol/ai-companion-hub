@@ -14,6 +14,7 @@ const LOCAL_BIN = path.join(AGENT_DIR, "vendor", "openclaw", "node_modules", ".b
 const ENV_PATH = path.join(AGENT_DIR, ".env");
 
 let child = null;
+let restartedForConfig = false;
 function has(cmd) {
   try {
     execSync(platform() === "win32" ? `where ${cmd}` : `command -v ${cmd}`, { stdio: "ignore" });
@@ -189,6 +190,11 @@ export async function startOpenClaw({ force = false, autoInstall = false } = {})
     await new Promise((r) => setTimeout(r, 1000));
     if (await pingBase()) { log.ok("openclaw", "gateway ready"); return true; }
     if (i === 8 && (await discoverBase(bin))) return true;
+    if (i === 10 && !restartedForConfig) {
+      restartedForConfig = true;
+      log.info("openclaw", "applying the corrected gateway configuration…");
+      await run(bin, ["gateway", "restart"], { timeout: 30000, windowsHide: true }).catch(() => null);
+    }
   }
   log.warn("openclaw", "gateway service is running but the chat endpoint is not ready; run `npm run openclaw:status`");
   return false;
