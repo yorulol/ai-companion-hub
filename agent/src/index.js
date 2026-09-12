@@ -28,7 +28,14 @@ refreshModels(true)
 
 autotuneOpenClaw()
   .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
-  .finally(() => { startOpenClaw().catch((e) => log.warn("openclaw", e.message)); });
+  .finally(async () => {
+    // Keep trying in the background instead of giving up after the first pass.
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const ok = await startOpenClaw({ force: attempt > 0 }).catch((e) => { log.warn("openclaw", e.message); return false; });
+      if (ok) return;
+      await new Promise((r) => setTimeout(r, 30_000));
+    }
+  });
 startOllama().catch((e) => log.warn("ollama", e.message));
 
 if (config.discord.botAutostart && config.discord.botToken) {
