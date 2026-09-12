@@ -322,6 +322,8 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
         <AltAccountTab />
       )}
 
+      {tab === "plugins" && <SelfbotPluginsTab />}
+
       {tab === "whitelist" && (
         <WhitelistTab />
       )}
