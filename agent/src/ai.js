@@ -180,6 +180,7 @@ async function pullOllamaModel(model) {
 }
 
 async function ollamaChatRequest(url, model, messages) {
+  const p = config.providers.ollama;
   const res = await fetch(`${url}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -189,8 +190,12 @@ async function ollamaChatRequest(url, model, messages) {
       stream: false,
       // Keep the model loaded in VRAM so replies don't pay a 30s+ reload cost.
       keep_alive: "24h",
-      // Smaller context = much faster prompt processing on a 6 GB card.
-      options: { num_ctx: 4096 },
+      // Keep the model and KV cache fully on a 6 GB GPU. Output is bounded so
+      // casual replies do not spend minutes generating unnecessary text.
+      options: {
+        num_ctx: p.numCtx,
+        num_predict: p.numPredict,
+      },
     }),
     signal: AbortSignal.timeout(180_000),
   });
@@ -200,12 +205,15 @@ async function ollamaChatRequest(url, model, messages) {
 async function callOllama(messages, mode) {
   const p = config.providers.ollama;
   const model = mode === "coding" ? p.codeModel : p.model;
-  let res = await ollamaChatRequest(p.url, model, messages);
+  const system = messages[0]?.role === "system" ? messages.slice(0, 1) : [];
+  const conversation = messages.slice(system.length).slice(-p.historyMessages);
+  const localMessages = [...system, ...conversation];
+  let res = await ollamaChatRequest(p.url, model, localMessages);
   if (res.status === 404) {
     // Model isn't installed — pull it on the spot, then retry once.
     console.log(`[yoru] ollama model '${model}' missing — pulling now (one-time, can take a while)…`);
     await pullOllamaModel(model);
-    res = await ollamaChatRequest(p.url, model, messages);
+    res = await ollamaChatRequest(p.url, model, localMessages);
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -214,6 +222,13 @@ async function callOllama(messages, mode) {
   const body = await res.json();
   const text = body?.message?.content?.trim();
   if (!text) throw new Error("Ollama returned nothing");
+  const seconds = Number(body.eval_duration || 0) / 1e9;
+  const tokens = Number(body.eval_count || 0);
+  const rate = seconds > 0 && tokens > 0 ? tokens / seconds : 0;
+  const total = Number(body.total_duration || 0) / 1e9;
+  if (rate > 0) {
+    console.log(`[ollama] ${model} · ${rate.toFixed(1)} tok/s · ${tokens} tokens · ${total.toFixed(1)}s total`);
+  }
   return { reply: text, provider: "ollama", model };
 }
 
