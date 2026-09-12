@@ -227,3 +227,6 @@ export function botGuilds() {
 
 export const listCommands = commandSummary;
 export const allCommands = COMMANDS;
+export const getBotClient = () => client;
+export { newVerifyToken, verifyUrl };
+export { getAutomod };
