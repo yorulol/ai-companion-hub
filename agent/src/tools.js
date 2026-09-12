@@ -57,7 +57,7 @@ async function run(name, args = {}) {
 
 const TOOL_RE = /```tool\s*\n([\s\S]+?)\n```/i;
 // Some models emit raw <tool_call>tool {...} blocks instead of fenced JSON.
-const TOOL_CALL_RE = /<tool_call>\s*(?:tool)?\s*(\{[\s\S]+?\})\s*(?:<\/tool_call>)?/i;
+const TOOL_CALL_RE = /<tool_call>\s*(?:tool)?\s*(\{[\s\S]*\})\s*(?:<\/tool_call>)?/i;
 // Last-resort: a bare {"tool": "...", "args": {...}} object anywhere in the reply.
 const BARE_TOOL_RE = /(\{\s*"tool"\s*:\s*"[a-z_]+"\s*,\s*"args"\s*:\s*\{[\s\S]*?\}\s*\})/i;
 
