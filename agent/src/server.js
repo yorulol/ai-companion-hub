@@ -13,6 +13,7 @@ import {
 } from "./db.js";
 import { startBot, stopBot, botStatus, botGuilds, listCommands, getBotClient } from "./bot.js";
 import { startSelfbot, stopSelfbot, selfbotStatus, selfbotGuilds } from "./selfbot.js";
+import { listPlugins, setPluginEnabled, setPluginConfig } from "./selfbot-plugins.js";
 import * as pc from "./computer.js";
 import { lookup, listLookupFiles, addWhitelistIdentity } from "./lookups.js";
 import { auditFolder } from "./code-audit.js";
@@ -303,6 +304,17 @@ const ROUTES = {
 
   // ---- Alt account guilds ----
   "GET /api/owner/selfbot-guilds": async (req) => { requireOwner(req); return { guilds: selfbotGuilds() }; },
+
+  // ---- Alt account plugins ----
+  "GET /api/owner/selfbot-plugins": async (req) => { requireOwner(req); return { plugins: listPlugins() }; },
+  "POST /api/owner/selfbot-plugins": async (req) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (!b.id) throw new Error("Missing plugin id");
+    if (typeof b.enabled === "boolean") setPluginEnabled(b.id, b.enabled);
+    if (b.config && typeof b.config === "object") setPluginConfig(b.id, b.config);
+    return { plugins: listPlugins() };
+  },
 
   // ---- Server automation (custom commands, autoresponder, welcome, reaction roles) ----
   "GET /api/owner/guilds/:id/custom-commands": async (req, id) => { requireOwner(req); return { items: listCustomCommands(id) }; },
