@@ -219,12 +219,19 @@ export async function ask({ messages, mode = "general" }) {
           }
         }
         // Every free model is parked (all rate-limited). Force a fresh scan so
-        // newly-listed free models get picked up immediately, then retry once
-        // with any models that are still un-parked after the refresh.
+        // newly-listed free models get picked up, and if still nothing is
+        // available evict the soonest-expiring cooldowns and retry ANYWAY —
+        // better to hit a maybe-cool model than tell the user "no providers".
         if (!attemptedAny) {
           await refreshModels(true);
-          const fresh = (mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels)
+          let fresh = (mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels)
             .filter((m) => !tried.has(m) && !isParked(m));
+          if (!fresh.length) {
+            evictSoonestCooldowns(8);
+            fresh = (mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels)
+              .filter((m) => !tried.has(m));
+            console.warn(`[ai] openrouter all models parked — evicted cooldowns and retrying ${fresh.length} models`);
+          }
           for (const model of fresh) {
             try {
               const reply = await callOpenRouter(model, full);
