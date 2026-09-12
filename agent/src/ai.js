@@ -18,7 +18,7 @@ const rank = (id) => {
 export async function refreshModels(force = false) {
   const p = config.providers.openrouter;
   if (!p.enabled || !p.key) return { free: [], coding: [] };
-  if (!force && Date.now() - lastModelFetch < 15 * 60 * 1000 && freeModels.length) {
+  if (!force && Date.now() - lastModelFetch < 60 * 1000 && freeModels.length) {
     return { free: freeModels, coding: codingModels };
   }
   try {
