@@ -9,6 +9,7 @@ frontend build, no Lovable, no extra terminals.
 ```bash
 cd agent
 npm install         # auto-detects your CPU/RAM/GPU and tunes Ollama for it
+# (or `npm ci` — identical, but installs the exact pinned dependency versions)
 # fill in the tokens in .env, then:
 npm run yoru
 ```
@@ -47,7 +48,7 @@ then:
 
 ```bash
 cd agent
-npm install
+npm ci              # exact pinned versions from the lockfile — no surprises
 # keep it alive across reboots
 npx pm2 start src/index.js --name yoru
 npx pm2 save
@@ -60,7 +61,10 @@ a reverse proxy (Caddy, Nginx, Traefik) if you want HTTPS and a domain.
 ## Getting updates
 
 `git pull`, then `npm install` inside `agent/` if dependencies changed, and
-restart the process.
+restart the process. On a brand-new machine the whole setup is just
+`git clone … && cd agent && npm ci` — the postinstall script creates `.env`,
+scans the hardware, picks the fastest Ollama models for it, and rebuilds
+native modules if the Node version differs from the one that built them.
 
 ## What's inside
 
