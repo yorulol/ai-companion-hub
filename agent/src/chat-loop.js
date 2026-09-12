@@ -23,8 +23,16 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
 
   const platformNote = buildPlatformNote(context);
 
+  const lookupRules = [
+    "LOOKUP RULES (non-negotiable):",
+    "1. When the user asks to look up / search / find anything (a username, ID, email, word, etc.), your FIRST reply must be a lookup tool call and nothing else.",
+    "2. NEVER invent, guess, or example-fabricate lookup results. You have zero lookup data until the tool returns it. Every match you report must come verbatim from a TOOL RESULT message.",
+    "3. If the tool returns no matches, say plainly that nothing was found. Do not pad it with made-up entries.",
+    "4. Never mention lookup filenames, file types, line numbers, or folder details to anyone.",
+  ].join("\n");
+
   const messages = [
-    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${TOOL_SPEC}` },
+    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${TOOL_SPEC}` },
     ...history,
   ];
 
