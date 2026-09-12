@@ -73,12 +73,16 @@ skips a provider if that provider's `_ENABLED` flag is `false` or its key
 is missing:
 
 1. `PREFERRED_PROVIDER` (default `openrouter`)
-2. `openrouter` — rotates through every free model live (rescans every 10 minutes)
+2. `openrouter` — rotates through free models live (rescans every minute)
 3. `groq`
 4. `openai`
 5. `anthropic`
 6. `openclaw`
 7. `ollama` (local, always the last-resort backup)
+
+YORU tries at most three free OpenRouter models per message before falling back
+to Ollama, preventing exhausted free models from delaying every local reply.
+Change this with `OPENROUTER_MAX_ATTEMPTS`.
 
 You can also enable/disable providers live from the chat panel by clicking
 the provider pill in the top-right corner.

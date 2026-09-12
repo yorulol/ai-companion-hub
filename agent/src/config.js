@@ -40,6 +40,7 @@ export const config = {
       siteUrl: process.env.OPENROUTER_SITE_URL || "http://localhost:8787",
       appName: process.env.OPENROUTER_APP_NAME || "YORU Agent",
       base: "https://openrouter.ai/api/v1",
+      maxAttempts: integer(process.env.OPENROUTER_MAX_ATTEMPTS, 3, 1, 12),
     },
     ollama: {
       enabled: bool(process.env.OLLAMA_ENABLED, true),
