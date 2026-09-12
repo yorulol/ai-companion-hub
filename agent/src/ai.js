@@ -208,9 +208,19 @@ async function ollamaChatRequest(url, model, messages) {
 async function callOllama(messages, mode) {
   const p = config.providers.ollama;
   const model = mode === "coding" ? p.codeModel : p.model;
-  const system = messages[0]?.role === "system" ? messages.slice(0, 1) : [];
-  const conversation = messages.slice(system.length).slice(-p.historyMessages);
-  const localMessages = [...system, ...conversation];
+  // Small local models drown in the full multi-section system prompt used for
+  // frontier models (persona + secrecy + platform + lookup rules + tool spec).
+  // Compact it down to just the persona line so the 1B/3B stays focused and
+  // the KV prefix cache actually hits between turns.
+  const rawSystem = messages[0]?.role === "system" ? messages[0].content : "";
+  const personaLine = rawSystem.split("\n").find((l) => l.trim()) || rawSystem;
+  const compactSystem = [{
+    role: "system",
+    content: `${personaLine}\n\nReply in ONE short, direct message. No rambling, no lists, no repeating yourself, no self-narration, no meta commentary. Stay fully in character. If you don't know something, say so briefly.`,
+  }];
+  const rest = messages[0]?.role === "system" ? messages.slice(1) : messages;
+  const conversation = rest.slice(-p.historyMessages);
+  const localMessages = [...compactSystem, ...conversation];
   let res = await ollamaChatRequest(p.url, model, localMessages);
   if (res.status === 404) {
     // Model isn't installed — pull it on the spot, then retry once.
