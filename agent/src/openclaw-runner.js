@@ -1,8 +1,14 @@
 // Auto-start the local OpenClaw gateway if enabled.
 import { spawn, execSync } from "node:child_process";
 import { platform } from "node:os";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { config } from "./config.js";
 import { log } from "./boot-ui.js";
+
+const AGENT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const LOCAL_BIN = path.join(AGENT_DIR, "vendor", "openclaw", "node_modules", ".bin", platform() === "win32" ? "openclaw.cmd" : "openclaw");
 
 let child = null;
 
@@ -11,6 +17,13 @@ function has(cmd) {
     execSync(platform() === "win32" ? `where ${cmd}` : `command -v ${cmd}`, { stdio: "ignore" });
     return true;
   } catch { return false; }
+}
+
+function resolveBin() {
+  // Prefer the vendored local install; fall back to a global one.
+  if (existsSync(LOCAL_BIN)) return LOCAL_BIN;
+  if (has("openclaw")) return "openclaw";
+  return null;
 }
 
 async function pingBase() {
@@ -30,14 +43,21 @@ export async function startOpenClaw() {
 
   if (await pingBase()) { log.ok("openclaw", "gateway already running"); return; }
 
-  if (!has("openclaw")) {
-    log.warn("openclaw", "CLI not found. Run: npm run openclaw:setup");
+  const bin = resolveBin();
+  if (!bin) {
+    log.warn("openclaw", "not installed. Run: npm run openclaw:setup");
     return;
   }
 
-  log.info("openclaw", "starting local gateway (openclaw gateway start)…");
+  const major = Number(process.versions.node.split(".")[0]);
+  if (major < 22) {
+    log.warn("openclaw", `needs Node 22+, you're on v${process.versions.node}. Upgrade Node, then run: npm run openclaw:setup`);
+    return;
+  }
+
+  log.info("openclaw", `starting local gateway (${bin === "openclaw" ? "openclaw" : "local install"})…`);
   try {
-    child = spawn("openclaw", ["gateway", "start"], {
+    child = spawn(bin, ["gateway", "start"], {
       stdio: ["ignore", "pipe", "pipe"],
       shell: platform() === "win32",
       detached: false,
@@ -51,7 +71,7 @@ export async function startOpenClaw() {
       if (line) log.warn("openclaw", line.split("\n")[0].slice(0, 160));
     });
     child.on("exit", (code) => {
-      if (code !== 0) log.warn("openclaw", `gateway exited (${code}). Re-run: openclaw gateway start`);
+      if (code !== 0) log.warn("openclaw", `gateway exited (${code}). Re-run: npm run openclaw:setup`);
     });
 
     // Poll for readiness (up to 30s)
