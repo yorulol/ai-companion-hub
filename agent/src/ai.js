@@ -343,19 +343,32 @@ export async function ask({ messages, mode = "general" }) {
         return { reply, provider: "anthropic", model: cfg.model };
       }
       if (name === "openclaw") {
-        if (openclawDownUntil > Date.now()) continue; // silently skip while unreachable
+        // Only skip the retry if a *different* provider is also enabled and could pick up the slack.
+        const otherEnabled = ["openrouter", "groq", "openai", "anthropic", "ollama"].some((n) => P[n]?.enabled && (n === "ollama" || !!P[n].key));
+        if (openclawDownUntil > Date.now() && otherEnabled) continue;
         try {
           const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);
           openclawDownUntil = 0;
           return { reply, provider: "openclaw", model: cfg.model };
         } catch (err) {
           const msg = String(err.message || "");
-          if (msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")) {
-            openclawDownUntil = Date.now() + 5 * 60 * 1000;
-            console.warn(`[ai] openclaw unreachable at ${cfg.base} — start your local OpenClaw server (https://github.com/openclaw/openclaw). Skipping for 5 min.`);
-            continue;
+          const unreachable = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
+          if (unreachable) {
+            // Try to (re)start the local gateway on-demand, then retry once.
+            try {
+              const { startOpenClaw } = await import("./openclaw-runner.js");
+              await startOpenClaw({ force: true });
+              const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);
+              openclawDownUntil = 0;
+              return { reply, provider: "openclaw", model: cfg.model };
+            } catch (err2) {
+              openclawDownUntil = Date.now() + 60 * 1000;
+              errors.push(`openclaw unreachable at ${cfg.base} — local gateway isn't responding. Run: npm run openclaw:setup, then npm start.`);
+              continue;
+            }
           }
-          throw err;
+          errors.push(`openclaw: ${msg.slice(0, 200)}`);
+          continue;
         }
       }
       if (name === "ollama") {
