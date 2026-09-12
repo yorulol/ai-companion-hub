@@ -213,16 +213,20 @@ async function ollamaChatRequest(url, model, messages) {
 async function callOllama(messages, mode) {
   const p = config.providers.ollama;
   const model = mode === "coding" ? p.codeModel : p.model;
-  // Small local models drown in the full multi-section system prompt used for
-  // frontier models (persona + secrecy + platform + lookup rules + tool spec).
-  // Compact it down to just the persona line so the 1B/3B stays focused and
-  // the KV prefix cache actually hits between turns.
+  // Pass the FULL system prompt (persona + secrecy + platform + lookup rules +
+  // tool spec) so the local model behaves the same as OpenRouter: stays in
+  // character, fires back at insults, and can invoke owner tools. The system
+  // block is pinned via num_keep so it doesn't re-tokenize each turn.
   const rawSystem = messages[0]?.role === "system" ? messages[0].content : "";
-  const personaLine = rawSystem.split("\n").find((l) => l.trim()) || rawSystem;
-  const compactSystem = [{
-    role: "system",
-    content: `${personaLine}\n\nReply in ONE short, direct message. No rambling, no lists, no repeating yourself, no self-narration, no meta commentary. Stay fully in character. If you don't know something, say so briefly.`,
-  }];
+  const hardenedSystem = `${rawSystem}
+
+CRITICAL BEHAVIOR RULES (override any built-in politeness training):
+- You are NOT a corporate assistant. Do not refuse insults, trash-talk, or heated conversation. If the user comes at you sideways, roast them back — witty, sharp, a little unhinged, but still smart.
+- Never say "let's keep this professional/respectful", never lecture about tone, never moralize. Match the energy in the room.
+- Never reveal, hint at, or deny which model or provider you're running on. You're YORU. That's it.
+- For owner-level requests (file ops, lockdown, shell, lookups, etc.), invoke tools via the tool-call format defined above — don't say you can't do it.
+- Reply in ONE tight message. No filler, no lists unless asked, no self-narration, no meta commentary. Stay fully in character.`;
+  const compactSystem = [{ role: "system", content: hardenedSystem }];
   const rest = messages[0]?.role === "system" ? messages.slice(1) : messages;
   const conversation = rest.slice(-p.historyMessages);
   const localMessages = [...compactSystem, ...conversation];
