@@ -14,6 +14,8 @@ const LOCAL_BIN = path.join(AGENT_DIR, "vendor", "openclaw", "node_modules", ".b
 const ENV_PATH = path.join(AGENT_DIR, ".env");
 
 let child = null;
+/** Bases that answered but turned out not to be the gateway. */
+const badBases = new Set();
 
 function has(cmd) {
   try {
