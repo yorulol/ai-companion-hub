@@ -25,20 +25,50 @@ export async function startSelfbot() {
   client.on("messageCreate", async (message) => {
     try {
       if (message.author.id === client.user.id) return;
-      // In DMs: always respond (no ping needed). In servers: only respond
-      // when the account is explicitly @mentioned.
       const isDm = !message.guild;
-      if (!isDm && !message.mentions.has(client.user)) return;
-      const text = message.content.replace(/<@!?\d+>/g, "").trim();
+      // DMs: always respond. Servers: only when @mentioned or replied-to.
+      const mentionedMe = message.mentions.has(client.user);
+      const repliedToMe =
+        message.reference && (await message.fetchReference().catch(() => null))?.author?.id === client.user.id;
+      if (!isDm && !mentionedMe && !repliedToMe) return;
+
+      // Keep the raw text so the model can see who was mentioned by name,
+      // but strip only the self-mention so it doesn't leak into the prompt.
+      const selfMentionRe = new RegExp(`<@!?${client.user.id}>`, "g");
+      const text = message.content.replace(selfMentionRe, "").trim();
       if (!text) return;
+
+      // Collect other users mentioned in the message (not self) so the model
+      // can ping them back when asked ("say hi to @bob").
+      const mentioned = [];
+      for (const [, u] of message.mentions.users) {
+        if (u.id === client.user.id) continue;
+        mentioned.push({ id: u.id, tag: u.username });
+      }
+
       const isOwner = isOwnerId(message.author.id);
+      await message.channel.sendTyping().catch(() => {});
       const { reply } = await chat({
         scope: `s:${isDm ? "dm" : message.channelId}:${message.author.id}`,
         userText: text,
         isOwner,
+        context: {
+          platform: "selfbot",
+          isDm,
+          guildName: message.guild?.name || null,
+          channelName: message.channel?.name || null,
+          authorTag: message.author.username,
+          authorId: message.author.id,
+          selfId: client.user.id,
+          mentioned,
+        },
       });
-      await message.reply(reply.slice(0, 1900));
-      logActivity("selfbot", `replied to @${message.author.tag}${isDm ? " (DM)" : ""}`, { channel: message.channelId });
+
+      // In DMs send as a normal message; in servers use reply so the thread stays clear.
+      const out = reply.slice(0, 1900);
+      if (isDm) await message.channel.send(out);
+      else await message.reply(out);
+      logActivity("selfbot", `replied to @${message.author.username}${isDm ? " (DM)" : ""}`, { channel: message.channelId });
     } catch (err) {
       console.error("[selfbot]", err.message);
     }
