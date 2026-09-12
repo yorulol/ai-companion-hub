@@ -27,6 +27,7 @@
       <button class="ghost sm menu-item" data-pane="chat" style="width:100%;text-align:left">Chat</button>
       <button class="ghost sm menu-item" data-pane="code" style="width:100%;text-align:left">Code check</button>
       <button class="ghost sm menu-item" data-pane="email" style="width:100%;text-align:left">Mail Forwarding</button>
+      <button class="ghost sm menu-item" data-pane="persona" style="width:100%;text-align:left">Persona</button>
     </div>
   </header>
 
@@ -215,6 +216,23 @@
       </div>
       <!-- Output -->
       <div id="mfOut" style="margin-top:16px"></div>
+    </main>
+  </div>
+
+  <!-- ============ Persona pane ============ -->
+  <div class="chat-wrap hidden" id="personaWrap">
+    <main class="stream glass" style="width:100%">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <span class="pill">YORU · persona editor</span>
+        <span class="muted" id="personaOwnerNote" style="font-size:12px">Owner-only. Set <code>OWNER_DISCORD_ID</code> in .env.</span>
+      </div>
+      <p class="muted" style="margin-top:0">Adjust how YORU speaks and behaves everywhere — chat panel, alt-account replies, Discord bot mentions. Changes save to the local database and take effect immediately.</p>
+      <textarea id="personaText" rows="14" placeholder="Loading…" style="width:100%;font-family:ui-monospace,monospace;font-size:13px;min-height:280px"></textarea>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px">
+        <button class="ghost sm" id="personaReload">Reload</button>
+        <button class="primary sm" id="personaSave">Save persona</button>
+      </div>
+      <div id="personaOut" class="muted" style="margin-top:10px"></div>
     </main>
   </div>
 </div>
