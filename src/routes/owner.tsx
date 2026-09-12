@@ -340,6 +340,120 @@ function ModelList({ items }: { items: string[] }) {
   );
 }
 
+function SecurityTab({ guilds }: { guilds: GuildConfig[] }) {
+  const [guildId, setGuildId] = useState(guilds[0]?.id ?? "");
+  const [config, setConfig] = useState<AutomodConfig | null>(null);
+  const [message, setMessage] = useState("");
+  const activeGuild = guilds.find((guild) => guild.id === guildId);
+
+  useEffect(() => {
+    if (!guildId && guilds[0]?.id) setGuildId(guilds[0].id);
+  }, [guildId, guilds]);
+  useEffect(() => {
+    if (guildId) api.automod(guildId).then(setConfig).catch((error: Error) => setMessage(error.message));
+  }, [guildId]);
+
+  const toggle = (key: "antispam" | "antiraid" | "antiinvite" | "antimention") => {
+    if (config) setConfig({ ...config, [key]: config[key] ? 0 : 1 });
+  };
+  const save = async () => {
+    if (!config || !guildId) return;
+    try { setConfig(await api.saveAutomod(guildId, config)); setMessage("Security settings saved."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Could not save settings."); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card title="Security & verification">
+        <label className="block text-sm text-muted-foreground">Server</label>
+        <select value={guildId} onChange={(event) => setGuildId(event.target.value)} className="w-full rounded-lg border border-input bg-background px-3 py-2">
+          {guilds.length ? guilds.map((guild) => <option key={guild.id} value={guild.id}>{guild.name || guild.id}</option>) : <option value="">No connected servers</option>}
+        </select>
+        {config && (
+          <>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {([['antispam', 'Anti-spam'], ['antiraid', 'Anti-raid'], ['antiinvite', 'Block invite links'], ['antimention', 'Block mass mentions']] as const).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2 rounded-lg bg-secondary/60 p-3 text-sm">
+                  <input type="checkbox" checked={!!config[key]} onChange={() => toggle(key)} /> {label}
+                </label>
+              ))}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm text-muted-foreground">Moderation log channel ID
+                <input value={config.log_channel_id ?? ""} onChange={(event) => setConfig({ ...config, log_channel_id: event.target.value || null })} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-foreground" />
+              </label>
+              <label className="text-sm text-muted-foreground">Verified role
+                <select value={config.verify_role_id ?? ""} onChange={(event) => setConfig({ ...config, verify_role_id: event.target.value || null })} className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-foreground">
+                  <option value="">Choose a role</option>
+                  {(activeGuild?.roles ?? []).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+                </select>
+              </label>
+            </div>
+            <button onClick={() => void save()} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Save security settings</button>
+          </>
+        )}
+        {message && <p className="text-sm text-muted-foreground">{message}</p>}
+      </Card>
+      <Card title="Browser verification">
+        <p className="text-sm text-muted-foreground">Members run <code>!verify</code>, open their private one-time link, and receive the selected role. Verification events are recorded locally.</p>
+      </Card>
+    </div>
+  );
+}
+
+function AltAccountTab() {
+  const [guilds, setGuilds] = useState<{ id: string; name: string; memberCount: number; icon: string | null }[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => { api.selfbotGuilds().then((result) => setGuilds(result.guilds)).catch((reason: Error) => setError(reason.message)); }, []);
+  return (
+    <Card title="Alt account servers">
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {!error && !guilds.length && <p className="text-sm text-muted-foreground">The alt-account responder is offline or is not in any servers.</p>}
+      <div className="grid gap-2 sm:grid-cols-2">
+        {guilds.map((guild) => <div key={guild.id} className="rounded-lg bg-secondary/60 p-3"><strong>{guild.name}</strong><p className="text-xs text-muted-foreground">{guild.memberCount.toLocaleString()} members · {guild.id}</p></div>)}
+      </div>
+    </Card>
+  );
+}
+
+function WhitelistTab() {
+  const [items, setItems] = useState<WhitelistItem[]>([]);
+  const [value, setValue] = useState("");
+  const [note, setNote] = useState("");
+  const [message, setMessage] = useState("");
+  const load = () => api.whitelist().then((result) => setItems(result.items)).catch((error: Error) => setMessage(error.message));
+  useEffect(load, []);
+  const add = async () => {
+    if (!value.trim()) { setMessage("Enter a Discord username or ID first."); return; }
+    try {
+      const saved = await api.addWhitelist(value, note);
+      setMessage(`Protected ${saved.value}.${saved.aliases?.length ? ` Linked ${saved.aliases.length} matching ID(s).` : ""}`);
+      setValue(""); setNote(""); load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not add identity."); }
+  };
+  const remove = async (entry: string) => { try { await api.removeWhitelist(entry); load(); } catch (error) { setMessage(error instanceof Error ? error.message : "Could not remove identity."); } };
+  return (
+    <Card title="Lookup whitelist">
+      <p className="text-sm text-muted-foreground">Protected identities are blocked everywhere. Matching Discord IDs found beside a protected username are linked automatically.</p>
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+        <input value={value} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void add()} placeholder="Discord username or ID" className="rounded-lg border border-input bg-background px-3 py-2" />
+        <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Note (optional)" className="rounded-lg border border-input bg-background px-3 py-2" />
+        <button onClick={() => void add()} className="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground">Add</button>
+      </div>
+      {message && <p className="text-sm text-muted-foreground">{message}</p>}
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div key={item.value} className="flex items-center justify-between gap-3 rounded-lg bg-secondary/60 p-3">
+            <div><strong>{item.value}</strong>{item.note && <span className="text-sm text-muted-foreground"> · {item.note}</span>}{!!item.aliases?.length && <p className="text-xs text-muted-foreground">Also protects: {item.aliases.join(", ")}</p>}</div>
+            <button onClick={() => void remove(item.value)} className="rounded-lg border border-destructive px-3 py-1.5 text-sm text-destructive">Remove</button>
+          </div>
+        ))}
+        {!items.length && <p className="text-sm text-muted-foreground">No protected identities yet.</p>}
+      </div>
+    </Card>
+  );
+}
+
 function GuildCard({ guild, onSaved }: { guild: GuildConfig; onSaved: () => void }) {
   const [prefix, setPrefix] = useState(guild.prefix);
   const [adminRoles, setAdminRoles] = useState<string[]>(guild.adminRoles);
