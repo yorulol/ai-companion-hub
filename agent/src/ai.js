@@ -161,16 +161,48 @@ async function callAnthropic(model, messages) {
   return text;
 }
 
-async function callOllama(messages, mode) {
+const ollamaPulling = new Map(); // model -> Promise
+
+async function pullOllamaModel(model) {
+  if (ollamaPulling.has(model)) return ollamaPulling.get(model);
   const p = config.providers.ollama;
-  const model = mode === "coding" ? p.codeModel : p.model;
-  const res = await fetch(`${p.url}/api/chat`, {
+  const job = (async () => {
+    const res = await fetch(`${p.url}/api/pull`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: model, stream: false }),
+      signal: AbortSignal.timeout(30 * 60 * 1000),
+    });
+    if (!res.ok) throw new Error(`Ollama pull failed (${res.status})`);
+  })().finally(() => ollamaPulling.delete(model));
+  ollamaPulling.set(model, job);
+  return job;
+}
+
+async function ollamaChatRequest(url, model, messages) {
+  const res = await fetch(`${url}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ model, messages, stream: false }),
     signal: AbortSignal.timeout(180_000),
   });
-  if (!res.ok) throw new Error(`Ollama ${res.status}`);
+  return res;
+}
+
+async function callOllama(messages, mode) {
+  const p = config.providers.ollama;
+  const model = mode === "coding" ? p.codeModel : p.model;
+  let res = await ollamaChatRequest(p.url, model, messages);
+  if (res.status === 404) {
+    // Model isn't installed — pull it on the spot, then retry once.
+    console.log(`[yoru] ollama model '${model}' missing — pulling now (one-time, can take a while)…`);
+    await pullOllamaModel(model);
+    res = await ollamaChatRequest(p.url, model, messages);
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Ollama ${res.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`);
+  }
   const body = await res.json();
   const text = body?.message?.content?.trim();
   if (!text) throw new Error("Ollama returned nothing");
