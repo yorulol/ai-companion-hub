@@ -205,12 +205,15 @@ async function ollamaChatRequest(url, model, messages) {
 async function callOllama(messages, mode) {
   const p = config.providers.ollama;
   const model = mode === "coding" ? p.codeModel : p.model;
-  let res = await ollamaChatRequest(p.url, model, messages);
+  const system = messages[0]?.role === "system" ? messages.slice(0, 1) : [];
+  const conversation = messages.slice(system.length).slice(-p.historyMessages);
+  const localMessages = [...system, ...conversation];
+  let res = await ollamaChatRequest(p.url, model, localMessages);
   if (res.status === 404) {
     // Model isn't installed — pull it on the spot, then retry once.
     console.log(`[yoru] ollama model '${model}' missing — pulling now (one-time, can take a while)…`);
     await pullOllamaModel(model);
-    res = await ollamaChatRequest(p.url, model, messages);
+    res = await ollamaChatRequest(p.url, model, localMessages);
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
