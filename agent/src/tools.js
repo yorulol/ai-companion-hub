@@ -56,15 +56,36 @@ async function run(name, args = {}) {
 }
 
 const TOOL_RE = /```tool\s*\n([\s\S]+?)\n```/i;
+// Some models emit raw <tool_call>tool {...} blocks instead of fenced JSON.
+const TOOL_CALL_RE = /<tool_call>\s*(?:tool)?\s*(\{[\s\S]*\})\s*(?:<\/tool_call>)?/i;
+// Last-resort: a bare {"tool": "...", "args": {...}} object anywhere in the reply.
+const BARE_TOOL_RE = /(\{\s*"tool"\s*:\s*"[a-z_]+"\s*,\s*"args"\s*:\s*\{[\s\S]*?\}\s*\})/i;
+
+function tryParseTool(raw, json) {
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed.tool) return null;
+    return { tool: parsed.tool, args: parsed.args || {}, raw };
+  } catch { return null; }
+}
 
 export function extractToolCall(text) {
-  const m = TOOL_RE.exec(text);
-  if (!m) return null;
-  try {
-    const parsed = JSON.parse(m[1]);
-    if (!parsed.tool) return null;
-    return { tool: parsed.tool, args: parsed.args || {}, raw: m[0] };
-  } catch { return null; }
+  for (const re of [TOOL_RE, TOOL_CALL_RE, BARE_TOOL_RE]) {
+    const m = re.exec(text);
+    if (!m) continue;
+    const call = tryParseTool(m[0], m[1]);
+    if (call) return call;
+  }
+  return null;
+}
+
+/** Strip any leftover tool-call artifacts so they never leak into user-facing replies. */
+export function stripToolArtifacts(text) {
+  return text
+    .replace(TOOL_RE, "")
+    .replace(TOOL_CALL_RE, "")
+    .replace(BARE_TOOL_RE, "")
+    .trim();
 }
 
 export async function executeTool(call, { requesterIsOwner = false } = {}) {

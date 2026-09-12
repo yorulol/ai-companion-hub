@@ -1,6 +1,6 @@
 /** Chat with tool-use loop. Handles up to 5 sequential tool calls per reply. */
 import { ask } from "./ai.js";
-import { extractToolCall, executeTool, TOOL_SPEC } from "./tools.js";
+import { extractToolCall, executeTool, stripToolArtifacts, TOOL_SPEC } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
 
 /**
@@ -38,9 +38,9 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
     provider = pv; model = md;
 
     const call = extractToolCall(reply);
-    if (!call) { finalReply = reply; break; }
+    if (!call) { finalReply = stripToolArtifacts(reply); break; }
 
-    const visible = reply.replace(call.raw, "").trim();
+    const visible = stripToolArtifacts(reply.replace(call.raw, ""));
     if (visible) finalReply += visible + "\n\n";
 
     const result = await executeTool(call, { requesterIsOwner: isOwner });
@@ -49,10 +49,11 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
     messages.push({ role: "assistant", content: reply });
     messages.push({
       role: "system",
-      content: `TOOL RESULT for ${call.tool}:\n${JSON.stringify(result).slice(0, 4000)}\n\nContinue the answer for the user. Do NOT repeat the tool block.`,
+      content: `TOOL RESULT for ${call.tool}:\n${JSON.stringify(result).slice(0, 4000)}\n\nContinue the answer for the user. Do NOT repeat the tool block or any tool syntax — reply in plain text only.`,
     });
   }
 
+  finalReply = stripToolArtifacts(finalReply);
   if (!finalReply) finalReply = "(no response)";
   rememberMessage(scope, "assistant", finalReply);
   return { reply: finalReply.trim(), provider, model, tools: toolTrace };
