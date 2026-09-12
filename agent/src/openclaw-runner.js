@@ -228,6 +228,12 @@ export async function startOpenClaw({ force = false, autoInstall = false } = {})
  * for the machine if needed, then starts and waits for readiness.
  */
 let ensuring = null;
+
+/** Forget the current base URL so the next ensure() hunts for the real one. */
+export function invalidateOpenClawBase() {
+  badBases.add(config.providers.openclaw.base);
+}
+
 export async function ensureOpenClaw() {
   if (await pingBase()) return true;
   if (await discoverBase(resolveBin())) return true;
