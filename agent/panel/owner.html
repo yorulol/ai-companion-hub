@@ -42,6 +42,7 @@
           <button data-tab="security">Security &amp; verification</button>
           <button data-tab="automation">Automation</button>
           <button data-tab="alt">Alt account</button>
+          <button data-tab="plugins">Alt plugins</button>
           <button data-tab="commands">Commands</button>
         </div>
       </details>
@@ -269,6 +270,22 @@
           <div id="altGuilds" style="margin-top:12px"></div>
         </div>
       </section>
+
+      <!-- ============ Alt account plugins ============ -->
+      <section class="pane" data-pane="plugins">
+        <h2 class="sec">Alt account plugins</h2>
+        <div class="muted" style="margin-bottom:10px">
+          Headless reimplementations of the Equicord-style plugins that actually work on a
+          token-driven account. Toggle each one, edit its settings, then restart the alt account
+          for <em>Presence</em>-type plugins to re-apply.
+        </div>
+        <div class="row" style="margin-bottom:12px">
+          <input id="plugSearch" placeholder="Search plugins…" style="flex:1" />
+          <button class="sm ghost" id="plugReload">Reload</button>
+        </div>
+        <div id="plugList"></div>
+      </section>
+
 
       <!-- ============ Whitelist ============ -->
       <section class="pane" data-pane="whitelist">

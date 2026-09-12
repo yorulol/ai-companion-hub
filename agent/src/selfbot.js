@@ -5,6 +5,7 @@
 import { config, isOwnerId } from "./config.js";
 import { chat } from "./chat-loop.js";
 import { logActivity } from "./activity.js";
+import { attachPlugins, runOutgoing } from "./selfbot-plugins.js";
 
 let client = null;
 let running = false;
@@ -66,14 +67,17 @@ export async function startSelfbot() {
 
       // In DMs send as a normal message; in servers use reply so the thread stays clear.
       const out = reply.slice(0, 1900);
-      if (isDm) await message.channel.send(out);
-      else await message.reply(out);
+      const payload = await runOutgoing(client, { content: out });
+      if (payload === null) return;
+      if (isDm) await message.channel.send(payload);
+      else await message.reply(payload);
       logActivity("selfbot", `replied to @${message.author.username}${isDm ? " (DM)" : ""}`, { channel: message.channelId });
     } catch (err) {
       console.error("[selfbot]", err.message);
     }
   });
 
+  attachPlugins(client);
   await client.login(config.discord.userToken);
   running = true;
   logActivity("selfbot", "started");

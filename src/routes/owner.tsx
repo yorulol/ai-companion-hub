@@ -11,6 +11,7 @@ import {
   type HealthInfo,
   type WhitelistItem,
   type AutomodConfig,
+  type SelfbotPlugin,
 } from "@/lib/agent-client";
 
 export const Route = createFileRoute("/owner")({
@@ -109,7 +110,7 @@ type Settings = {
 };
 
 function OwnerDashboard({ onLock }: { onLock: () => void }) {
-  type OwnerTab = "overview" | "discord" | "servers" | "security" | "automation" | "alt" | "whitelist" | "commands" | "models" | "computer";
+  type OwnerTab = "overview" | "discord" | "servers" | "security" | "automation" | "alt" | "plugins" | "whitelist" | "commands" | "models" | "computer";
   const [tab, setTab] = useState<OwnerTab>("overview");
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -139,7 +140,8 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
     { label: "Discord", tabs: [
       { id: "discord", label: "Bot & responder" }, { id: "servers", label: "Servers & roles" },
       { id: "security", label: "Security & verification" }, { id: "automation", label: "Automation" },
-      { id: "alt", label: "Alt account" }, { id: "commands", label: "Commands" },
+      { id: "alt", label: "Alt account" }, { id: "plugins", label: "Alt plugins" },
+      { id: "commands", label: "Commands" },
     ] },
     { label: "AI", tabs: [{ id: "models", label: "Providers & models" }] },
     { label: "Data", tabs: [{ id: "whitelist", label: "Lookup whitelist" }] },
@@ -320,6 +322,8 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
         <AltAccountTab />
       )}
 
+      {tab === "plugins" && <SelfbotPluginsTab />}
+
       {tab === "whitelist" && (
         <WhitelistTab />
       )}
@@ -415,6 +419,142 @@ function AltAccountTab() {
     </Card>
   );
 }
+
+function PluginConfigField({
+  pluginId, name, value, onChange,
+}: { pluginId: string; name: string; value: unknown; onChange: (v: unknown) => void }) {
+  const label = <span className="text-xs font-medium text-muted-foreground">{name}</span>;
+
+  if (typeof value === "boolean") {
+    return (
+      <label className="flex items-center gap-2 py-1">
+        <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+        {label}
+      </label>
+    );
+  }
+  if (Array.isArray(value)) {
+    const isObjArr = value.length > 0 && typeof value[0] === "object";
+    const text = isObjArr ? JSON.stringify(value, null, 2) : (value as string[]).join("\n");
+    return (
+      <div className="py-1">
+        {label}
+        <textarea
+          className="mt-1 w-full rounded-lg bg-secondary/60 p-2 font-mono text-xs"
+          rows={Math.min(8, Math.max(2, text.split("\n").length))}
+          defaultValue={text}
+          onBlur={(e) => {
+            if (isObjArr) { try { onChange(JSON.parse(e.target.value)); } catch { /* keep old */ } }
+            else onChange(e.target.value.split("\n").map((s) => s.trim()).filter(Boolean));
+          }}
+        />
+      </div>
+    );
+  }
+  const isNum = typeof value === "number";
+  return (
+    <div className="py-1">
+      {label}
+      <input
+        id={`${pluginId}-${name}`}
+        type={isNum ? "number" : "text"}
+        className="mt-1 w-full rounded-lg bg-secondary/60 p-2 text-sm"
+        defaultValue={String(value ?? "")}
+        onBlur={(e) => onChange(isNum ? Number(e.target.value) : e.target.value)}
+      />
+    </div>
+  );
+}
+
+function SelfbotPluginsTab() {
+  const [plugins, setPlugins] = useState<SelfbotPlugin[]>([]);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  const [draft, setDraft] = useState<Record<string, Record<string, unknown>>>({});
+  const [note, setNote] = useState("");
+
+  const load = () => api.selfbotPlugins()
+    .then((r) => { setPlugins(r.plugins); setError(""); })
+    .catch((reason: Error) => setError(reason.message));
+
+  useEffect(() => { void load(); }, []);
+
+  const flash = (m: string) => { setNote(m); setTimeout(() => setNote(""), 1800); };
+
+  async function toggle(plugin: SelfbotPlugin, enabled: boolean) {
+    try { const r = await api.saveSelfbotPlugin({ id: plugin.id, enabled }); setPlugins(r.plugins); flash(`${plugin.name} ${enabled ? "on" : "off"}`); }
+    catch (reason) { setError((reason as Error).message); }
+  }
+  async function save(plugin: SelfbotPlugin) {
+    const config = { ...plugin.config, ...(draft[plugin.id] ?? {}) };
+    try { const r = await api.saveSelfbotPlugin({ id: plugin.id, config }); setPlugins(r.plugins); flash("Saved"); }
+    catch (reason) { setError((reason as Error).message); }
+  }
+
+  const shown = plugins.filter((p) =>
+    !query || `${p.name} ${p.id} ${p.description}`.toLowerCase().includes(query.toLowerCase()));
+
+  return (
+    <Card title="Alt account plugins">
+      <p className="mb-3 text-sm text-muted-foreground">
+        Headless versions of the Equicord-style plugins that actually work on a token-driven account.
+        Toggle one on, tweak its settings, then restart the alt account so presence-style plugins re-apply.
+      </p>
+      {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
+      {note && <p className="mb-2 text-sm text-primary">{note}</p>}
+      <input
+        className="mb-3 w-full rounded-lg bg-secondary/60 p-2 text-sm"
+        placeholder="Search plugins…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {!shown.length && <p className="text-sm text-muted-foreground">No plugins available — start the alt account responder first.</p>}
+      <div className="space-y-2">
+        {shown.map((plugin) => {
+          const keys = Object.keys(plugin.config ?? {});
+          return (
+            <div key={plugin.id} className="rounded-lg bg-secondary/60 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <strong className="text-sm">{plugin.name}</strong>
+                  <span className="ml-2 rounded bg-background/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{plugin.id}</span>
+                  <p className="mt-1 text-xs text-muted-foreground">{plugin.description}</p>
+                </div>
+                <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={plugin.enabled} onChange={(e) => void toggle(plugin, e.target.checked)} />
+                  {plugin.enabled ? "on" : "off"}
+                </label>
+              </div>
+              {keys.length > 0 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs text-muted-foreground">Settings</summary>
+                  <div className="mt-2">
+                    {keys.map((key) => (
+                      <PluginConfigField
+                        key={key}
+                        pluginId={plugin.id}
+                        name={key}
+                        value={(draft[plugin.id]?.[key] ?? plugin.config[key])}
+                        onChange={(v) => setDraft((d) => ({ ...d, [plugin.id]: { ...(d[plugin.id] ?? {}), [key]: v } }))}
+                      />
+                    ))}
+                    <button
+                      className="mt-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
+                      onClick={() => void save(plugin)}
+                    >
+                      Save settings
+                    </button>
+                  </div>
+                </details>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 
 function WhitelistTab() {
   const [items, setItems] = useState<WhitelistItem[]>([]);

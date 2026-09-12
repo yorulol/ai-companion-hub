@@ -49,9 +49,10 @@ export async function startOpenClaw() {
     return;
   }
 
-  const major = Number(process.versions.node.split(".")[0]);
-  if (major < 22) {
-    log.warn("openclaw", `needs Node 22+, you're on v${process.versions.node}. Upgrade Node, then run: npm run openclaw:setup`);
+  const [maj, min] = process.versions.node.split(".").map(Number);
+  const nodeOk = (maj === 24 && min >= 16) || maj >= 26;
+  if (!nodeOk) {
+    log.warn("openclaw", `needs Node 24.16+ or 26.1+, you're on v${process.versions.node}. Upgrade Node, then run: npm run openclaw:setup`);
     return;
   }
 

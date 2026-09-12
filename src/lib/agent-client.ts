@@ -50,6 +50,16 @@ export type HealthInfo = {
   computerEnabled: boolean;
 };
 
+export type SelfbotPlugin = {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  defaultConfig: Record<string, unknown>;
+};
+
+
 export type GuildConfig = {
   id: string;
   name: string;
@@ -139,6 +149,10 @@ export const api = {
   saveAutomod: (guildId: string, patch: Partial<AutomodConfig>) =>
     request<AutomodConfig>(`/api/owner/guilds/${guildId}/automod`, { method: "POST", owner: true, body: JSON.stringify(patch) }),
   selfbotGuilds: () => request<{ guilds: { id: string; name: string; memberCount: number; icon: string | null }[] }>("/api/owner/selfbot-guilds", { owner: true }),
+  // ---- Alt account plugins ----
+  selfbotPlugins: () => request<{ plugins: SelfbotPlugin[] }>("/api/owner/selfbot-plugins", { owner: true }),
+  saveSelfbotPlugin: (body: { id: string; enabled?: boolean; config?: Record<string, unknown> }) =>
+    request<{ plugins: SelfbotPlugin[] }>("/api/owner/selfbot-plugins", { method: "POST", owner: true, body: JSON.stringify(body) }),
   // ---- Mail Forwarding (mail.thc.org) ----
   mailFwd: <T = unknown>(op: string, args: Record<string, unknown> = {}) =>
     request<{ op: string; result: T }>("/api/email-forward", {
