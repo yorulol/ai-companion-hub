@@ -40,8 +40,9 @@ const upsertRow = (id, enabled, config) =>
     .run(id, enabled ? 1 : 0, JSON.stringify(config || {}));
 
 /* ---------- plugin definitions ---------- */
-const PLUGINS = [];
-const P = (def) => { PLUGINS.push(def); return def; };
+export const PLUGINS = [];
+export const P = (def) => { PLUGINS.push(def); return def; };
+
 
 /* 1 · AutoReplyDM — canned reply to any DM from a non-friend / unknown */
 P({
@@ -418,6 +419,11 @@ P({
   defaultConfig: { prefix: "$" },
   hooks: {},
 });
+
+/* Register the extended 200+ self-command library. */
+import { registerSelfCommands } from "./selfbot-commands.js";
+registerSelfCommands(P);
+
 
 /* ---------- public API ---------- */
 export function listPlugins() {
