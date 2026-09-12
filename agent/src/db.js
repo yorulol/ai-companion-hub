@@ -72,6 +72,13 @@ CREATE TABLE IF NOT EXISTS lookup_whitelist (
   note TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS lookup_whitelist_aliases (
+  value TEXT NOT NULL,
+  alias TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (value, alias),
+  FOREIGN KEY (value) REFERENCES lookup_whitelist(value) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS custom_commands (
   guild_id TEXT NOT NULL,
   name TEXT NOT NULL,
@@ -232,26 +239,44 @@ export const topXp = (guild_id, limit = 10) =>
 
 // lookup whitelist — IDs/usernames that must never appear in lookup results
 export const listLookupWhitelist = () =>
-  db.prepare("SELECT value, note, created_at FROM lookup_whitelist ORDER BY created_at DESC").all();
-export const addLookupWhitelist = (value, note = "") => {
+  db.prepare("SELECT value, note, created_at FROM lookup_whitelist ORDER BY created_at DESC").all()
+    .map((item) => ({
+      ...item,
+      aliases: db.prepare("SELECT alias FROM lookup_whitelist_aliases WHERE value = ? ORDER BY alias").all(item.value).map((row) => row.alias),
+    }));
+export const addLookupWhitelist = (value, note = "", aliases = []) => {
   const v = String(value || "").trim().toLowerCase();
   if (!v) throw new Error("Empty whitelist value.");
-  db.prepare("INSERT OR REPLACE INTO lookup_whitelist (value, note, created_at) VALUES (?, ?, ?)")
-    .run(v, note, Date.now());
-  return { value: v, note };
+  const normalizedAliases = [...new Set(aliases.map((alias) => String(alias || "").trim().toLowerCase()).filter((alias) => alias && alias !== v))];
+  const save = db.transaction(() => {
+    db.prepare("INSERT INTO lookup_whitelist (value, note, created_at) VALUES (?, ?, ?) ON CONFLICT(value) DO UPDATE SET note = excluded.note")
+      .run(v, note, Date.now());
+    const insertAlias = db.prepare("INSERT OR IGNORE INTO lookup_whitelist_aliases (value, alias, created_at) VALUES (?, ?, ?)");
+    for (const alias of normalizedAliases) insertAlias.run(v, alias, Date.now());
+  });
+  save();
+  return { value: v, note, aliases: normalizedAliases };
 };
-export const removeLookupWhitelist = (value) =>
-  db.prepare("DELETE FROM lookup_whitelist WHERE value = ?").run(String(value || "").trim().toLowerCase());
+export const removeLookupWhitelist = (value) => {
+  const v = String(value || "").trim().toLowerCase();
+  db.prepare("DELETE FROM lookup_whitelist_aliases WHERE value = ?").run(v);
+  return db.prepare("DELETE FROM lookup_whitelist WHERE value = ?").run(v);
+};
 export const isLookupWhitelisted = (query) => {
   const q = String(query || "").trim().toLowerCase();
   if (!q) return false;
-  return !!db.prepare("SELECT 1 FROM lookup_whitelist WHERE value = ?").get(q);
+  return !!db.prepare(`
+    SELECT 1 FROM lookup_whitelist WHERE value = ?
+    UNION ALL
+    SELECT 1 FROM lookup_whitelist_aliases WHERE alias = ?
+    LIMIT 1
+  `).get(q, q);
 };
 /** Given raw text of matched rows, returns the first whitelisted value found in it, or null. */
 export const findWhitelistHit = (haystack) => {
   const s = String(haystack || "").toLowerCase();
   if (!s) return null;
-  const rows = db.prepare("SELECT value FROM lookup_whitelist").all();
+  const rows = db.prepare("SELECT value FROM lookup_whitelist UNION SELECT alias AS value FROM lookup_whitelist_aliases").all();
   for (const { value } of rows) if (s.includes(value)) return value;
   return null;
 };

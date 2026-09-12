@@ -5,7 +5,7 @@ import { ask, providerStatus, refreshModels, knownModels, ollamaModels } from ".
 import { chat } from "./chat-loop.js";
 import {
   getSettings, setSettings, allGuilds, getGuild, saveGuild,
-  listLookupWhitelist, addLookupWhitelist, removeLookupWhitelist,
+  listLookupWhitelist, removeLookupWhitelist,
   listCustomCommands, setCustomCommand, deleteCustomCommand,
   getAutoresponder, setAutoresponder,
   getWelcome, setWelcome,
@@ -14,7 +14,7 @@ import {
 import { startBot, stopBot, botStatus, botGuilds, listCommands, getBotClient } from "./bot.js";
 import { startSelfbot, stopSelfbot, selfbotStatus, selfbotGuilds } from "./selfbot.js";
 import * as pc from "./computer.js";
-import { lookup, listLookupFiles } from "./lookups.js";
+import { lookup, listLookupFiles, addWhitelistIdentity } from "./lookups.js";
 import { auditFolder } from "./code-audit.js";
 import { runEmailForward, supportedOps as emailForwardOps } from "./email-forward.js";
 import { listActivity, logActivity } from "./activity.js";
@@ -26,7 +26,7 @@ const json = (res, code, body) => {
     "content-type": "application/json",
     "access-control-allow-origin": corsOrigin(),
     "access-control-allow-headers": "content-type, x-owner-id",
-    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   });
   res.end(JSON.stringify(body));
 };
@@ -249,7 +249,7 @@ const ROUTES = {
   "POST /api/owner/lookup-whitelist": async (req) => {
     requireOwner(req);
     const b = await readBody(req);
-    return addLookupWhitelist(b.value, b.note);
+    return await addWhitelistIdentity(b.value, b.note);
   },
   "DELETE /api/owner/lookup-whitelist/:value": async (req, value) => { requireOwner(req); removeLookupWhitelist(value); return { ok: true }; },
 
