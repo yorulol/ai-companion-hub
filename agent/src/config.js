@@ -45,15 +45,17 @@ export const config = {
     ollama: {
       enabled: bool(process.env.OLLAMA_ENABLED, true),
       url: (process.env.OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/$/, ""),
-      // Default swapped to the 1B chat model: ~1.3 GB, fully on a 6 GB GPU,
-      // and 3-5x faster tok/s than the 3B on a 1660 Ti. Old defaults auto-migrate.
-      model: ["llama3.1", "llama3.1:8b-instruct-q4_K_M", "llama3.2:3b-instruct-q4_K_M"].includes(process.env.OLLAMA_MODEL || "")
-        ? "llama3.2:1b-instruct-q4_K_M"
-        : process.env.OLLAMA_MODEL || "llama3.2:1b-instruct-q4_K_M",
+      // Default: qwen2.5:3b-instruct-q4_K_M — ~2 GB, fully on a 6 GB GPU,
+      // and follows persona/instructions FAR better than llama3.2:1b (which
+      // rambles) while still hitting ~40-60 tok/s on a 1660 Ti. Old defaults
+      // auto-migrate to this one.
+      model: ["llama3.1", "llama3.1:8b-instruct-q4_K_M", "llama3.2:3b-instruct-q4_K_M", "llama3.2:1b-instruct-q4_K_M"].includes(process.env.OLLAMA_MODEL || "")
+        ? "qwen2.5:3b-instruct-q4_K_M"
+        : process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct-q4_K_M",
       codeModel: process.env.OLLAMA_CODE_MODEL || "qwen2.5-coder",
-      numCtx: integer(process.env.OLLAMA_NUM_CTX, 1024, 512, 32768),
-      numPredict: integer(process.env.OLLAMA_NUM_PREDICT, 256, 32, 8192),
-      historyMessages: integer(process.env.OLLAMA_HISTORY_MESSAGES, 6, 2, 24),
+      numCtx: integer(process.env.OLLAMA_NUM_CTX, 2048, 512, 32768),
+      numPredict: integer(process.env.OLLAMA_NUM_PREDICT, 220, 32, 8192),
+      historyMessages: integer(process.env.OLLAMA_HISTORY_MESSAGES, 4, 2, 24),
       numBatch: integer(process.env.OLLAMA_NUM_BATCH, 512, 64, 4096),
       numGpu: integer(process.env.OLLAMA_NUM_GPU, 999, 0, 999),
       numThread: integer(process.env.OLLAMA_NUM_THREAD, 0, 0, 64),
