@@ -41,6 +41,7 @@ async function fetchTimeout(url, ms = 2500) {
 
 /** Is an OpenAI-compatible gateway answering at this base (…/v1)? */
 async function probe(base) {
+  if (badBases.has(base)) return false;
   // Must expose OpenAI-shaped /v1/models AND /v1/chat/completions — a bare
   // /health or a random JSON server is not enough (we've adopted wrong ports
   // before, e.g. an unrelated service on 18789 that 404s on completions).
