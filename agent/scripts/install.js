@@ -314,6 +314,127 @@ function verifyNativeModules() {
   }
 }
 
+// ─────────────────────────────────── openclaw ───────────────────────────────
+
+const VENDOR_DIR = path.join(ROOT, "vendor", "openclaw");
+const OPENCLAW_BIN = path.join(
+  VENDOR_DIR, "node_modules", ".bin",
+  process.platform === "win32" ? "openclaw.cmd" : "openclaw",
+);
+
+/** Free-tier OpenClaw routing profiles, strongest-first by usable VRAM. */
+const OPENCLAW_TIERS = [
+  { min: 22, label: "workstation", model: "openclaw-pro", ctx: 8192 },
+  { min: 11, label: "high-end", model: "openclaw-balanced", ctx: 8192 },
+  { min: 7, label: "mainstream", model: "openclaw-default", ctx: 4096 },
+  { min: 5, label: "midrange", model: "openclaw-fast", ctx: 2048 },
+  { min: 3, label: "entry GPU", model: "openclaw-mini", ctx: 2048 },
+  { min: 0, label: "cpu-only", model: "openclaw-mini", ctx: 1536 },
+];
+
+function pickOpenclawProfile(specs) {
+  const gpu = specs.gpu;
+  let vram = gpu?.vramGb ?? 0;
+  if (gpu?.unified) vram = Math.min(vram, Math.max(0, specs.ramGb - 6));
+  if (!gpu) vram = Math.min(4, Math.max(0, specs.ramGb - 6));
+  const tier = OPENCLAW_TIERS.find((t) => vram >= t.min) || OPENCLAW_TIERS[OPENCLAW_TIERS.length - 1];
+  const threads = Math.max(2, Math.min(specs.cpuCores - 2, 16));
+  return { ...tier, threads: gpu && !gpu.unified && vram >= 4 ? 0 : threads };
+}
+
+async function writeOpenclawConfig(profile) {
+  const cfgDir = path.join(os.homedir(), ".openclaw");
+  const cfgPath = path.join(cfgDir, "config.json");
+  await fs.mkdir(cfgDir, { recursive: true });
+  let existing = {};
+  try { existing = JSON.parse(await fs.readFile(cfgPath, "utf8")); } catch {}
+  const merged = {
+    ...existing,
+    defaults: {
+      ...(existing.defaults || {}),
+      model: profile.model,
+      context_size: profile.ctx,
+      num_threads: profile.threads,
+      free_only: true,
+    },
+    tuning: {
+      ...(existing.tuning || {}),
+      profile: profile.label,
+      auto_tuned_by: "yoru-install",
+      auto_tuned_at: new Date().toISOString(),
+    },
+  };
+  await fs.writeFile(cfgPath, JSON.stringify(merged, null, 2), "utf8");
+}
+
+function openclawNodeOk() {
+  const [maj, min] = process.versions.node.split(".").map(Number);
+  return (maj === 24 && min >= 16) || maj >= 26;
+}
+
+async function installOpenclawVendored() {
+  await fs.mkdir(VENDOR_DIR, { recursive: true });
+  const pkg = path.join(VENDOR_DIR, "package.json");
+  try { await fs.access(pkg); } catch {
+    await fs.writeFile(pkg, JSON.stringify({ name: "yoru-openclaw-host", private: true, version: "0.0.0" }, null, 2));
+  }
+  execFileSync("npm", [
+    "install", "--prefix", VENDOR_DIR, "openclaw@latest",
+    "--no-audit", "--no-fund", "--ignore-scripts", "--loglevel=error",
+  ], { stdio: "ignore", timeout: 15 * 60 * 1000, shell: process.platform === "win32" });
+
+  const post = path.join(VENDOR_DIR, "node_modules", "openclaw", "scripts", "postinstall-bundled-plugins.mjs");
+  try {
+    await fs.access(post);
+    execFileSync(process.execPath, [post], {
+      cwd: path.join(VENDOR_DIR, "node_modules", "openclaw"),
+      stdio: "ignore", timeout: 10 * 60 * 1000,
+    });
+  } catch { /* no bundled plugins step — fine */ }
+}
+
+/** Reads OPENCLAW_ENABLED straight from .env (dotenv isn't loaded here). */
+async function openclawEnabled() {
+  const text = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
+  const m = text.match(/^OPENCLAW_ENABLED=(.*)$/m);
+  if (!m) return true; // default on — the gateway is part of the stock stack
+  return !/^(false|0|no|off)\s*$/i.test(m[1].trim());
+}
+
+async function setupOpenclaw(specs) {
+  if (!(await openclawEnabled())) {
+    info("openclaw disabled in .env — skipping");
+    return;
+  }
+  const profile = pickOpenclawProfile(specs);
+  console.log("");
+  console.log(`${C.purple}  openclaw profile ${C.reset}${C.bold}${profile.label}${C.reset}`);
+  console.log(`${C.grey}   model  ${C.reset}${C.green}${profile.model}${C.reset} ${C.grey}(free tier)${C.reset}`);
+  console.log(`${C.grey}   tuning ${C.reset}ctx ${profile.ctx} · threads ${profile.threads || "auto"}`);
+  console.log("");
+
+  try {
+    await patchEnv({ OPENCLAW_AUTOSTART: "true", OPENCLAW_MODEL: profile.model });
+    ok("openclaw settings written to .env");
+  } catch (e) { warn(`could not write openclaw env: ${e.message}`); }
+
+  try { await writeOpenclawConfig(profile); ok("openclaw gateway config written (~/.openclaw/config.json)"); }
+  catch (e) { warn(`could not write openclaw config: ${e.message}`); }
+
+  let installed = true;
+  try { await fs.access(OPENCLAW_BIN); } catch { installed = false; }
+  if (installed) { ok("openclaw already installed"); return; }
+
+  if (!openclawNodeOk()) {
+    warn(`openclaw needs Node 24.16+ or 26.1+ (you're on v${process.versions.node}) — install skipped.`);
+    console.log(`${C.grey}            upgrade Node, then run:  npm run openclaw:setup${C.reset}`);
+    return;
+  }
+  info("installing openclaw locally — one-time, ~30-90s…");
+  try { await installOpenclawVendored(); ok("openclaw installed and tuned"); }
+  catch (e) { warn(`openclaw install failed: ${e.message} — retry with: npm run openclaw:setup`); }
+}
+
 // ─────────────────────────────────── main ───────────────────────────────────
 
 async function main() {
@@ -366,6 +487,9 @@ async function main() {
   } else {
     ollamaInstallHint();
   }
+
+  try { await setupOpenclaw(specs); }
+  catch (e) { warn(`openclaw setup skipped: ${e.message}`); }
 
   console.log("\n" + line());
   console.log(`${C.green}${C.bold}  Setup complete.${C.reset}  ${C.grey}Add your tokens to ${C.reset}agent/.env${C.grey}, then run:${C.reset} ${C.magenta}npm run yoru${C.reset}`);
