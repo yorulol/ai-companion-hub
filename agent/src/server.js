@@ -11,13 +11,15 @@ import {
   getWelcome, setWelcome,
   listReactionRoles, setReactionRole, deleteReactionRole,
 } from "./db.js";
-import { startBot, stopBot, botStatus, botGuilds, listCommands } from "./bot.js";
+import { startBot, stopBot, botStatus, botGuilds, listCommands, getBotClient } from "./bot.js";
 import { startSelfbot, stopSelfbot, selfbotStatus, selfbotGuilds } from "./selfbot.js";
 import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
 import { auditFolder } from "./code-audit.js";
 import { runEmailForward, supportedOps as emailForwardOps } from "./email-forward.js";
 import { listActivity, logActivity } from "./activity.js";
+import { attachRoutes as verifyRoutes } from "./verify.js";
+import { getAutomod, setAutomod } from "./automod.js";
 
 const json = (res, code, body) => {
   res.writeHead(code, {
@@ -128,6 +130,20 @@ const ROUTES = {
     requireOwner(req);
     return { ok: true };
   },
+
+  // ---- Persona (public read so the chat panel can display; owner-only write) ----
+  "GET /api/persona": async () => ({ persona: getSettings().persona }),
+  "POST /api/persona": async (req) => {
+    requireOwner(req);
+    const { persona } = await readBody(req);
+    if (typeof persona !== "string" || persona.length < 20) throw new Error("Persona must be a non-empty string.");
+    setSettings({ persona });
+    return { ok: true, persona };
+  },
+
+  // ---- Auto-mod config (owner only) ----
+  "GET /api/owner/guilds/:id/automod": async (req, id) => { requireOwner(req); return getAutomod(id); },
+  "POST /api/owner/guilds/:id/automod": async (req, id) => { requireOwner(req); return setAutomod(id, await readBody(req)); },
 
   "GET /api/owner/settings": async (req) => {
     requireOwner(req);
@@ -321,10 +337,30 @@ function match(method, url) {
   return null;
 }
 
+const VERIFY = verifyRoutes(getBotClient);
+function sendHtml(res, body, status = 200) {
+  res.writeHead(status, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+  res.end(body);
+}
+
 export function startServer() {
   const server = http.createServer(async (req, res) => {
     if (req.method === "OPTIONS") { json(res, 204, {}); return; }
     const url = req.url.split("?")[0];
+
+    // Public verification pages (outside /api/).
+    const vm = url.match(/^\/verify\/([a-f0-9]+)$/);
+    if (vm) {
+      try {
+        const handler = VERIFY[req.method];
+        if (!handler) { res.writeHead(405); return res.end(); }
+        const out = await handler(req, vm[1]);
+        return sendHtml(res, out.html, out.status || 200);
+      } catch (err) {
+        return sendHtml(res, `<pre>${err.message}</pre>`, 500);
+      }
+    }
+
     try {
       const found = match(req.method, url);
       if (!found) return json(res, 404, { error: "Not found" });
