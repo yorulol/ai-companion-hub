@@ -38,3 +38,8 @@ dist-ssr
 
 # Local OpenClaw install (machine-specific)
 agent/vendor/
+
+# Environment / secrets (per-machine)
+.env
+agent/.env
+agent/.env.*.local
