@@ -1,16 +1,15 @@
 // Auto-provision Ollama models tuned for mid-range hardware.
 // Target rig: Intel i7 + RTX 1660 Ti (6 GB VRAM) + 16 GB RAM.
-// We pick quantised 7-8B models that fit in ~6 GB VRAM comfortably and
-// leave headroom on the CPU/RAM side.
+// We use a fast 3B chat model that stays fully on a 6 GB GPU, while retaining
+// the stronger 7B coder for coding tasks where quality matters more than speed.
 import { config } from "./config.js";
 import { log } from "./boot-ui.js";
 
 // Chosen for a 6 GB VRAM / 16 GB RAM box:
-//   - llama3.1:8b-instruct-q4_K_M → ~4.7 GB, best all-round chat
+//   - llama3.2:3b-instruct-q4_K_M → ~2 GB, fast all-round chat
 //   - qwen2.5-coder:7b-instruct-q4_K_M → ~4.4 GB, strongest small coder
-// Both run fully on the 1660 Ti with room for context.
 const RECOMMENDED = {
-  general: "llama3.1:8b-instruct-q4_K_M",
+  general: "llama3.2:3b-instruct-q4_K_M",
   coding: "qwen2.5-coder:7b-instruct-q4_K_M",
 };
 
@@ -51,7 +50,8 @@ export async function startOllama() {
   }
 
   // If the user hasn't customised their model choice, snap to hardware-tuned defaults.
-  if (p.model === "llama3.1") p.model = RECOMMENDED.general;
+  // Migrate both the old shorthand and the previous 8B hardware default.
+  if (p.model === "llama3.1" || p.model === "llama3.1:8b-instruct-q4_K_M") p.model = RECOMMENDED.general;
   if (p.codeModel === "qwen2.5-coder") p.codeModel = RECOMMENDED.coding;
 
   const installed = await listInstalled();
@@ -63,7 +63,12 @@ export async function startOllama() {
       await fetch(`${p.url}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: p.model, messages: [], keep_alive: "24h" }),
+        body: JSON.stringify({
+          model: p.model,
+          messages: [],
+          keep_alive: "24h",
+          options: { num_ctx: p.numCtx, num_predict: 1 },
+        }),
         signal: AbortSignal.timeout(120_000),
       });
       log.ok("ollama", `${p.model} pre-loaded into memory`);

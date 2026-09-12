@@ -2,6 +2,7 @@
 import { ask } from "./ai.js";
 import { extractToolCall, executeTool, stripToolArtifacts, TOOL_SPEC } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
+import { config } from "./config.js";
 
 /**
  * @param {object} opts
@@ -15,7 +16,9 @@ import { getSettings, rememberMessage, recallMessages } from "./db.js";
  */
 export async function chat({ scope, userText, mode = "general", isOwner = false, context = null }) {
   rememberMessage(scope, "user", userText);
-  const history = recallMessages(scope);
+  // Local models pay a large latency penalty for replaying long conversations.
+  // Keep the newest turns; persistent memory remains intact in SQLite.
+  const history = recallMessages(scope).slice(-config.providers.ollama.historyMessages);
   const persona = getSettings().persona;
   const secrecy = isOwner
     ? "The requester is the verified OWNER. You may discuss and use all commands and capabilities with them."

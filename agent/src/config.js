@@ -4,6 +4,11 @@ import os from "node:os";
 const bool = (v, fallback = false) =>
   v === undefined || v === "" ? fallback : ["1", "true", "yes", "on"].includes(String(v).toLowerCase());
 
+const integer = (v, fallback, min, max) => {
+  const parsed = Number.parseInt(v ?? "", 10);
+  return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+};
+
 const homeDir = os.homedir();
 
 const ownerIds = [
@@ -39,8 +44,11 @@ export const config = {
     ollama: {
       enabled: bool(process.env.OLLAMA_ENABLED, true),
       url: (process.env.OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/$/, ""),
-      model: process.env.OLLAMA_MODEL || "llama3.1",
+      model: process.env.OLLAMA_MODEL || "llama3.2:3b-instruct-q4_K_M",
       codeModel: process.env.OLLAMA_CODE_MODEL || "qwen2.5-coder",
+      numCtx: integer(process.env.OLLAMA_NUM_CTX, 2048, 1024, 32768),
+      numPredict: integer(process.env.OLLAMA_NUM_PREDICT, 384, 64, 8192),
+      historyMessages: integer(process.env.OLLAMA_HISTORY_MESSAGES, 8, 2, 24),
     },
     openai: {
       enabled: bool(process.env.OPENAI_ENABLED, false),

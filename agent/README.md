@@ -83,6 +83,16 @@ is missing:
 You can also enable/disable providers live from the chat panel by clicking
 the provider pill in the top-right corner.
 
+### Ollama performance
+
+The defaults target an i7, RTX 1660 Ti 6 GB, and 16 GB RAM. Normal chat uses
+`llama3.2:3b-instruct-q4_K_M` so the model and its context stay fully on the
+GPU; coding keeps the stronger `qwen2.5-coder:7b-instruct-q4_K_M`. YORU
+automatically migrates the previous 8B chat default and downloads the 3B model
+on first use. Tune `OLLAMA_NUM_CTX`, `OLLAMA_NUM_PREDICT`, and
+`OLLAMA_HISTORY_MESSAGES` in `.env`. After each reply, the terminal reports
+generation speed in tokens per second and total response time.
+
 ## Code check
 
 In the chat panel, open the hamburger menu (☰) and choose **Code check**.

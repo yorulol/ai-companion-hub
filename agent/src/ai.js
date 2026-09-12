@@ -180,6 +180,7 @@ async function pullOllamaModel(model) {
 }
 
 async function ollamaChatRequest(url, model, messages) {
+  const p = config.providers.ollama;
   const res = await fetch(`${url}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -189,8 +190,12 @@ async function ollamaChatRequest(url, model, messages) {
       stream: false,
       // Keep the model loaded in VRAM so replies don't pay a 30s+ reload cost.
       keep_alive: "24h",
-      // Smaller context = much faster prompt processing on a 6 GB card.
-      options: { num_ctx: 4096 },
+      // Keep the model and KV cache fully on a 6 GB GPU. Output is bounded so
+      // casual replies do not spend minutes generating unnecessary text.
+      options: {
+        num_ctx: p.numCtx,
+        num_predict: p.numPredict,
+      },
     }),
     signal: AbortSignal.timeout(180_000),
   });
@@ -214,6 +219,13 @@ async function callOllama(messages, mode) {
   const body = await res.json();
   const text = body?.message?.content?.trim();
   if (!text) throw new Error("Ollama returned nothing");
+  const seconds = Number(body.eval_duration || 0) / 1e9;
+  const tokens = Number(body.eval_count || 0);
+  const rate = seconds > 0 && tokens > 0 ? tokens / seconds : 0;
+  const total = Number(body.total_duration || 0) / 1e9;
+  if (rate > 0) {
+    console.log(`[ollama] ${model} · ${rate.toFixed(1)} tok/s · ${tokens} tokens · ${total.toFixed(1)}s total`);
+  }
   return { reply: text, provider: "ollama", model };
 }
 
