@@ -33,17 +33,34 @@
   </header>
 
   <div class="glass" style="flex:1;display:flex;flex-direction:column;min-height:0">
-    <div class="tabs" id="tabs">
-      <button data-tab="discord" aria-pressed="true">Discord</button>
-      <button data-tab="guilds">Servers</button>
-      <button data-tab="automation">Automation</button>
-      <button data-tab="alt">Alt account</button>
-      <button data-tab="providers">AI providers</button>
-      <button data-tab="commands">Commands</button>
-      <button data-tab="computer">Computer</button>
-      <button data-tab="lookups">Lookups</button>
-      <button data-tab="whitelist">Whitelist</button>
-      <button data-tab="activity">Activity</button>
+    <div class="tabs grouped-tabs" id="tabs">
+      <button data-tab="discord" aria-pressed="true">Overview</button>
+      <details class="tab-group">
+        <summary>Discord</summary>
+        <div class="tab-menu glass">
+          <button data-tab="guilds">Servers &amp; roles</button>
+          <button data-tab="security">Security &amp; verification</button>
+          <button data-tab="automation">Automation</button>
+          <button data-tab="alt">Alt account</button>
+          <button data-tab="commands">Commands</button>
+        </div>
+      </details>
+      <details class="tab-group">
+        <summary>AI</summary>
+        <div class="tab-menu glass"><button data-tab="providers">Providers &amp; models</button></div>
+      </details>
+      <details class="tab-group">
+        <summary>Data</summary>
+        <div class="tab-menu glass">
+          <button data-tab="lookups">Lookups</button>
+          <button data-tab="whitelist">Whitelist</button>
+          <button data-tab="activity">Activity</button>
+        </div>
+      </details>
+      <details class="tab-group">
+        <summary>System</summary>
+        <div class="tab-menu glass"><button data-tab="computer">Computer</button></div>
+      </details>
     </div>
 
     <div class="panes">
@@ -78,6 +95,30 @@
         <h2 class="sec">Per-server settings</h2>
         <div class="muted" style="margin-bottom:10px">Prefix, admin/mod roles and AI auto-reply, saved per server.</div>
         <div id="guilds"></div>
+      </section>
+
+      <!-- ============ Security & verification ============ -->
+      <section class="pane" data-pane="security">
+        <h2 class="sec">Server security &amp; verification</h2>
+        <div class="card">
+          <div class="field"><label>Server</label><select id="securityGuild"></select></div>
+          <div class="checks security-checks">
+            <label><input type="checkbox" data-security="antispam"/> Anti-spam</label>
+            <label><input type="checkbox" data-security="antiraid"/> Anti-raid</label>
+            <label><input type="checkbox" data-security="antiinvite"/> Block invites</label>
+            <label><input type="checkbox" data-security="antimention"/> Block mass mentions</label>
+          </div>
+          <div class="grid two" style="margin-top:16px">
+            <div class="field"><label>Moderation log channel ID</label><input id="securityLogChannel" placeholder="Discord channel ID"/></div>
+            <div class="field"><label>Verified role</label><select id="securityVerifyRole"><option value="">Choose a role</option></select></div>
+          </div>
+          <button class="primary" id="securitySave">Save security settings</button>
+          <div id="securityOut" class="muted" style="margin-top:10px"></div>
+        </div>
+        <div class="card">
+          <strong>Browser verification</strong>
+          <p class="muted">Members run <code>!verify</code>, receive a private one-time browser link, and get the selected role after completion. Events are appended to <code>lookups/verify.txt</code>.</p>
+        </div>
       </section>
 
       <!-- ============ Providers ============ -->
@@ -233,12 +274,13 @@
       <section class="pane" data-pane="whitelist">
         <h2 class="sec">Lookup whitelist</h2>
         <div class="card">
-          <div class="muted">Any ID or username added here will be blocked from lookup results across Discord, the chat panel, and the owner panel.</div>
+          <div class="muted">Protected identities are blocked from lookup results everywhere. Matching Discord IDs found beside a protected username are linked and protected automatically.</div>
           <div class="row" style="margin-top:12px">
             <input id="wlValue" placeholder="username or ID"/>
             <input id="wlNote" placeholder="note (optional)"/>
             <button class="sm primary" id="wlAdd">Add</button>
           </div>
+          <div id="wlOut" class="muted" style="margin-top:10px"></div>
           <div id="wlList" style="margin-top:12px"></div>
         </div>
       </section>
