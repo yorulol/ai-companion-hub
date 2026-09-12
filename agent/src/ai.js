@@ -80,6 +80,35 @@ export const knownModels = () => ({ free: freeModels, coding: codingModels });
 
 /** OpenClaw local server availability: paused-until timestamp when unreachable. */
 let openclawDownUntil = 0;
+let openclawModelCache = { at: 0, model: null };
+
+/**
+ * The gateway decides its own model ids. Asking it for a name it doesn't know
+ * is what produces `500 internal error`, so read the live list instead of
+ * trusting the configured placeholder.
+ */
+async function resolveOpenClawModel(cfg) {
+  if (openclawModelCache.model && Date.now() - openclawModelCache.at < 5 * 60 * 1000) {
+    return openclawModelCache.model;
+  }
+  let picked = null;
+  try {
+    const res = await fetch(`${cfg.base}/models`, {
+      headers: cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {},
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const body = await res.json();
+      const ids = (body.data || body.models || [])
+        .map((m) => (typeof m === "string" ? m : m.id || m.name))
+        .filter(Boolean);
+      picked = ids.find((id) => id === cfg.model) || ids.find((id) => /ollama|qwen|llama/i.test(id)) || ids[0] || null;
+    }
+  } catch {}
+  const model = picked || cfg.model;
+  openclawModelCache = { at: Date.now(), model };
+  return model;
+}
 
 export async function ollamaModels() {
   const p = config.providers.ollama;
@@ -340,39 +369,40 @@ export async function ask({ messages, mode = "general" }) {
         return { reply, provider: "anthropic", model: cfg.model };
       }
       if (name === "openclaw") {
-        // Only skip the retry if a *different* provider is also enabled and could pick up the slack.
         const otherEnabled = ["openrouter", "groq", "openai", "anthropic", "ollama"].some((n) => P[n]?.enabled && (n === "ollama" || !!P[n].key));
         if (openclawDownUntil > Date.now() && otherEnabled) continue;
         try {
-          const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);
+          const model = await resolveOpenClawModel(cfg);
+          const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", model, full);
           openclawDownUntil = 0;
-          return { reply, provider: "openclaw", model: cfg.model };
+          return { reply, provider: "openclaw", model };
         } catch (err) {
           const msg = String(err.message || "");
+          const status = Number((msg.match(/ (\d{3}): /) || [])[1] || 0);
           const unreachable = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
-          // A 404 means we're pointed at the wrong port/service, not that the
-          // gateway is down — force a re-discovery of the real address.
-          const wrongAddress = / 404: /.test(msg) || msg.includes("404: Not Found");
-          if (unreachable || wrongAddress) {
-            // Self-heal: re-discover / install + hardware-tune + start the local gateway, then retry.
+          if (unreachable || status === 404) {
             try {
               const { ensureOpenClaw, invalidateOpenClawBase } = await import("./openclaw-runner.js");
-              if (wrongAddress) invalidateOpenClawBase();
+              if (status === 404) invalidateOpenClawBase();
               const ready = await ensureOpenClaw();
-              if (!ready) throw new Error("gateway not ready");
-              const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);
-              openclawDownUntil = 0;
-              return { reply, provider: "openclaw", model: cfg.model };
-            } catch (err2) {
-              openclawDownUntil = Date.now() + 30 * 1000;
-              errors.push(`openclaw: local gateway is still starting up (auto-setup is running in the background). Try again in a moment.`);
-              continue;
-            }
+              if (ready) {
+                openclawModelCache = { at: 0, model: null };
+                const model = await resolveOpenClawModel(cfg);
+                const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", model, full);
+                openclawDownUntil = 0;
+                return { reply, provider: "openclaw", model };
+              }
+            } catch {}
+            openclawDownUntil = Date.now() + 30 * 1000;
+            errors.push(`openclaw: gateway not ready — falling back`);
+            continue;
           }
+          // 500 / 4xx from the gateway itself: model missing or upstream broken.
+          // Park briefly so we fall straight through to Ollama on the next turn.
+          openclawDownUntil = Date.now() + 60 * 1000;
           errors.push(`openclaw: ${msg.slice(0, 200)}`);
           continue;
         }
-
       }
       if (name === "ollama") {
         return await callOllama(full, mode);
