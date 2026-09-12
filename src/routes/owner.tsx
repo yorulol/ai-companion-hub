@@ -422,7 +422,7 @@ function WhitelistTab() {
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
   const load = () => api.whitelist().then((result) => setItems(result.items)).catch((error: Error) => setMessage(error.message));
-  useEffect(load, []);
+  useEffect(() => { void load(); }, []);
   const add = async () => {
     if (!value.trim()) { setMessage("Enter a Discord username or ID first."); return; }
     try {
