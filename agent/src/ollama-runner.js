@@ -9,7 +9,7 @@ import { log } from "./boot-ui.js";
 //   - llama3.2:3b-instruct-q4_K_M → ~2 GB, fast all-round chat
 //   - qwen2.5-coder:7b-instruct-q4_K_M → ~4.4 GB, strongest small coder
 const RECOMMENDED = {
-  general: "llama3.2:3b-instruct-q4_K_M",
+  general: "llama3.2:1b-instruct-q4_K_M",
   coding: "qwen2.5-coder:7b-instruct-q4_K_M",
 };
 
@@ -51,7 +51,7 @@ export async function startOllama() {
 
   // If the user hasn't customised their model choice, snap to hardware-tuned defaults.
   // Migrate both the old shorthand and the previous 8B hardware default.
-  if (p.model === "llama3.1" || p.model === "llama3.1:8b-instruct-q4_K_M") p.model = RECOMMENDED.general;
+  if (["llama3.1", "llama3.1:8b-instruct-q4_K_M", "llama3.2:3b-instruct-q4_K_M"].includes(p.model)) p.model = RECOMMENDED.general;
   if (p.codeModel === "qwen2.5-coder") p.codeModel = RECOMMENDED.coding;
 
   const installed = await listInstalled();
@@ -67,7 +67,7 @@ export async function startOllama() {
           model: p.model,
           messages: [],
           keep_alive: "24h",
-          options: { num_ctx: p.numCtx, num_predict: 1 },
+          options: { num_ctx: p.numCtx, num_predict: 1, num_gpu: p.numGpu, num_batch: p.numBatch },
         }),
         signal: AbortSignal.timeout(120_000),
       });
