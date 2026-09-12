@@ -8,14 +8,22 @@ frontend build, no Lovable, no extra terminals.
 
 ```bash
 cd agent
-# fill in the included .env file, then:
-npm install
+npm install         # auto-detects your CPU/RAM/GPU and tunes Ollama for it
+# fill in the tokens in .env, then:
 npm run yoru
 ```
 
-That's it. The agent boots the AI router, the Discord bot (optional), and
-both web panels — all as one process, behind a colored terminal dashboard
-with an animated robot mascot.
+That's it. `npm install` runs a hardware-aware setup that creates `.env` on a
+fresh machine, checks your Node version, rebuilds native modules if you
+switched Node versions, detects your CPU / RAM / GPU VRAM (NVIDIA, AMD, Apple
+Silicon, or CPU-only), picks the fastest chat + coding Ollama models that fit
+your hardware, writes tuned `OLLAMA_*` values into `.env`, and pre-pulls the
+models if Ollama is running. Re-run it any time with `npm run setup` (e.g.
+after upgrading your GPU).
+
+Then the agent boots the AI router, the Discord bot (optional), and both web
+panels — all as one process, behind a colored terminal dashboard with an
+animated robot mascot.
 
 > `npm run yoru` is the canonical command. `npm start` still works as an
 > alias.

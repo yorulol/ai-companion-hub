@@ -8,6 +8,8 @@
     "yoru": "bin/yoru.js"
   },
   "scripts": {
+    "postinstall": "node scripts/install.js",
+    "setup": "node scripts/install.js",
     "yoru": "node src/index.js",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
