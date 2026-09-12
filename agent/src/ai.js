@@ -198,17 +198,40 @@ export async function ask({ messages, mode = "general" }) {
         await refreshModels();
         const pool = mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels;
         const tried = new Set();
+        let attemptedAny = false;
         for (const model of pool) {
           if (tried.has(model)) continue;
           tried.add(model);
+          if (isParked(model)) continue; // skip cooling-down models entirely
+          attemptedAny = true;
           try {
             const reply = await callOpenRouter(model, full);
             return { reply, provider: "openrouter", model };
           } catch (err) {
-            console.warn(`[ai] openrouter ${model} → ${err.status || "?"} - trying next`);
+            const status = err.status || 0;
+            if ([429, 402, 403, 500, 502, 503, 504].includes(status)) parkModel(model, status);
+            console.warn(`[ai] openrouter ${model} → ${status || "?"} - parked, trying next`);
           }
         }
-        errors.push("openrouter: all free models failed");
+        // Every free model is parked (all rate-limited). Force a fresh scan so
+        // newly-listed free models get picked up immediately, then retry once
+        // with any models that are still un-parked after the refresh.
+        if (!attemptedAny) {
+          await refreshModels(true);
+          const fresh = (mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels)
+            .filter((m) => !tried.has(m) && !isParked(m));
+          for (const model of fresh) {
+            try {
+              const reply = await callOpenRouter(model, full);
+              return { reply, provider: "openrouter", model };
+            } catch (err) {
+              const status = err.status || 0;
+              if ([429, 402, 403, 500, 502, 503, 504].includes(status)) parkModel(model, status);
+              console.warn(`[ai] openrouter ${model} → ${status || "?"} - parked, trying next`);
+            }
+          }
+        }
+        errors.push("openrouter: all free models parked or failed");
         continue;
       }
       if (name === "groq" && cfg.key) {
