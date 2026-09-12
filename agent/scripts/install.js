@@ -488,6 +488,9 @@ async function main() {
     ollamaInstallHint();
   }
 
+  try { await setupOpenclaw(specs); }
+  catch (e) { warn(`openclaw setup skipped: ${e.message}`); }
+
   console.log("\n" + line());
   console.log(`${C.green}${C.bold}  Setup complete.${C.reset}  ${C.grey}Add your tokens to ${C.reset}agent/.env${C.grey}, then run:${C.reset} ${C.magenta}npm run yoru${C.reset}`);
   console.log(line() + "\n");
