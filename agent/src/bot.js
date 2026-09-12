@@ -65,11 +65,31 @@ export async function startBot() {
 
       // AI reply when mentioned
       if (message.mentions.has(client.user) && guildCfg.aiReplies) {
-        const text = message.content.replace(/<@!?\d+>/g, "").trim();
+        const selfRe = new RegExp(`<@!?${client.user.id}>`, "g");
+        const text = message.content.replace(selfRe, "").trim();
         if (text) {
           await message.channel.sendTyping();
           const isOwner = isOwnerId(message.author.id);
-          const { reply } = await chat({ scope: `g:${message.channel.id}:${message.author.id}`, userText: text, isOwner });
+          const mentioned = [];
+          for (const [, u] of message.mentions.users) {
+            if (u.id === client.user.id) continue;
+            mentioned.push({ id: u.id, tag: u.username });
+          }
+          const { reply } = await chat({
+            scope: `g:${message.channel.id}:${message.author.id}`,
+            userText: text,
+            isOwner,
+            context: {
+              platform: "bot",
+              isDm: false,
+              guildName: message.guild.name,
+              channelName: message.channel?.name || null,
+              authorTag: message.author.username,
+              authorId: message.author.id,
+              selfId: client.user.id,
+              mentioned,
+            },
+          });
           return void message.reply(reply.slice(0, 1990));
         }
       }
