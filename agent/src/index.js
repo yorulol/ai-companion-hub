@@ -5,6 +5,7 @@ import { startBot } from "./bot.js";
 import { startSelfbot } from "./selfbot.js";
 import { refreshModels } from "./ai.js";
 import { startOpenClaw } from "./openclaw-runner.js";
+import { autotuneOpenClaw } from "./openclaw-autotune.js";
 import { startOllama } from "./ollama-runner.js";
 import { bootUI, log } from "./boot-ui.js";
 
@@ -25,7 +26,9 @@ refreshModels(true)
   .then((n) => log.ok("ai", `${n ?? 0} free OpenRouter models cached`))
   .catch((e) => log.warn("ai", `model scan failed: ${e.message}`));
 
-startOpenClaw().catch((e) => log.warn("openclaw", e.message));
+autotuneOpenClaw()
+  .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
+  .finally(() => { startOpenClaw().catch((e) => log.warn("openclaw", e.message)); });
 startOllama().catch((e) => log.warn("ollama", e.message));
 
 if (config.discord.botAutostart && config.discord.botToken) {
