@@ -155,7 +155,7 @@ async function installVendored() {
  * openclaw config, and (if missing) installs openclaw locally. Idempotent —
  * re-runs only when the machine's spec fingerprint changes.
  */
-export async function autotuneOpenClaw() {
+export async function autotuneOpenClaw({ force = false } = {}) {
   if (!config.providers.openclaw.enabled) return null;
 
   const specs = await detectSpecs();
@@ -164,7 +164,8 @@ export async function autotuneOpenClaw() {
 
   let cached = null;
   try { cached = JSON.parse(await fs.readFile(AUTOTUNE_STAMP, "utf8")); } catch {}
-  const alreadyTuned = cached?.fingerprint === fingerprint;
+  const alreadyTuned = !force && cached?.fingerprint === fingerprint && existsSync(LOCAL_BIN);
+
 
   if (!alreadyTuned) {
     log.info("openclaw", `autotuning for ${specs.gpu ? `${specs.gpu.name} · ${specs.gpu.vramGb} GB VRAM` : "CPU-only"} → profile "${profile.label}" (${profile.model})`);
