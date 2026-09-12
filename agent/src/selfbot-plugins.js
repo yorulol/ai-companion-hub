@@ -420,6 +420,11 @@ P({
   hooks: {},
 });
 
+/* Register the extended 200+ self-command library. */
+import { registerSelfCommands } from "./selfbot-commands.js";
+registerSelfCommands(P);
+
+
 /* ---------- public API ---------- */
 export function listPlugins() {
   return PLUGINS.map((p) => {
