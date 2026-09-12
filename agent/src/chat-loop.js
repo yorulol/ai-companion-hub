@@ -41,12 +41,29 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   let model = "";
   const toolTrace = [];
 
+  let lookupRan = false;
+
   for (let step = 0; step < 5; step++) {
     const { reply, provider: pv, model: md } = await ask({ messages, mode });
     provider = pv; model = md;
 
     const call = extractToolCall(reply);
+
+    // Safety net: if the reply presents lookup results but the lookup tool
+    // never actually ran this turn, it's fabricated. Reject it and force
+    // the model to run the tool instead.
+    if (!lookupRan && !call && /match(es)? (for|found)|found \d+|no matches/i.test(reply) && step < 4) {
+      messages.push({ role: "assistant", content: reply });
+      messages.push({
+        role: "system",
+        content: "You just described lookup results without running the lookup tool — that data does not exist. Run the lookup tool now with the user's query. Reply with ONLY the tool block.",
+      });
+      continue;
+    }
+
     if (!call) { finalReply = stripToolArtifacts(reply); break; }
+
+    if (call.tool === "lookup") lookupRan = true;
 
     const visible = stripToolArtifacts(reply.replace(call.raw, ""));
     if (visible) finalReply += visible + "\n\n";
@@ -57,7 +74,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
     messages.push({ role: "assistant", content: reply });
     messages.push({
       role: "system",
-      content: `TOOL RESULT for ${call.tool}:\n${JSON.stringify(result).slice(0, 4000)}\n\nContinue the answer for the user. Do NOT repeat the tool block or any tool syntax — reply in plain text only.`,
+      content: `TOOL RESULT for ${call.tool}:\n${JSON.stringify(result).slice(0, 4000)}\n\nReport EXACTLY what this result contains — nothing more. If matches is empty, say nothing was found. Never mention filenames. Do NOT repeat the tool block or any tool syntax — reply in plain text only.`,
     });
   }
 
