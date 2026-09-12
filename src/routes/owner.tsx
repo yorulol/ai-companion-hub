@@ -110,7 +110,7 @@ type Settings = {
 };
 
 function OwnerDashboard({ onLock }: { onLock: () => void }) {
-  type OwnerTab = "overview" | "discord" | "servers" | "security" | "automation" | "alt" | "whitelist" | "commands" | "models" | "computer";
+  type OwnerTab = "overview" | "discord" | "servers" | "security" | "automation" | "alt" | "plugins" | "whitelist" | "commands" | "models" | "computer";
   const [tab, setTab] = useState<OwnerTab>("overview");
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
