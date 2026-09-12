@@ -5,6 +5,7 @@ import { startBot } from "./bot.js";
 import { startSelfbot } from "./selfbot.js";
 import { refreshModels } from "./ai.js";
 import { startOpenClaw } from "./openclaw-runner.js";
+import { startOllama } from "./ollama-runner.js";
 import { bootUI, log } from "./boot-ui.js";
 
 await bootUI();
@@ -25,6 +26,7 @@ refreshModels(true)
   .catch((e) => log.warn("ai", `model scan failed: ${e.message}`));
 
 startOpenClaw().catch((e) => log.warn("openclaw", e.message));
+startOllama().catch((e) => log.warn("ollama", e.message));
 
 if (config.discord.botAutostart && config.discord.botToken) {
   startBot()
