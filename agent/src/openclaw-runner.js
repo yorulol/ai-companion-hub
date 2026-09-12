@@ -37,9 +37,9 @@ async function pingBase() {
   } catch { return false; }
 }
 
-export async function startOpenClaw() {
+export async function startOpenClaw({ force = false } = {}) {
   if (!config.providers.openclaw.enabled) return;
-  if (!process.env.OPENCLAW_AUTOSTART || process.env.OPENCLAW_AUTOSTART === "false") return;
+  if (!force && (!process.env.OPENCLAW_AUTOSTART || process.env.OPENCLAW_AUTOSTART === "false")) return;
 
   if (await pingBase()) { log.ok("openclaw", "gateway already running"); return; }
 
