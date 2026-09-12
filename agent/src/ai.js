@@ -81,6 +81,9 @@ const isParked = (id) => {
 
 export const knownModels = () => ({ free: freeModels, coding: codingModels });
 
+/** OpenClaw local server availability: paused-until timestamp when unreachable. */
+let openclawDownUntil = 0;
+
 export async function ollamaModels() {
   const p = config.providers.ollama;
   if (!p.enabled) return [];
