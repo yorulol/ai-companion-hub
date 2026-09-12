@@ -80,6 +80,35 @@ export const knownModels = () => ({ free: freeModels, coding: codingModels });
 
 /** OpenClaw local server availability: paused-until timestamp when unreachable. */
 let openclawDownUntil = 0;
+let openclawModelCache = { at: 0, model: null };
+
+/**
+ * The gateway decides its own model ids. Asking it for a name it doesn't know
+ * is what produces `500 internal error`, so read the live list instead of
+ * trusting the configured placeholder.
+ */
+async function resolveOpenClawModel(cfg) {
+  if (openclawModelCache.model && Date.now() - openclawModelCache.at < 5 * 60 * 1000) {
+    return openclawModelCache.model;
+  }
+  let picked = null;
+  try {
+    const res = await fetch(`${cfg.base}/models`, {
+      headers: cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {},
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const body = await res.json();
+      const ids = (body.data || body.models || [])
+        .map((m) => (typeof m === "string" ? m : m.id || m.name))
+        .filter(Boolean);
+      picked = ids.find((id) => id === cfg.model) || ids.find((id) => /ollama|qwen|llama/i.test(id)) || ids[0] || null;
+    }
+  } catch {}
+  const model = picked || cfg.model;
+  openclawModelCache = { at: Date.now(), model };
+  return model;
+}
 
 export async function ollamaModels() {
   const p = config.providers.ollama;
