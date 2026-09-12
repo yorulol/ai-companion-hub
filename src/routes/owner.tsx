@@ -11,6 +11,7 @@ import {
   type HealthInfo,
   type WhitelistItem,
   type AutomodConfig,
+  type SelfbotPlugin,
 } from "@/lib/agent-client";
 
 export const Route = createFileRoute("/owner")({
