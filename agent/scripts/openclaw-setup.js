@@ -90,20 +90,21 @@ function nodeOk() {
   }
   ok("openclaw installed locally (global install not required)");
 
-  // 3) Onboard with the local binary.
+  // 3) Let Yoru write the local, non-interactive model/gateway configuration.
+  // Do not install a native daemon: Yoru owns one foreground gateway process,
+  // which avoids stale launchd/systemd/Task Scheduler registrations.
   const bin = openclawCmd();
-  info(`running: ${path.basename(bin)} onboard --install-daemon`);
-  info("follow the wizard to pick a model provider, then come back here.\n");
+  info("writing the hardware-tuned local gateway configuration…");
   try {
-    await run(bin, ["onboard", "--install-daemon"]);
-    ok("onboarding complete");
+    const { autotuneOpenClaw } = await import("../src/openclaw-autotune.js");
+    await autotuneOpenClaw({ force: true });
+    await run(bin, ["gateway", "stop", "--force", "--json"]).catch(() => {});
+    ok("local gateway configuration complete");
   } catch (e) {
-    err(`onboarding failed: ${e.message}`);
-    err(`you can rerun it any time with: ${bin} onboard --install-daemon`);
+    err(`configuration failed: ${e.message}`);
+    err("you can rerun it any time with: npm run openclaw:setup");
     process.exit(1);
   }
 
-  info("checking gateway status…");
-  try { await run(bin, ["gateway", "status"]); } catch {}
-  ok("done. Yoru will auto-start the gateway on boot when OPENCLAW_AUTOSTART=true.");
+  ok("done. `npm start` will launch and own one OpenClaw gateway.");
 })().catch((e) => { err(e.message); process.exit(1); });
