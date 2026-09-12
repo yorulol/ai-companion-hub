@@ -6,6 +6,7 @@ let freeModels = [];
 let codingModels = [];
 let lastModelFetch = 0;
 let openRouterCursor = 0;
+let openRouterDownUntil = 0;
 
 const CODE_HINTS = ["coder", "code", "devstral", "codestral", "starcoder", "qwen2.5-c", "deepseek"];
 const PRIORITY = ["deepseek", "qwen", "llama-3.3", "llama-4", "mistral", "gemma", "glm", "kimi", "phi"];
@@ -63,11 +64,6 @@ const COOLDOWN_MS = {
   502: 3 * 60 * 1000,
   503: 3 * 60 * 1000,
   504: 3 * 60 * 1000,
-};
-/** Evict the N models whose cooldown ends soonest so we can retry. */
-const evictSoonestCooldowns = (n = 5) => {
-  const entries = [...cooldown.entries()].sort((a, b) => a[1] - b[1]);
-  for (const [id] of entries.slice(0, n)) cooldown.delete(id);
 };
 const parkModel = (id, status) => {
   const ms = COOLDOWN_MS[status] ?? 5 * 60 * 1000;
@@ -258,6 +254,7 @@ export async function ask({ messages, mode = "general" }) {
     try {
       if (name === "openrouter") {
         if (!cfg.key) continue;
+        if (openRouterDownUntil > Date.now()) continue;
         await refreshModels();
         const sourcePool = mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels;
         const uniquePool = [...new Set(sourcePool)];
@@ -274,6 +271,7 @@ export async function ask({ messages, mode = "general" }) {
           attemptedAny = true;
           try {
             const reply = await callOpenRouter(model, full);
+            openRouterDownUntil = 0;
             return { reply, provider: "openrouter", model };
           } catch (err) {
             const status = err.status || 0;
@@ -291,6 +289,7 @@ export async function ask({ messages, mode = "general" }) {
           for (const model of fresh) {
             try {
               const reply = await callOpenRouter(model, full);
+              openRouterDownUntil = 0;
               return { reply, provider: "openrouter", model };
             } catch (err) {
               const status = err.status || 0;
@@ -299,6 +298,9 @@ export async function ask({ messages, mode = "general" }) {
             }
           }
         }
+        // Keep consecutive messages fast when the free pool is exhausted.
+        // The background model refresh still runs while this circuit is open.
+        openRouterDownUntil = Date.now() + 60 * 1000;
         errors.push(`openrouter: ${tried.size || "all"} free models unavailable`);
         continue;
       }
