@@ -191,6 +191,13 @@ async function ollamaChatRequest(url, model, messages) {
       options: {
         num_ctx: p.numCtx,
         num_predict: p.numPredict,
+        num_batch: p.numBatch,
+        num_gpu: p.numGpu,
+        ...(p.numThread ? { num_thread: p.numThread } : {}),
+        f16_kv: true,
+        use_mmap: true,
+        low_vram: false,
+        mirostat: 0,
       },
     }),
     signal: AbortSignal.timeout(180_000),
