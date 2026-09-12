@@ -81,8 +81,8 @@ export const config = {
     openclaw: {
       enabled: bool(process.env.OPENCLAW_ENABLED, false),
       key: process.env.OPENCLAW_API_KEY || "",
-      model: process.env.OPENCLAW_MODEL || "openclaw-default",
-      base: (process.env.OPENCLAW_BASE_URL || "http://127.0.0.1:8080/v1").replace(/\/$/, ""),
+      model: process.env.OPENCLAW_MODEL || "openclaw/default",
+      base: (process.env.OPENCLAW_BASE_URL || "http://127.0.0.1:18789/v1").replace(/\/$/, ""),
     },
   },
 

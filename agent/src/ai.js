@@ -125,7 +125,6 @@ async function callOpenAIStyle(base, key, model, messages) {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({ model, messages, temperature: 0.7 }),
-    signal: AbortSignal.timeout(90_000),
   });
   if (!res.ok) throw new Error(`${base} ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const body = await res.json();

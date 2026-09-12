@@ -8,6 +8,7 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { platform } from "node:os";
 import { existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { log } from "./boot-ui.js";
 import { config } from "./config.js";
@@ -55,19 +56,14 @@ async function detectSpecs() {
   };
 }
 
-/**
- * OpenClaw ships a small set of routing profiles for its free tier. We pick
- * the strongest that will actually fit on the user's machine — an oversized
- * profile spills to CPU/RAM and destroys tok/s, so we err on the safe side.
- * Each profile maps to a real OpenClaw model ID; users can override in .env.
- */
+/** Pick a real Ollama model that fits locally. OpenClaw is the agent gateway,
+ * not a model provider, so its HTTP API uses these through ollama/<model>. */
 const TIERS = [
-  { min: 22, label: "workstation",  model: "openclaw-pro",       ctx: 8192, threads: 0 },
-  { min: 11, label: "high-end",     model: "openclaw-balanced",  ctx: 8192, threads: 0 },
-  { min: 7,  label: "mainstream",   model: "openclaw-default",   ctx: 4096, threads: 0 },
-  { min: 5,  label: "midrange",     model: "openclaw-fast",      ctx: 2048, threads: 0 },
-  { min: 3,  label: "entry GPU",    model: "openclaw-mini",      ctx: 2048, threads: 0 },
-  { min: 0,  label: "cpu-only",     model: "openclaw-mini",      ctx: 1536, threads: 0 },
+  { min: 22, label: "workstation", model: "qwen2.5:14b-instruct-q4_K_M", ctx: 8192, threads: 0 },
+  { min: 11, label: "high-end", model: "qwen2.5:7b-instruct-q4_K_M", ctx: 8192, threads: 0 },
+  { min: 5, label: "midrange", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 4096, threads: 0 },
+  { min: 3, label: "entry GPU", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 2048, threads: 0 },
+  { min: 0, label: "cpu-only", model: "qwen2.5:1.5b-instruct-q4_K_M", ctx: 2048, threads: 0 },
 ];
 
 function pickProfile(specs) {
@@ -92,33 +88,53 @@ async function patchEnv(updates) {
 }
 
 /**
- * Write an OpenClaw gateway config file with the tuned profile. OpenClaw
- * reads ~/.openclaw/config.json on boot; we write a minimal profile there
- * without clobbering fields the onboarding wizard may have set.
+ * Write the documented OpenClaw config without clobbering onboarding fields.
+ * The OpenAI-compatible HTTP endpoint is disabled unless explicitly enabled.
  */
 async function writeOpenclawConfig(profile) {
   const cfgDir = path.join(os.homedir(), ".openclaw");
-  const cfgPath = path.join(cfgDir, "config.json");
+  const cfgPath = path.join(cfgDir, "openclaw.json");
   await fs.mkdir(cfgDir, { recursive: true });
   let existing = {};
   try { existing = JSON.parse(await fs.readFile(cfgPath, "utf8")); } catch {}
+  const token = (process.env.OPENCLAW_API_KEY || existing.gateway?.auth?.token || randomBytes(32).toString("hex")).trim();
+  const modelId = (config.providers.ollama.model || profile.model).trim();
   const merged = {
     ...existing,
-    defaults: {
-      ...(existing.defaults || {}),
-      model: profile.model,
-      context_size: profile.ctx,
-      num_threads: profile.threads,
-      free_only: true,
+    gateway: {
+      ...(existing.gateway || {}),
+      mode: "local",
+      port: existing.gateway?.port || 18789,
+      bind: "loopback",
+      auth: { ...(existing.gateway?.auth || {}), mode: "token", token },
+      http: {
+        ...(existing.gateway?.http || {}),
+        endpoints: {
+          ...(existing.gateway?.http?.endpoints || {}),
+          chatCompletions: { enabled: true },
+        },
+      },
     },
-    tuning: {
-      ...(existing.tuning || {}),
-      profile: profile.label,
-      auto_tuned_by: "yoru",
-      auto_tuned_at: new Date().toISOString(),
+    models: {
+      ...(existing.models || {}),
+      providers: {
+        ...(existing.models?.providers || {}),
+        ollama: {
+          ...(existing.models?.providers?.ollama || {}),
+          baseUrl: config.providers.ollama.url,
+          apiKey: "ollama-local",
+          api: "ollama",
+          models: [{ id: modelId, name: modelId, input: ["text"], contextTokens: profile.ctx, params: { num_ctx: profile.ctx, keep_alive: "24h" } }],
+        },
+      },
+    },
+    agents: {
+      ...(existing.agents || {}),
+      defaults: { ...(existing.agents?.defaults || {}), model: { primary: `ollama/${modelId}` } },
     },
   };
   await fs.writeFile(cfgPath, JSON.stringify(merged, null, 2), "utf8");
+  return { token, port: merged.gateway.port };
 }
 
 function nodeOk() {
@@ -171,19 +187,13 @@ export async function autotuneOpenClaw({ force = false } = {}) {
     log.info("openclaw", `autotuning for ${specs.gpu ? `${specs.gpu.name} · ${specs.gpu.vramGb} GB VRAM` : "CPU-only"} → profile "${profile.label}" (${profile.model})`);
   }
 
-  // Only rewrite OPENCLAW_MODEL when it's the stock default or unset — never
-  // stomp a user's manual choice.
-  const currentModel = (process.env.OPENCLAW_MODEL || "").trim();
-  const shouldSetModel = !currentModel || currentModel === "openclaw-default";
-  const envUpdates = { OPENCLAW_AUTOSTART: "true" };
-  if (shouldSetModel) envUpdates.OPENCLAW_MODEL = profile.model;
-
-  try { await patchEnv(envUpdates); } catch (e) { log.warn("openclaw", `could not write .env: ${e.message}`); }
-  if (shouldSetModel) {
-    config.providers.openclaw.model = profile.model;
-    process.env.OPENCLAW_MODEL = profile.model;
-  }
-  try { await writeOpenclawConfig(profile); } catch (e) { log.warn("openclaw", `could not write ~/.openclaw/config.json: ${e.message}`); }
+  try {
+    const gateway = await writeOpenclawConfig(profile);
+    const base = `http://127.0.0.1:${gateway.port}/v1`;
+    await patchEnv({ OPENCLAW_AUTOSTART: "true", OPENCLAW_MODEL: "openclaw/default", OPENCLAW_API_KEY: gateway.token, OPENCLAW_BASE_URL: base });
+    Object.assign(config.providers.openclaw, { model: "openclaw/default", key: gateway.token, base });
+    Object.assign(process.env, { OPENCLAW_MODEL: "openclaw/default", OPENCLAW_API_KEY: gateway.token, OPENCLAW_BASE_URL: base });
+  } catch (e) { log.warn("openclaw", `could not write OpenClaw config: ${e.message}`); }
 
   // Auto-install if missing (silent, no interactive onboarding).
   if (!existsSync(LOCAL_BIN)) {
@@ -201,6 +211,6 @@ export async function autotuneOpenClaw({ force = false } = {}) {
     await fs.writeFile(AUTOTUNE_STAMP, JSON.stringify({ fingerprint, profile, specs, at: Date.now() }, null, 2));
   } catch {}
 
-  if (!alreadyTuned) log.ok("openclaw", `tuned → model=${profile.model} · ctx=${profile.ctx} · threads=${profile.threads || "auto"}`);
+  if (!alreadyTuned) log.ok("openclaw", `tuned → ollama/${profile.model} · ctx=${profile.ctx} · threads=${profile.threads || "auto"}`);
   return profile;
 }
