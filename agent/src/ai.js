@@ -18,7 +18,7 @@ const rank = (id) => {
 export async function refreshModels(force = false) {
   const p = config.providers.openrouter;
   if (!p.enabled || !p.key) return { free: [], coding: [] };
-  if (!force && Date.now() - lastModelFetch < 15 * 60 * 1000 && freeModels.length) {
+  if (!force && Date.now() - lastModelFetch < 60 * 1000 && freeModels.length) {
     return { free: freeModels, coding: codingModels };
   }
   try {
@@ -43,8 +43,36 @@ export async function refreshModels(force = false) {
   return { free: freeModels, coding: codingModels };
 }
 
-// Background rescanner: keeps the pool fresh so new free models appear automatically.
-setInterval(() => refreshModels(true).catch(() => {}), 10 * 60 * 1000).unref?.();
+// Background rescanner: every minute, so newly-listed free models appear fast
+// and rate-limited ones get replaced automatically.
+setInterval(() => refreshModels(true).catch(() => {}), 60 * 1000).unref?.();
+
+/**
+ * Cooldown map: model id → epoch ms when it becomes eligible again.
+ * Any model that returns 429 / 402 / 403 / 5xx is parked here so the rotator
+ * skips it entirely until the cooldown expires. This is what keeps the loop
+ * from hammering the same dead free models over and over.
+ */
+const cooldown = new Map();
+const COOLDOWN_MS = {
+  429: 10 * 60 * 1000, // rate limited — park for 10 min
+  402: 60 * 60 * 1000, // out of credits — park for 1 hr
+  403: 60 * 60 * 1000, // blocked — park for 1 hr
+  500: 5 * 60 * 1000,
+  502: 5 * 60 * 1000,
+  503: 5 * 60 * 1000,
+  504: 5 * 60 * 1000,
+};
+const parkModel = (id, status) => {
+  const ms = COOLDOWN_MS[status] ?? 5 * 60 * 1000;
+  cooldown.set(id, Date.now() + ms);
+};
+const isParked = (id) => {
+  const until = cooldown.get(id);
+  if (!until) return false;
+  if (Date.now() >= until) { cooldown.delete(id); return false; }
+  return true;
+};
 
 export const knownModels = () => ({ free: freeModels, coding: codingModels });
 
@@ -170,17 +198,40 @@ export async function ask({ messages, mode = "general" }) {
         await refreshModels();
         const pool = mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels;
         const tried = new Set();
+        let attemptedAny = false;
         for (const model of pool) {
           if (tried.has(model)) continue;
           tried.add(model);
+          if (isParked(model)) continue; // skip cooling-down models entirely
+          attemptedAny = true;
           try {
             const reply = await callOpenRouter(model, full);
             return { reply, provider: "openrouter", model };
           } catch (err) {
-            console.warn(`[ai] openrouter ${model} → ${err.status || "?"} - trying next`);
+            const status = err.status || 0;
+            if ([429, 402, 403, 500, 502, 503, 504].includes(status)) parkModel(model, status);
+            console.warn(`[ai] openrouter ${model} → ${status || "?"} - parked, trying next`);
           }
         }
-        errors.push("openrouter: all free models failed");
+        // Every free model is parked (all rate-limited). Force a fresh scan so
+        // newly-listed free models get picked up immediately, then retry once
+        // with any models that are still un-parked after the refresh.
+        if (!attemptedAny) {
+          await refreshModels(true);
+          const fresh = (mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels)
+            .filter((m) => !tried.has(m) && !isParked(m));
+          for (const model of fresh) {
+            try {
+              const reply = await callOpenRouter(model, full);
+              return { reply, provider: "openrouter", model };
+            } catch (err) {
+              const status = err.status || 0;
+              if ([429, 402, 403, 500, 502, 503, 504].includes(status)) parkModel(model, status);
+              console.warn(`[ai] openrouter ${model} → ${status || "?"} - parked, trying next`);
+            }
+          }
+        }
+        errors.push("openrouter: all free models parked or failed");
         continue;
       }
       if (name === "groq" && cfg.key) {
