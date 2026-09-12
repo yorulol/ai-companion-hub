@@ -5,6 +5,8 @@ import { getSettings } from "./db.js";
 let freeModels = [];
 let codingModels = [];
 let lastModelFetch = 0;
+let openRouterCursor = 0;
+let openRouterDownUntil = 0;
 
 const CODE_HINTS = ["coder", "code", "devstral", "codestral", "starcoder", "qwen2.5-c", "deepseek"];
 const PRIORITY = ["deepseek", "qwen", "llama-3.3", "llama-4", "mistral", "gemma", "glm", "kimi", "phi"];
@@ -63,11 +65,6 @@ const COOLDOWN_MS = {
   503: 3 * 60 * 1000,
   504: 3 * 60 * 1000,
 };
-/** Evict the N models whose cooldown ends soonest so we can retry. */
-const evictSoonestCooldowns = (n = 5) => {
-  const entries = [...cooldown.entries()].sort((a, b) => a[1] - b[1]);
-  for (const [id] of entries.slice(0, n)) cooldown.delete(id);
-};
 const parkModel = (id, status) => {
   const ms = COOLDOWN_MS[status] ?? 5 * 60 * 1000;
   cooldown.set(id, Date.now() + ms);
@@ -110,7 +107,6 @@ async function callOpenRouter(model, messages) {
       "X-Title": p.appName,
     },
     body: JSON.stringify({ model, messages, temperature: 0.7 }),
-    signal: AbortSignal.timeout(90_000),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -258,17 +254,24 @@ export async function ask({ messages, mode = "general" }) {
     try {
       if (name === "openrouter") {
         if (!cfg.key) continue;
+        if (openRouterDownUntil > Date.now()) continue;
         await refreshModels();
-        const pool = mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels;
+        const sourcePool = mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels;
+        const uniquePool = [...new Set(sourcePool)];
+        const offset = uniquePool.length ? openRouterCursor % uniquePool.length : 0;
+        const pool = [...uniquePool.slice(offset), ...uniquePool.slice(0, offset)];
+        openRouterCursor = uniquePool.length ? (offset + 1) % uniquePool.length : 0;
         const tried = new Set();
         let attemptedAny = false;
         for (const model of pool) {
+          if (tried.size >= cfg.maxAttempts) break;
           if (tried.has(model)) continue;
-          tried.add(model);
           if (isParked(model)) continue; // skip cooling-down models entirely
+          tried.add(model);
           attemptedAny = true;
           try {
             const reply = await callOpenRouter(model, full);
+            openRouterDownUntil = 0;
             return { reply, provider: "openrouter", model };
           } catch (err) {
             const status = err.status || 0;
@@ -276,23 +279,17 @@ export async function ask({ messages, mode = "general" }) {
             console.warn(`[ai] openrouter ${model} → ${status || "?"} - parked, trying next`);
           }
         }
-        // Every free model is parked (all rate-limited). Force a fresh scan so
-        // newly-listed free models get picked up, and if still nothing is
-        // available evict the soonest-expiring cooldowns and retry ANYWAY —
-        // better to hit a maybe-cool model than tell the user "no providers".
+        // If every model is parked, refresh once for newly listed models. Never
+        // hammer cooling models: fall through to Ollama immediately instead.
         if (!attemptedAny) {
           await refreshModels(true);
           let fresh = (mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels)
-            .filter((m) => !tried.has(m) && !isParked(m));
-          if (!fresh.length) {
-            evictSoonestCooldowns(8);
-            fresh = (mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels)
-              .filter((m) => !tried.has(m));
-            console.warn(`[ai] openrouter all models parked — evicted cooldowns and retrying ${fresh.length} models`);
-          }
+            .filter((m) => !tried.has(m) && !isParked(m))
+            .slice(0, cfg.maxAttempts);
           for (const model of fresh) {
             try {
               const reply = await callOpenRouter(model, full);
+              openRouterDownUntil = 0;
               return { reply, provider: "openrouter", model };
             } catch (err) {
               const status = err.status || 0;
@@ -301,7 +298,10 @@ export async function ask({ messages, mode = "general" }) {
             }
           }
         }
-        errors.push("openrouter: all free models parked or failed");
+        // Keep consecutive messages fast when the free pool is exhausted.
+        // The background model refresh still runs while this circuit is open.
+        openRouterDownUntil = Date.now() + 60 * 1000;
+        errors.push(`openrouter: ${tried.size || "all"} free models unavailable`);
         continue;
       }
       if (name === "groq" && cfg.key) {
