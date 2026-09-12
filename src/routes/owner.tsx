@@ -140,7 +140,8 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
     { label: "Discord", tabs: [
       { id: "discord", label: "Bot & responder" }, { id: "servers", label: "Servers & roles" },
       { id: "security", label: "Security & verification" }, { id: "automation", label: "Automation" },
-      { id: "alt", label: "Alt account" }, { id: "commands", label: "Commands" },
+      { id: "alt", label: "Alt account" }, { id: "plugins", label: "Alt plugins" },
+      { id: "commands", label: "Commands" },
     ] },
     { label: "AI", tabs: [{ id: "models", label: "Providers & models" }] },
     { label: "Data", tabs: [{ id: "whitelist", label: "Lookup whitelist" }] },
