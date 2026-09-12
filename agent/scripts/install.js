@@ -437,6 +437,7 @@ async function setupOpenclaw(specs) {
       OPENCLAW_AUTOSTART: "true",
       OPENCLAW_MODEL: "openclaw/default",
       OPENCLAW_API_KEY: gateway.token,
+      OPENCLAW_GATEWAY_TOKEN: gateway.token,
       OPENCLAW_BASE_URL: `http://127.0.0.1:${gateway.port}/v1`,
     });
     ok("openclaw gateway and authentication settings written");
