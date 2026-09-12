@@ -9,6 +9,8 @@ import {
   type GuildConfig,
   type CommandInfo,
   type HealthInfo,
+  type WhitelistItem,
+  type AutomodConfig,
 } from "@/lib/agent-client";
 
 export const Route = createFileRoute("/owner")({
@@ -107,7 +109,8 @@ type Settings = {
 };
 
 function OwnerDashboard({ onLock }: { onLock: () => void }) {
-  const [tab, setTab] = useState<"overview" | "discord" | "servers" | "automation" | "alt" | "whitelist" | "commands" | "models" | "computer">("overview");
+  type OwnerTab = "overview" | "discord" | "servers" | "security" | "automation" | "alt" | "whitelist" | "commands" | "models" | "computer";
+  const [tab, setTab] = useState<OwnerTab>("overview");
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [guilds, setGuilds] = useState<GuildConfig[]>([]);
@@ -132,7 +135,16 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
     setTimeout(() => setNote(null), 1800);
   }
 
-  const tabs = ["overview", "discord", "servers", "automation", "alt", "whitelist", "commands", "models", "computer"] as const;
+  const groups: { label: string; tabs: { id: OwnerTab; label: string }[] }[] = [
+    { label: "Discord", tabs: [
+      { id: "discord", label: "Bot & responder" }, { id: "servers", label: "Servers & roles" },
+      { id: "security", label: "Security & verification" }, { id: "automation", label: "Automation" },
+      { id: "alt", label: "Alt account" }, { id: "commands", label: "Commands" },
+    ] },
+    { label: "AI", tabs: [{ id: "models", label: "Providers & models" }] },
+    { label: "Data", tabs: [{ id: "whitelist", label: "Lookup whitelist" }] },
+    { label: "System", tabs: [{ id: "computer", label: "Computer & lookups" }] },
+  ];
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6">
@@ -154,17 +166,20 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
         </button>
       </header>
 
-      <nav className="mb-4 flex flex-wrap gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize ${
-              tab === t ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
-            }`}
-          >
-            {t}
-          </button>
+      <nav className="relative z-30 mb-4 flex flex-wrap gap-2">
+        <button onClick={() => setTab("overview")} className={`rounded-full px-4 py-1.5 text-sm font-semibold ${tab === "overview" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>Overview</button>
+        {groups.map((group) => (
+          <details key={group.label} className="group relative">
+            <summary className="cursor-pointer list-none rounded-full bg-secondary px-4 py-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground">{group.label}</summary>
+            <div className="panel-strong absolute left-0 top-full mt-2 grid min-w-56 gap-1 p-2">
+              {group.tabs.map((item) => (
+                <button key={item.id} onClick={(event) => { setTab(item.id); event.currentTarget.closest("details")?.removeAttribute("open"); }}
+                  className={`rounded-lg px-3 py-2 text-left text-sm ${tab === item.id ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </details>
         ))}
       </nav>
 
@@ -262,6 +277,8 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
         </div>
       )}
 
+      {tab === "security" && <SecurityTab guilds={guilds} />}
+
       {tab === "commands" && <CommandList commands={commands} />}
 
       {tab === "models" && models && (
@@ -291,7 +308,7 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
       {tab === "automation" && (
         <Card title="Server automation">
           <p className="text-sm text-muted-foreground">
-            Custom commands, auto-responder, welcome/goodbye messages, and reaction roles are available in the local owner panel.
+            Custom commands, auto-responder, welcome/goodbye messages, and reaction roles are managed from the standalone owner panel.
           </p>
           <a href="http://localhost:8789" target="_blank" rel="noreferrer" className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
             Open local owner panel
@@ -300,25 +317,11 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
       )}
 
       {tab === "alt" && (
-        <Card title="Alt account servers">
-          <p className="text-sm text-muted-foreground">
-            View the Discord servers your alt account is in from the local owner panel.
-          </p>
-          <a href="http://localhost:8789" target="_blank" rel="noreferrer" className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
-            Open local owner panel
-          </a>
-        </Card>
+        <AltAccountTab />
       )}
 
       {tab === "whitelist" && (
-        <Card title="Lookup whitelist">
-          <p className="text-sm text-muted-foreground">
-            Manage IDs and usenames that should be excluded from lookup results in the local owner panel.
-          </p>
-          <a href="http://localhost:8789" target="_blank" rel="noreferrer" className="inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
-            Open local owner panel
-          </a>
-        </Card>
+        <WhitelistTab />
       )}
 
       {tab === "computer" && <ComputerTab />}
