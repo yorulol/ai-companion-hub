@@ -50,6 +50,16 @@ export type HealthInfo = {
   computerEnabled: boolean;
 };
 
+export type SelfbotPlugin = {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  defaultConfig: Record<string, unknown>;
+};
+
+
 export type GuildConfig = {
   id: string;
   name: string;
