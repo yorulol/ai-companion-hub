@@ -9,7 +9,7 @@ import { log } from "./boot-ui.js";
 //   - llama3.2:3b-instruct-q4_K_M → ~2 GB, fast all-round chat
 //   - qwen2.5-coder:7b-instruct-q4_K_M → ~4.4 GB, strongest small coder
 const RECOMMENDED = {
-  general: "llama3.2:1b-instruct-q4_K_M",
+  general: "qwen2.5:3b-instruct-q4_K_M",
   coding: "qwen2.5-coder:7b-instruct-q4_K_M",
 };
 
