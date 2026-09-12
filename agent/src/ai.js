@@ -259,8 +259,20 @@ export async function ask({ messages, mode = "general" }) {
         return { reply, provider: "anthropic", model: cfg.model };
       }
       if (name === "openclaw") {
-        const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);
-        return { reply, provider: "openclaw", model: cfg.model };
+        if (openclawDownUntil > Date.now()) continue; // silently skip while unreachable
+        try {
+          const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);
+          openclawDownUntil = 0;
+          return { reply, provider: "openclaw", model: cfg.model };
+        } catch (err) {
+          const msg = String(err.message || "");
+          if (msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")) {
+            openclawDownUntil = Date.now() + 5 * 60 * 1000;
+            console.warn(`[ai] openclaw unreachable at ${cfg.base} — start your local OpenClaw server (https://github.com/openclaw/openclaw). Skipping for 5 min.`);
+            continue;
+          }
+          throw err;
+        }
       }
       if (name === "ollama") {
         return await callOllama(full, mode);
