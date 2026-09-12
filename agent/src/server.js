@@ -165,6 +165,7 @@ const ROUTES = {
         openaiEnabled: config.providers.openai.enabled,
         anthropicEnabled: config.providers.anthropic.enabled,
         groqEnabled: config.providers.groq.enabled,
+        openclawEnabled: config.providers.openclaw.enabled,
       },
       computer: {
         enabled: config.computer.enabled,
@@ -192,6 +193,7 @@ const ROUTES = {
         await setProviderEnabled(name, provider[key]);
       }
     }
+    if (provider.preferred) await setPreferredProvider(provider.preferred);
     delete body.provider;
     return setSettings(body);
   },

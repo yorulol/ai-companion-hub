@@ -8,7 +8,7 @@ frontend build, no Lovable, no extra terminals.
 
 ```bash
 cd agent
-cp .env.example .env       # fill in what you use
+# fill in the included .env file, then:
 npm install
 npm run yoru
 ```
@@ -39,7 +39,6 @@ then:
 
 ```bash
 cd agent
-cp .env.example .env
 npm install
 # keep it alive across reboots
 npx pm2 start src/index.js --name yoru

@@ -254,7 +254,7 @@ async function loadWhitelist() {
     list.innerHTML = r.items.length
       ? r.items.map((i) => `
         <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
-          <div><strong>${esc(i.value)}</strong>${i.note ? ` <span class="muted">· ${esc(i.note)}</span>` : ""}</div>
+          <div><strong>${esc(i.value)}</strong>${i.note ? ` <span class="muted">· ${esc(i.note)}</span>` : ""}${i.aliases?.length ? `<div class="muted">Also protects: ${i.aliases.map(esc).join(", ")}</div>` : ""}</div>
           <button class="sm danger" data-wl-del="${esc(i.value)}">Remove</button>
         </div>`).join("")
       : `<div class="muted">No whitelisted values yet.</div>`;
