@@ -125,7 +125,6 @@ async function callOpenAIStyle(base, key, model, messages) {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({ model, messages, temperature: 0.7 }),
-    signal: AbortSignal.timeout(90_000),
   });
   if (!res.ok) throw new Error(`${base} ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const body = await res.json();
@@ -148,7 +147,6 @@ async function callAnthropic(model, messages) {
       "content-type": "application/json",
     },
     body: JSON.stringify({ model, system: sys, messages: rest, max_tokens: 2048 }),
-    signal: AbortSignal.timeout(90_000),
   });
   if (!res.ok) throw new Error(`Anthropic ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const body = await res.json();
@@ -205,7 +203,6 @@ async function ollamaChatRequest(url, model, messages) {
         stop: ["<tool_call>", "</tool_call>", "\nUser:", "\nSystem:"],
       },
     }),
-    signal: AbortSignal.timeout(180_000),
   });
   return res;
 }

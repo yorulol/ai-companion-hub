@@ -14,9 +14,7 @@ const LOCAL_BIN = path.join(AGENT_DIR, "vendor", "openclaw", "node_modules", ".b
 const ENV_PATH = path.join(AGENT_DIR, ".env");
 
 let child = null;
-/** Bases that answered but turned out not to be the gateway. */
-const badBases = new Set();
-
+let restartedForConfig = false;
 function has(cmd) {
   try {
     execSync(platform() === "win32" ? `where ${cmd}` : `command -v ${cmd}`, { stdio: "ignore" });
@@ -31,33 +29,28 @@ function resolveBin() {
   return null;
 }
 
-async function fetchTimeout(url, ms = 2500) {
+async function fetchTimeout(url, ms = 4000, options = {}) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), ms);
-  try { return await fetch(url, { signal: ac.signal }); }
+  try { return await fetch(url, { ...options, signal: ac.signal }); }
   catch { return null; }
   finally { clearTimeout(t); }
 }
 
 /** Is an OpenAI-compatible gateway answering at this base (…/v1)? */
 async function probe(base) {
-  if (badBases.has(base)) return false;
-  // Must expose OpenAI-shaped /v1/models AND /v1/chat/completions — a bare
-  // /health or a random JSON server is not enough (we've adopted wrong ports
-  // before, e.g. an unrelated service on 18789 that 404s on completions).
-  const m = await fetchTimeout(base + "/models");
+  const headers = config.providers.openclaw.key
+    ? { Authorization: `Bearer ${config.providers.openclaw.key}` }
+    : {};
+  const m = await fetchTimeout(base + "/models", 4000, { headers });
   if (!m) return false;
-  if (m.status === 401) return true; // auth-gated but real
   if (!m.ok) return false;
   const ct = m.headers.get("content-type") || "";
   if (!ct.includes("json")) return false;
   const body = await m.json().catch(() => null);
   const looksOpenAI = body && (Array.isArray(body.data) || Array.isArray(body.models));
   if (!looksOpenAI) return false;
-  // Confirm the completions route exists (OPTIONS/HEAD → 200/204/401/405 all fine; 404 = wrong service).
-  const cc = await fetchTimeout(base + "/chat/completions");
-  if (!cc) return true; // network hiccup, trust /models
-  return cc.status !== 404;
+  return Boolean(looksOpenAI);
 }
 
 async function pingBase() {
@@ -100,7 +93,7 @@ async function portsFromCli(bin) {
 
 async function portsFromConfigFile() {
   try {
-    const raw = await fsp.readFile(path.join(homedir(), ".openclaw", "config.json"), "utf8");
+    const raw = await fsp.readFile(path.join(homedir(), ".openclaw", "openclaw.json"), "utf8");
     const ports = [];
     for (const m of raw.matchAll(/"(?:port|gateway_port|listen_port)"\s*:\s*(\d{2,5})/g)) ports.push(Number(m[1]));
     for (const m of raw.matchAll(/https?:\/\/[^"]*?:(\d{2,5})/g)) ports.push(Number(m[1]));
@@ -126,19 +119,6 @@ async function discoverBase(bin) {
     }
   }
   return false;
-}
-
-/** Kill a stale/hung daemon so the next start actually binds. */
-async function hardRestart(bin) {
-  if (!bin) return;
-  log.info("openclaw", "gateway is registered but not answering — restarting it…");
-  for (const args of [["gateway", "stop"], ["gateway", "restart"]]) {
-    const ok = await run(bin, args, { timeout: 15000, windowsHide: true }).then(() => true).catch(() => false);
-    if (args[1] === "restart" && ok) return;
-  }
-  try {
-    child = spawn(bin, ["gateway", "start"], { stdio: "ignore", shell: platform() === "win32", detached: false });
-  } catch {}
 }
 
 export async function startOpenClaw({ force = false, autoInstall = false } = {}) {
@@ -174,9 +154,6 @@ export async function startOpenClaw({ force = false, autoInstall = false } = {})
   // A daemon may already be up on a port we don't know about.
   if (await discoverBase(bin)) return true;
 
-  let sawAlreadyRunning = false;
-  const noteLine = (line) => { if (/already running/i.test(line)) sawAlreadyRunning = true; };
-
   if (child && !child.killed && child.exitCode === null) {
     // Already spawned; just wait for readiness below.
   } else {
@@ -190,13 +167,11 @@ export async function startOpenClaw({ force = false, autoInstall = false } = {})
       child.stdout.on("data", (b) => {
         const line = b.toString().trim();
         if (!line) return;
-        noteLine(line);
         log.info("openclaw", line.split("\n")[0].slice(0, 160));
       });
       child.stderr.on("data", (b) => {
         const line = b.toString().trim();
         if (!line) return;
-        noteLine(line);
         log.warn("openclaw", line.split("\n")[0].slice(0, 160));
       });
       child.on("exit", (code) => {
@@ -209,19 +184,19 @@ export async function startOpenClaw({ force = false, autoInstall = false } = {})
     }
   }
 
-  // Poll for readiness, with one hard restart if a stale daemon owns the pidfile.
-  let restarted = false;
-  for (let i = 0; i < 60; i++) {
+  // OpenClaw owns its service lifecycle. Wait for its endpoint instead of
+  // repeatedly fighting the registered daemon with stop/restart calls.
+  for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     if (await pingBase()) { log.ok("openclaw", "gateway ready"); return true; }
     if (i === 8 && (await discoverBase(bin))) return true;
-    if (!restarted && i >= 12 && (sawAlreadyRunning || child === null)) {
-      restarted = true;
-      await hardRestart(bin);
+    if (i === 10 && !restartedForConfig) {
+      restartedForConfig = true;
+      log.info("openclaw", "applying the corrected gateway configuration…");
+      await run(bin, ["gateway", "restart"], { timeout: 30000, windowsHide: true }).catch(() => null);
     }
-    if (i === 40 && (await discoverBase(bin))) return true;
   }
-  log.warn("openclaw", "gateway did not respond in time — will keep retrying in background");
+  log.warn("openclaw", "gateway service is running but the chat endpoint is not ready; run `npm run openclaw:status`");
   return false;
 }
 
@@ -234,7 +209,7 @@ let ensuring = null;
 
 /** Forget the current base URL so the next ensure() hunts for the real one. */
 export function invalidateOpenClawBase() {
-  badBases.add(config.providers.openclaw.base);
+  // Compatibility hook: the configured loopback gateway remains authoritative.
 }
 
 export async function ensureOpenClaw() {
