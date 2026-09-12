@@ -58,7 +58,97 @@ async function init() {
   document.getElementById("cmdSearch").oninput = renderCommands;
   document.getElementById("wlAdd").onclick = addWhitelist;
   document.getElementById("wlValue").onkeydown = (e) => { if (e.key === "Enter") addWhitelist(); };
+  document.getElementById("plugSearch").oninput = renderPlugins;
+  document.getElementById("plugReload").onclick = loadPlugins;
 }
+
+/* ---------- alt account plugins ---------- */
+let PLUGINS = [];
+async function loadPlugins() {
+  const wrap = document.getElementById("plugList");
+  if (!wrap) return;
+  try { PLUGINS = (await api("/api/owner/selfbot-plugins")).plugins; renderPlugins(); }
+  catch (err) { wrap.innerHTML = `<div class="muted">${esc(err.message)}</div>`; }
+}
+
+function cfgField(pid, key, value) {
+  const id = `cfg-${pid}-${key}`;
+  if (typeof value === "boolean") {
+    return `<label style="display:flex;gap:8px;align-items:center;margin:4px 0">
+      <input type="checkbox" id="${id}" data-pid="${pid}" data-key="${key}" data-type="bool" ${value ? "checked" : ""}/>
+      <span class="muted">${esc(key)}</span></label>`;
+  }
+  if (Array.isArray(value)) {
+    const isObjArr = value.length && typeof value[0] === "object";
+    const text = isObjArr ? JSON.stringify(value, null, 2) : value.join("\n");
+    return `<div class="field" style="margin:6px 0">
+      <div class="muted" style="font-size:12px;margin-bottom:4px">${esc(key)} ${isObjArr ? "(JSON array)" : "(one per line)"}</div>
+      <textarea id="${id}" data-pid="${pid}" data-key="${key}" data-type="${isObjArr ? "json" : "lines"}" rows="${Math.min(8, Math.max(2, text.split("\n").length))}" style="width:100%">${esc(text)}</textarea></div>`;
+  }
+  const type = typeof value === "number" ? "number" : "text";
+  return `<div class="field" style="margin:6px 0">
+    <div class="muted" style="font-size:12px;margin-bottom:4px">${esc(key)}</div>
+    <input id="${id}" data-pid="${pid}" data-key="${key}" data-type="${type}" type="${type}" value="${esc(String(value ?? ""))}" style="width:100%"/></div>`;
+}
+
+function renderPlugins() {
+  const wrap = document.getElementById("plugList");
+  const q = (document.getElementById("plugSearch").value || "").toLowerCase();
+  const items = PLUGINS.filter((p) => !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
+  if (!items.length) { wrap.innerHTML = `<div class="muted">No plugins match.</div>`; return; }
+
+  wrap.innerHTML = items.map((p) => {
+    const keys = Object.keys(p.config || {});
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div style="flex:1">
+          <strong>${esc(p.name)}</strong>
+          <span class="tag" style="margin-left:6px">${esc(p.id)}</span>
+          <div class="muted" style="margin-top:4px">${esc(p.description)}</div>
+        </div>
+        <label style="display:flex;gap:8px;align-items:center;white-space:nowrap">
+          <input type="checkbox" data-toggle="${esc(p.id)}" ${p.enabled ? "checked" : ""}/>
+          <span class="muted">${p.enabled ? "on" : "off"}</span>
+        </label>
+      </div>
+      ${keys.length ? `<details style="margin-top:10px"><summary class="muted" style="cursor:pointer">Settings</summary>
+        <div style="margin-top:8px">
+          ${keys.map((k) => cfgField(p.id, k, p.config[k])).join("")}
+          <button class="sm primary" data-save="${esc(p.id)}" style="margin-top:8px">Save settings</button>
+        </div></details>` : ""}
+    </div>`;
+  }).join("");
+
+  wrap.querySelectorAll("[data-toggle]").forEach((el) => {
+    el.onchange = async () => {
+      try {
+        PLUGINS = (await api("/api/owner/selfbot-plugins", { method: "POST", body: { id: el.dataset.toggle, enabled: el.checked } })).plugins;
+        toast(`${el.dataset.toggle} ${el.checked ? "enabled" : "disabled"}`);
+        renderPlugins();
+      } catch (err) { toast(err.message); el.checked = !el.checked; }
+    };
+  });
+
+  wrap.querySelectorAll("[data-save]").forEach((btn) => {
+    btn.onclick = async () => {
+      const pid = btn.dataset.save;
+      const config = {};
+      wrap.querySelectorAll(`[data-pid="${pid}"]`).forEach((f) => {
+        const t = f.dataset.type;
+        if (t === "bool") config[f.dataset.key] = f.checked;
+        else if (t === "number") config[f.dataset.key] = Number(f.value);
+        else if (t === "lines") config[f.dataset.key] = f.value.split("\n").map((s) => s.trim()).filter(Boolean);
+        else if (t === "json") { try { config[f.dataset.key] = JSON.parse(f.value); } catch { toast(`${f.dataset.key}: invalid JSON`); throw new Error("bad json"); } }
+        else config[f.dataset.key] = f.value;
+      });
+      try {
+        PLUGINS = (await api("/api/owner/selfbot-plugins", { method: "POST", body: { id: pid, config } })).plugins;
+        toast("Saved.");
+      } catch (err) { if (err.message !== "bad json") toast(err.message); }
+    };
+  });
+}
+
 
 /* ---------- health ---------- */
 async function refreshHealth() {
