@@ -41,15 +41,6 @@ async function pullModel(name) {
   log.ok("ollama", `${name} ready`);
 }
 
-async function gpuInfo() {
-  try {
-    const r = await fetch(`${config.providers.ollama.url}/api/ps`, { signal: AbortSignal.timeout(2500) });
-    if (!r.ok) return null;
-    const b = await r.json();
-    return (b.models || []).map((m) => `${m.name} (${m.size_vram ? "GPU" : "CPU"})`);
-  } catch { return null; }
-}
-
 export async function startOllama() {
   const p = config.providers.ollama;
   if (!p.enabled) return;
