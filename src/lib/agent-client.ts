@@ -22,6 +22,7 @@ async function request<T>(path: string, init?: RequestInit & { owner?: boolean }
   if (init?.owner || getOwnerId()) headers["x-owner-id"] = getOwnerId();
   const res = await fetch(`${getBaseUrl()}${path}`, {
     ...init,
+    cache: "no-store",
     headers: { ...headers, ...(init?.headers as object) },
   });
   const text = await res.text();
