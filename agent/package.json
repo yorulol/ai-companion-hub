@@ -10,7 +10,10 @@
   "scripts": {
     "yoru": "node src/index.js",
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "openclaw:setup": "node scripts/openclaw-setup.js",
+    "openclaw:start": "openclaw gateway start",
+    "openclaw:status": "openclaw gateway status"
   },
   "engines": { "node": ">=20" },
   "dependencies": {
