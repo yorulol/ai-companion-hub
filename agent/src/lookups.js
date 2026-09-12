@@ -66,7 +66,7 @@ async function readPdf(file) {
 export async function lookup(query, { limitPerFile = 25 } = {}) {
   if (!query || query.length < 2) throw new Error("Query must be at least 2 characters.");
   if (isLookupWhitelisted(query)) {
-    return { query, files: 0, matches: [], protected: true, message: "That identity is protected by the lookup whitelist." };
+    return { query, files: (await listLookupFiles()).length, matches: [], protected: true, message: "That identity is protected by the lookup whitelist." };
   }
   const files = await listLookupFiles();
   const needle = query.toLowerCase();
@@ -152,13 +152,21 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
   };
 }
 
-function collectLinkedIds(value, hit) {
-  const ids = new Set();
+function collectLinkedIdentities(value, hit) {
+  const identities = new Set();
   const source = JSON.stringify(hit);
   for (const match of source.matchAll(/(?<!\d)\d{15,22}(?!\d)/g)) {
-    if (match[0] !== String(value).trim()) ids.add(match[0]);
+    if (match[0] !== String(value).trim()) identities.add(match[0]);
   }
-  return [...ids];
+  if (hit && typeof hit === "object") {
+    for (const [key, raw] of Object.entries(hit)) {
+      const candidate = String(raw ?? "").trim().toLowerCase();
+      if (/^(?:user(?:name)?|discord_?user(?:name)?|handle)$/i.test(key) && /^[\w.-]{2,64}$/.test(candidate) && candidate !== value) {
+        identities.add(candidate);
+      }
+    }
+  }
+  return [...identities];
 }
 
 /** Add an identity and any Discord-like IDs found in the same local records. */
@@ -179,12 +187,21 @@ export async function addWhitelistIdentity(value, note = "") {
           const cols = parseCsvLine(lines[i]);
           const row = {};
           header.forEach((h, k) => { row[h || `col_${k}`] = cols[k] ?? ""; });
-          collectLinkedIds(normalized, row).forEach((id) => aliases.add(id));
+          collectLinkedIdentities(normalized, row).forEach((id) => aliases.add(id));
         }
+      } else if (ext === ".json") {
+        const parsed = JSON.parse(await fs.readFile(full, "utf8"));
+        const visit = (item) => {
+          if (item && typeof item === "object") {
+            if (JSON.stringify(item).toLowerCase().includes(needle)) collectLinkedIdentities(normalized, item).forEach((identity) => aliases.add(identity));
+            Object.values(item).forEach(visit);
+          }
+        };
+        visit(parsed);
       } else {
         const text = ext === ".pdf" ? await readPdf(full) : await fs.readFile(full, "utf8");
         for (const line of text.split(/\r?\n/)) if (line.toLowerCase().includes(needle)) {
-          collectLinkedIds(normalized, line).forEach((id) => aliases.add(id));
+          collectLinkedIdentities(normalized, line).forEach((id) => aliases.add(id));
         }
       }
     } catch {}

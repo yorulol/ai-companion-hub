@@ -253,7 +253,7 @@ const ROUTES = {
     const b = await readBody(req);
     return await addWhitelistIdentity(b.value, b.note);
   },
-  "DELETE /api/owner/lookup-whitelist/:value": async (req, value) => { requireOwner(req); removeLookupWhitelist(value); return { ok: true }; },
+  "DELETE /api/owner/lookup-whitelist/:value": async (req, value) => { requireOwner(req); removeLookupWhitelist(decodeURIComponent(value)); return { ok: true }; },
 
   // ---- Code check / auditor ----
   "POST /api/owner/code-files": async (req) => {
