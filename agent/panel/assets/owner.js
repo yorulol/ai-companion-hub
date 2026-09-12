@@ -33,6 +33,7 @@ async function init() {
   loadLookups();
   loadWhitelist();
   loadAltGuilds();
+  loadPlugins();
   loadAutomation();
   initAutomation();
   initSecurity();
