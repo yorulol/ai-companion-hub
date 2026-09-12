@@ -7,7 +7,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { isLookupWhitelisted, findWhitelistHit } from "./db.js";
+import { isLookupWhitelisted, findWhitelistHit, addLookupWhitelist } from "./db.js";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -66,9 +66,7 @@ async function readPdf(file) {
 export async function lookup(query, { limitPerFile = 25 } = {}) {
   if (!query || query.length < 2) throw new Error("Query must be at least 2 characters.");
   if (isLookupWhitelisted(query)) {
-    const err = new Error(`"${query}" is whitelisted and cannot be looked up.`);
-    err.whitelisted = true;
-    throw err;
+    return { query, files: (await listLookupFiles()).length, matches: [], protected: true, message: "That identity is protected by the lookup whitelist." };
   }
   const files = await listLookupFiles();
   const needle = query.toLowerCase();
@@ -143,6 +141,70 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
   }
 
   // Sanitize: never expose the source filename outside owner-side debug logs.
-  const sanitized = results.map(({ sourceInternal, ...rest }) => rest);
-  return { query, files: files.length, matches: sanitized };
+  const protectedHits = results.reduce((count, result) => count + (result.whitelistedRemoved || 0), 0);
+  const sanitized = results.map(({ sourceInternal, ...rest }) => rest).filter((result) => result.hits?.length || result.error);
+  return {
+    query,
+    files: files.length,
+    matches: sanitized,
+    protected: protectedHits > 0 && sanitized.every((result) => !result.hits?.length),
+    message: protectedHits > 0 ? "One or more matching identities are protected by the lookup whitelist." : undefined,
+  };
+}
+
+function collectLinkedIdentities(value, hit) {
+  const identities = new Set();
+  const source = JSON.stringify(hit);
+  for (const match of source.matchAll(/(?<!\d)\d{15,22}(?!\d)/g)) {
+    if (match[0] !== String(value).trim()) identities.add(match[0]);
+  }
+  if (hit && typeof hit === "object") {
+    for (const [key, raw] of Object.entries(hit)) {
+      const candidate = String(raw ?? "").trim().toLowerCase();
+      if (/^(?:user(?:name)?|discord_?user(?:name)?|handle)$/i.test(key) && /^[\w.-]{2,64}$/.test(candidate) && candidate !== value) {
+        identities.add(candidate);
+      }
+    }
+  }
+  return [...identities];
+}
+
+/** Add an identity and any Discord-like IDs found in the same local records. */
+export async function addWhitelistIdentity(value, note = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) throw new Error("Enter a Discord username or ID.");
+  const aliases = new Set();
+  const files = await listLookupFiles();
+  const needle = normalized.toLowerCase();
+  for (const name of files) {
+    const full = path.join(LOOKUPS_DIR, name);
+    const ext = path.extname(name).toLowerCase();
+    try {
+      if (ext === ".csv" || ext === ".tsv") {
+        const lines = (await fs.readFile(full, "utf8")).split(/\r?\n/).filter(Boolean);
+        const header = lines.length ? parseCsvLine(lines[0]) : [];
+        for (let i = 1; i < lines.length; i++) if (lines[i].toLowerCase().includes(needle)) {
+          const cols = parseCsvLine(lines[i]);
+          const row = {};
+          header.forEach((h, k) => { row[h || `col_${k}`] = cols[k] ?? ""; });
+          collectLinkedIdentities(normalized, row).forEach((id) => aliases.add(id));
+        }
+      } else if (ext === ".json") {
+        const parsed = JSON.parse(await fs.readFile(full, "utf8"));
+        const visit = (item) => {
+          if (item && typeof item === "object") {
+            if (JSON.stringify(item).toLowerCase().includes(needle)) collectLinkedIdentities(normalized, item).forEach((identity) => aliases.add(identity));
+            Object.values(item).forEach(visit);
+          }
+        };
+        visit(parsed);
+      } else {
+        const text = ext === ".pdf" ? await readPdf(full) : await fs.readFile(full, "utf8");
+        for (const line of text.split(/\r?\n/)) if (line.toLowerCase().includes(needle)) {
+          collectLinkedIdentities(normalized, line).forEach((id) => aliases.add(id));
+        }
+      }
+    } catch {}
+  }
+  return addLookupWhitelist(normalized, note, [...aliases]);
 }

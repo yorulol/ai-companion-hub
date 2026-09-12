@@ -16,6 +16,10 @@ tabs.addEventListener("click", (e) => {
   if (!b) return;
   document.querySelectorAll("#tabs button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
   document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("active", p.dataset.pane === b.dataset.tab));
+  document.querySelectorAll("#tabs details").forEach((group) => { group.open = false; });
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#tabs")) document.querySelectorAll("#tabs details").forEach((group) => { group.open = false; });
 });
 
 requireOwner({ onReady: init });
@@ -30,6 +34,8 @@ async function init() {
   loadWhitelist();
   loadAltGuilds();
   loadAutomation();
+  initAutomation();
+  initSecurity();
   startActivity();
 
 
@@ -49,6 +55,8 @@ async function init() {
   document.getElementById("fsListBtn").onclick = listFs;
   document.getElementById("lookupBtn").onclick = runLookup;
   document.getElementById("cmdSearch").oninput = renderCommands;
+  document.getElementById("wlAdd").onclick = addWhitelist;
+  document.getElementById("wlValue").onkeydown = (e) => { if (e.key === "Enter") addWhitelist(); };
 }
 
 /* ---------- health ---------- */
@@ -228,10 +236,11 @@ async function runLookup() {
   out.innerHTML = `<div class="muted">Searching…</div>`;
   try {
     const r = await api("/api/owner/lookup", { method: "POST", body: { query: q } });
+    if (r.protected) { out.innerHTML = `<div class="card" style="color:var(--warn)">🛡 ${esc(r.message || "That identity is protected by the lookup whitelist.")}</div>`; return; }
     if (!r.matches?.length) { out.innerHTML = `<div class="muted">No matches across ${r.files} files.</div>`; return; }
     out.innerHTML = r.matches.map((m) => `
       <div class="card">
-        <strong>${esc(m.file)}</strong> — ${m.error ? `<span style="color:var(--bad)">${esc(m.error)}</span>` : `${(m.hits || []).length} hits`}
+        ${m.error ? `<span style="color:var(--bad)">${esc(m.error)}</span>` : `<strong>${(m.hits || []).length} result${(m.hits || []).length === 1 ? "" : "s"}</strong>`}
         ${(m.hits || []).slice(0, 20).map((h) => `<pre class="out" style="margin-top:8px">${esc(typeof h === "string" ? h : JSON.stringify(h, null, 2))}</pre>`).join("")}
       </div>`).join("");
   } catch (err) { out.innerHTML = `<div style="color:var(--bad)">${esc(err.message)}</div>`; }
@@ -245,7 +254,7 @@ async function loadWhitelist() {
     list.innerHTML = r.items.length
       ? r.items.map((i) => `
         <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
-          <div><strong>${esc(i.value)}</strong>${i.note ? ` <span class="muted">· ${esc(i.note)}</span>` : ""}</div>
+          <div><strong>${esc(i.value)}</strong>${i.note ? ` <span class="muted">· ${esc(i.note)}</span>` : ""}${i.aliases?.length ? `<div class="muted">Also protects: ${i.aliases.map(esc).join(", ")}</div>` : ""}</div>
           <button class="sm danger" data-wl-del="${esc(i.value)}">Remove</button>
         </div>`).join("")
       : `<div class="muted">No whitelisted values yet.</div>`;
@@ -258,9 +267,60 @@ async function loadWhitelist() {
 async function addWhitelist() {
   const value = document.getElementById("wlValue").value.trim();
   const note = document.getElementById("wlNote").value.trim();
-  if (!value) return;
-  try { await api("/api/owner/lookup-whitelist", { method: "POST", body: { value, note } }); toast("Added."); loadWhitelist(); document.getElementById("wlValue").value = ""; }
-  catch (err) { toast(err.message); }
+  const out = document.getElementById("wlOut");
+  if (!value) { out.textContent = "Enter a Discord username or ID first."; return; }
+  try {
+    const saved = await api("/api/owner/lookup-whitelist", { method: "POST", body: { value, note } });
+    const linked = saved.aliases?.length ? ` Linked ${saved.aliases.length} matching ID${saved.aliases.length === 1 ? "" : "s"}.` : "";
+    out.innerHTML = `<span style="color:var(--ok)">Protected ${esc(saved.value)}.${esc(linked)}</span>`;
+    toast("Whitelist updated.");
+    await loadWhitelist();
+    document.getElementById("wlValue").value = "";
+    document.getElementById("wlNote").value = "";
+  } catch (err) { out.innerHTML = `<span style="color:var(--bad)">${esc(err.message)}</span>`; }
+}
+
+/* ---------- security & verification ---------- */
+let SECURITY_GUILDS = [];
+function initSecurity() {
+  document.getElementById("securityGuild").onchange = loadSecurity;
+  document.getElementById("securitySave").onclick = saveSecurity;
+  loadSecurity();
+}
+async function loadSecurity() {
+  const select = document.getElementById("securityGuild");
+  const out = document.getElementById("securityOut");
+  try {
+    if (!SECURITY_GUILDS.length) {
+      SECURITY_GUILDS = (await api("/api/owner/guilds")).guilds;
+      select.innerHTML = SECURITY_GUILDS.length
+        ? SECURITY_GUILDS.map((g) => `<option value="${esc(g.id)}">${esc(g.name || g.id)}</option>`).join("")
+        : `<option value="">No connected servers</option>`;
+    }
+    const id = select.value;
+    if (!id) { out.textContent = "Start the Discord bot to load server settings."; return; }
+    const cfg = await api(`/api/owner/guilds/${id}/automod`);
+    document.querySelectorAll("[data-security]").forEach((input) => { input.checked = !!cfg[input.dataset.security]; });
+    document.getElementById("securityLogChannel").value = cfg.log_channel_id || "";
+    const guild = SECURITY_GUILDS.find((g) => g.id === id);
+    const roles = document.getElementById("securityVerifyRole");
+    roles.innerHTML = `<option value="">Choose a role</option>` + (guild?.roles || []).map((role) =>
+      `<option value="${esc(role.id)}" ${cfg.verify_role_id === role.id ? "selected" : ""}>${esc(role.name)}</option>`
+    ).join("");
+    out.textContent = "";
+  } catch (err) { out.textContent = err.message; }
+}
+async function saveSecurity() {
+  const id = document.getElementById("securityGuild").value;
+  const out = document.getElementById("securityOut");
+  if (!id) return;
+  const body = {
+    log_channel_id: document.getElementById("securityLogChannel").value.trim() || null,
+    verify_role_id: document.getElementById("securityVerifyRole").value || null,
+  };
+  document.querySelectorAll("[data-security]").forEach((input) => { body[input.dataset.security] = input.checked ? 1 : 0; });
+  try { await api(`/api/owner/guilds/${id}/automod`, { method: "POST", body }); out.innerHTML = `<span style="color:var(--ok)">Security settings saved.</span>`; toast("Security saved."); }
+  catch (err) { out.innerHTML = `<span style="color:var(--bad)">${esc(err.message)}</span>`; }
 }
 
 /* ---------- alt account guilds ---------- */

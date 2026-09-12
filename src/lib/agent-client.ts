@@ -67,6 +67,12 @@ export type CommandInfo = {
   permission: "everyone" | "mod" | "admin" | "owner";
 };
 
+export type WhitelistItem = { value: string; note: string; created_at: number; aliases?: string[] };
+export type AutomodConfig = {
+  guild_id: string; antispam: number; antiraid: number; antiinvite: number; antimention: number;
+  log_channel_id: string | null; verify_role_id: string | null;
+};
+
 export const api = {
   health: () => request<HealthInfo>("/api/health"),
 
@@ -120,9 +126,18 @@ export const api = {
   // ---- Lookups ----
   lookupFiles: () => request<{ files: string[] }>("/api/owner/lookups", { owner: true }),
   lookup: (query: string) =>
-    request<{ query: string; files: number; matches: { file: string; hits?: unknown[]; error?: string }[] }>("/api/owner/lookup", {
+    request<{ query: string; files: number; protected?: boolean; message?: string; matches: { hits?: unknown[]; error?: string }[] }>("/api/owner/lookup", {
       method: "POST", owner: true, body: JSON.stringify({ query }),
     }),
+  whitelist: () => request<{ items: WhitelistItem[] }>("/api/owner/lookup-whitelist", { owner: true }),
+  addWhitelist: (value: string, note: string) =>
+    request<WhitelistItem>("/api/owner/lookup-whitelist", { method: "POST", owner: true, body: JSON.stringify({ value, note }) }),
+  removeWhitelist: (value: string) =>
+    request<{ ok: true }>(`/api/owner/lookup-whitelist/${encodeURIComponent(value)}`, { method: "DELETE", owner: true }),
+  automod: (guildId: string) => request<AutomodConfig>(`/api/owner/guilds/${guildId}/automod`, { owner: true }),
+  saveAutomod: (guildId: string, patch: Partial<AutomodConfig>) =>
+    request<AutomodConfig>(`/api/owner/guilds/${guildId}/automod`, { method: "POST", owner: true, body: JSON.stringify(patch) }),
+  selfbotGuilds: () => request<{ guilds: { id: string; name: string; memberCount: number; icon: string | null }[] }>("/api/owner/selfbot-guilds", { owner: true }),
   // ---- Mail Forwarding (mail.thc.org) ----
   mailFwd: <T = unknown>(op: string, args: Record<string, unknown> = {}) =>
     request<{ op: string; result: T }>("/api/email-forward", {

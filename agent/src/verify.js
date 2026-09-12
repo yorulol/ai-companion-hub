@@ -79,12 +79,16 @@ export function attachRoutes(getBotClient) {
       const ua = req.headers?.["user-agent"] || "";
       try {
         const client = getBotClient();
-        if (client && rec.guildId && rec.roleId) {
-          const guild = client.guilds.cache.get(rec.guildId);
-          const member = guild && (await guild.members.fetch(rec.userId).catch(() => null));
-          if (member) await member.roles.add(rec.roleId).catch(() => {});
-        }
-      } catch {}
+        if (!client) throw new Error("The Discord bot is offline.");
+        if (!rec.guildId || !rec.roleId) throw new Error("Verification is not configured for this server.");
+        const guild = client.guilds.cache.get(rec.guildId);
+        if (!guild) throw new Error("The Discord server is unavailable.");
+        const member = await guild.members.fetch(rec.userId).catch(() => null);
+        if (!member) throw new Error("Your Discord membership could not be confirmed.");
+        await member.roles.add(rec.roleId);
+      } catch (error) {
+        return { html: PAGE(token, false, error.message || "Verification could not be completed."), status: 503 };
+      }
       await appendLog({ ...rec, ip, ua });
       PENDING.delete(token);
       return { html: PAGE(token, true, null) };
