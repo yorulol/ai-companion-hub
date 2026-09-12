@@ -354,22 +354,24 @@ export async function ask({ messages, mode = "general" }) {
           const msg = String(err.message || "");
           const unreachable = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
           if (unreachable) {
-            // Try to (re)start the local gateway on-demand, then retry once.
+            // Self-heal: install + hardware-tune + start the local gateway, then retry.
             try {
-              const { startOpenClaw } = await import("./openclaw-runner.js");
-              await startOpenClaw({ force: true });
+              const { ensureOpenClaw } = await import("./openclaw-runner.js");
+              const ready = await ensureOpenClaw();
+              if (!ready) throw new Error("gateway not ready");
               const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", cfg.model, full);
               openclawDownUntil = 0;
               return { reply, provider: "openclaw", model: cfg.model };
             } catch (err2) {
-              openclawDownUntil = Date.now() + 60 * 1000;
-              errors.push(`openclaw unreachable at ${cfg.base} — local gateway isn't responding. Run: npm run openclaw:setup, then npm start.`);
+              openclawDownUntil = Date.now() + 30 * 1000;
+              errors.push(`openclaw: local gateway is still starting up (auto-setup is running in the background). Try again in a moment.`);
               continue;
             }
           }
           errors.push(`openclaw: ${msg.slice(0, 200)}`);
           continue;
         }
+
       }
       if (name === "ollama") {
         return await callOllama(full, mode);
