@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Install and onboard OpenClaw locally (no root / no global install). Run with: npm run openclaw:setup
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { platform } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -25,9 +25,8 @@ function run(cmd, args, opts = {}) {
 function openclawCmd() {
   // Local vendored install first, global fallback.
   const localBin = path.join(VENDOR_DIR, "node_modules", ".bin", platform() === "win32" ? "openclaw.cmd" : "openclaw");
-  try { execSync0(localBin); return localBin; } catch { return "openclaw"; }
+  try { execSync(`"${localBin}" --version`, { stdio: "ignore" }); return localBin; } catch { return "openclaw"; }
 }
-import { execSync as execSync0 } from "node:child_process";
 
 (async () => {
   console.log(c("38;5;141", "\n◆ YORU · OpenClaw setup\n"));
