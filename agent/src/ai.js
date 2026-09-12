@@ -193,7 +193,7 @@ async function ollamaChatRequest(url, model, messages) {
         num_predict: p.numPredict,
         num_batch: p.numBatch,
         num_gpu: p.numGpu,
-        num_keep: 64, // pin the compact system prompt in the KV cache
+        num_keep: 512, // pin the full system prompt in the KV cache so persona + tools survive between turns
         ...(p.numThread ? { num_thread: p.numThread } : {}),
         f16_kv: true,
         use_mmap: true,
