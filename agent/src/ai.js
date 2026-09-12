@@ -183,7 +183,15 @@ async function ollamaChatRequest(url, model, messages) {
   const res = await fetch(`${url}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model, messages, stream: false }),
+    body: JSON.stringify({
+      model,
+      messages,
+      stream: false,
+      // Keep the model loaded in VRAM so replies don't pay a 30s+ reload cost.
+      keep_alive: "24h",
+      // Smaller context = much faster prompt processing on a 6 GB card.
+      options: { num_ctx: 4096 },
+    }),
     signal: AbortSignal.timeout(180_000),
   });
   return res;
