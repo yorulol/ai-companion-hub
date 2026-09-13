@@ -34,18 +34,23 @@ startOllama()
   .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
   .then(() => startOpenClaw().catch((e) => log.warn("openclaw", e.message)));
 
-if (config.discord.botAutostart && config.discord.botToken) {
-  startBot()
-    .then(() => log.ok("bot", "discord bot online"))
-    .catch((err) => log.err("bot", `failed to start: ${err.message}`));
+const { isDead } = await import("./killswitch.js");
+if (isDead()) {
+  log.warn("killswitch", "engaged — bot and selfbot will stay offline until the owner jumpstarts from the panel");
 } else {
-  log.info("bot", "autostart off or no token — skipping");
-}
+  if (config.discord.botAutostart && config.discord.botToken) {
+    startBot()
+      .then(() => log.ok("bot", "discord bot online"))
+      .catch((err) => log.err("bot", `failed to start: ${err.message}`));
+  } else {
+    log.info("bot", "autostart off or no token — skipping");
+  }
 
-if (config.discord.selfbotAutostart && config.discord.userToken) {
-  startSelfbot()
-    .then(() => log.ok("selfbot", "alt account responder online"))
-    .catch((err) => log.err("selfbot", `failed to start: ${err.message}`));
+  if (config.discord.selfbotAutostart && config.discord.userToken) {
+    startSelfbot()
+      .then(() => log.ok("selfbot", "alt account responder online"))
+      .catch((err) => log.err("selfbot", `failed to start: ${err.message}`));
+  }
 }
 
 process.on("SIGINT", () => {
