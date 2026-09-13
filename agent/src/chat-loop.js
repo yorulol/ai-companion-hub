@@ -1,6 +1,6 @@
 /** Chat with tool-use loop. Handles up to 5 sequential tool calls per reply. */
 import { ask } from "./ai.js";
-import { extractToolCall, executeTool, stripToolArtifacts, TOOL_SPEC } from "./tools.js";
+import { extractToolCall, executeTool, stripToolArtifacts, toolSpecFor } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
 
 function safeToolResult(call, result, isOwner) {
@@ -22,6 +22,12 @@ function safeToolResult(call, result, isOwner) {
  *                                    mentioned: [{id,tag}], replyToTag }
  */
 export async function chat({ scope, userText, mode = "general", isOwner = false, context = null }) {
+  if (!isOwner && /\b(?:lockdown|unlock(?:down)?|system[_ ]?info|shell|terminal|read[_ ]?file|write[_ ]?file|remove[_ ]?file|delete\s+(?:a\s+)?file|list[_ ]?dir|malware[_ ]?scan)\b/i.test(userText)) {
+    const reply = "Those are my master's commands. Fuck off trying to use them.";
+    rememberMessage(scope, "user", userText);
+    rememberMessage(scope, "assistant", reply);
+    return { reply, provider: "policy", model: "owner-guard", tools: [] };
+  }
   rememberMessage(scope, "user", userText);
   const history = recallMessages(scope);
   const persona = getSettings().persona;
@@ -40,7 +46,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   ].join("\n");
 
   const messages = [
-    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${TOOL_SPEC}` },
+    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolSpecFor(isOwner)}` },
     ...history,
   ];
 
@@ -77,6 +83,10 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
     if (visible) finalReply += visible + "\n\n";
 
     const result = await executeTool(call, { requesterIsOwner: isOwner });
+    if (result?.denied) {
+      finalReply = result.error;
+      break;
+    }
     toolTrace.push({ tool: call.tool, args: call.args, result });
     const observation = safeToolResult(call, result, isOwner);
 

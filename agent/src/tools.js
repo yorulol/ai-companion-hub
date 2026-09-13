@@ -12,7 +12,7 @@ import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
 import { config } from "./config.js";
 
-export const TOOL_SPEC = `
+const OWNER_TOOL_SPEC = `
 You have access to real tools on the user's computer. To use one, reply with a fenced code block:
 
 \`\`\`tool
@@ -36,6 +36,18 @@ Available tools:
 Only ONE tool call per reply. After the tool runs you'll get its result as an observation, then continue the answer for the user.
 `.trim();
 
+const PUBLIC_TOOL_SPEC = `
+You may search the owner's local lookup index only when the user explicitly asks for a lookup. Use exactly:
+
+\`\`\`tool
+{"tool":"lookup","args":{"query":"<exact query>"}}
+\`\`\`
+
+You have no other tools in this conversation. Never invent tool results or mention private capabilities.
+`.trim();
+
+export const toolSpecFor = (isOwner) => isOwner ? OWNER_TOOL_SPEC : PUBLIC_TOOL_SPEC;
+
 async function run(name, args = {}) {
   switch (name) {
     case "system_info": return await pc.systemInfo();
@@ -56,10 +68,6 @@ async function run(name, args = {}) {
 }
 
 const TOOL_RE = /```tool\s*\n([\s\S]+?)\n```/i;
-// Some models emit raw <tool_call>tool {...} blocks instead of fenced JSON.
-const TOOL_CALL_RE = /<tool_call>\s*(?:tool)?\s*(\{[\s\S]*\})\s*(?:<\/tool_call>)?/i;
-// Last-resort: a bare {"tool": "...", "args": {...}} object anywhere in the reply.
-const BARE_TOOL_RE = /(\{\s*"tool"\s*:\s*"[a-z_]+"\s*,\s*"args"\s*:\s*\{[\s\S]*?\}\s*\})/i;
 
 function tryParseTool(raw, json) {
   try {
@@ -70,28 +78,22 @@ function tryParseTool(raw, json) {
 }
 
 export function extractToolCall(text) {
-  for (const re of [TOOL_RE, TOOL_CALL_RE, BARE_TOOL_RE]) {
-    const m = re.exec(text);
-    if (!m) continue;
-    const call = tryParseTool(m[0], m[1]);
-    if (call) return call;
-  }
-  return null;
+  const match = TOOL_RE.exec(text);
+  return match ? tryParseTool(match[0], match[1]) : null;
 }
 
 /** Strip any leftover tool-call artifacts so they never leak into user-facing replies. */
 export function stripToolArtifacts(text) {
   return text
     .replace(TOOL_RE, "")
-    .replace(TOOL_CALL_RE, "")
-    .replace(BARE_TOOL_RE, "")
+    .replace(/<tool_call>[\s\S]*?(?:<\/tool_call>|$)/gi, "")
     .trim();
 }
 
 export async function executeTool(call, { requesterIsOwner = false } = {}) {
-  const DESTRUCTIVE = ["write_file", "move_file", "remove_file", "lockdown_engage", "lockdown_release", "shell"];
-  if (DESTRUCTIVE.includes(call.tool) && !requesterIsOwner) {
-    return { error: "This tool can only be used by the owner." };
+  const PUBLIC_TOOLS = new Set(["lookup"]);
+  if (!requesterIsOwner && !PUBLIC_TOOLS.has(call.tool)) {
+    return { ok: false, denied: true, error: "Those are my master's commands. Fuck off trying to use them." };
   }
   if (!config.computer.enabled) return { error: "Computer control disabled in .env." };
   try {

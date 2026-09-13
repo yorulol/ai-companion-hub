@@ -52,6 +52,7 @@ export const config = {
       model: ["llama3.1", "llama3.1:8b-instruct-q4_K_M", "llama3.2:3b-instruct-q4_K_M", "llama3.2:1b-instruct-q4_K_M"].includes(process.env.OLLAMA_MODEL || "")
         ? "qwen2.5:3b-instruct-q4_K_M"
         : process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct-q4_K_M",
+      reasoningModel: process.env.OLLAMA_REASONING_MODEL || "qwen2.5:7b-instruct-q4_K_M",
       codeModel: process.env.OLLAMA_CODE_MODEL || "qwen2.5-coder",
       numCtx: integer(process.env.OLLAMA_NUM_CTX, 2048, 512, 32768),
       numPredict: integer(process.env.OLLAMA_NUM_PREDICT, 220, 32, 8192),
@@ -59,6 +60,7 @@ export const config = {
       numBatch: integer(process.env.OLLAMA_NUM_BATCH, 512, 64, 4096),
       numGpu: integer(process.env.OLLAMA_NUM_GPU, 999, 0, 999),
       numThread: integer(process.env.OLLAMA_NUM_THREAD, 0, 0, 64),
+      balancedGpuLayers: integer(process.env.OLLAMA_BALANCED_GPU_LAYERS, 24, 0, 999),
     },
     openai: {
       enabled: bool(process.env.OPENAI_ENABLED, false),
@@ -90,6 +92,7 @@ export const config = {
     botToken: process.env.DISCORD_BOT_TOKEN || "",
     userToken: process.env.DISCORD_USER_TOKEN || "",
     defaultPrefix: process.env.DEFAULT_PREFIX || "!",
+    ownerPrefix: process.env.OWNER_PREFIX || process.env.DEFAULT_PREFIX || "!",
     botAutostart: bool(process.env.BOT_AUTOSTART, true),
     selfbotAutostart: bool(process.env.SELFBOT_AUTOSTART, false),
   },
