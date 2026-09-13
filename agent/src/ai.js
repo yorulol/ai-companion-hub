@@ -400,7 +400,7 @@ export async function ask({ messages, mode = "general" }) {
     if (!cfg?.enabled) continue;
     try {
       if (name === "openrouter") {
-        if (!cfg.key) continue;
+        if (!cfg.key) { errors.push("openrouter: no API key set in .env"); continue; }
         if (openRouterDownUntil > Date.now()) continue;
         await refreshModels();
         const sourcePool = mode === "coding" && codingModels.length ? [...codingModels, ...freeModels] : freeModels;
@@ -490,7 +490,7 @@ export async function ask({ messages, mode = "general" }) {
               }
             } catch {}
             openclawDownUntil = Date.now() + 30 * 1000;
-            errors.push(`openclaw: gateway not ready — falling back`);
+            errors.push("openclaw: gateway not ready (run `npm run openclaw:status`) — falling back");
             continue;
           }
           // 500 / 4xx from the gateway itself: model missing or upstream broken.

@@ -343,5 +343,7 @@ export async function ensureOpenClaw() {
   return startOpenClaw({ force: true, autoInstall: true }).catch(() => false);
 }
 
-process.on("exit", () => { try { child?.kill(); } catch {} });
-process.on("SIGINT", () => { try { child?.kill(); } catch {} });
+function shutdownGateway() { try { killTree(child); } catch {} child = null; }
+process.on("exit", shutdownGateway);
+process.on("SIGINT", () => { shutdownGateway(); process.exit(0); });
+process.on("SIGTERM", () => { shutdownGateway(); process.exit(0); });
