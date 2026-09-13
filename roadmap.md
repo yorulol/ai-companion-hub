@@ -8,3 +8,4 @@
 - [x] Add owner-prefix `class` commands to bot and alt account
 - [x] Replace destructive lockdown encryption with a safe emergency lock
 - [x] Validate owner authorization, Ollama profiles, and command registry
+- [x] Make OpenClaw readiness require a successful live chat and surface exact startup failures

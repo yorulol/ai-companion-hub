@@ -12,6 +12,7 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { log } from "./boot-ui.js";
 import { config } from "./config.js";
+import { supportsOpenClawNode } from "./openclaw-runtime.js";
 
 const run = promisify(execFile);
 const AGENT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -137,11 +138,6 @@ async function writeOpenclawConfig(profile) {
   return { token, port: merged.gateway.port };
 }
 
-function nodeOk() {
-  const [maj, min] = process.versions.node.split(".").map(Number);
-  return (maj === 24 && min >= 16) || maj >= 26;
-}
-
 /** Install openclaw locally & non-interactively into agent/vendor/openclaw. */
 async function installVendored() {
   await fs.mkdir(VENDOR_DIR, { recursive: true });
@@ -197,7 +193,7 @@ export async function autotuneOpenClaw({ force = false } = {}) {
 
   // Auto-install if missing (silent, no interactive onboarding).
   if (!existsSync(LOCAL_BIN)) {
-    if (!nodeOk()) {
+    if (!supportsOpenClawNode()) {
       log.warn("openclaw", `auto-install skipped — needs Node 24.16+ or 26.1+, you're on v${process.versions.node}`);
     } else {
       log.info("openclaw", "not installed — auto-installing locally (this runs once, ~30-90s)…");

@@ -4,6 +4,7 @@ import { spawn, execSync } from "node:child_process";
 import { platform } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { supportsOpenClawNode } from "../src/openclaw-runtime.js";
 
 const AGENT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VENDOR_DIR = path.join(AGENT_DIR, "vendor", "openclaw");
@@ -28,20 +29,11 @@ function openclawCmd() {
   try { execSync(`"${localBin}" --version`, { stdio: "ignore" }); return localBin; } catch { return "openclaw"; }
 }
 
-function nodeOk() {
-  const [maj, min] = process.versions.node.split(".").map(Number);
-  // Package.json engines: ">=24.16.0 <25 || >=26.1.0"
-  if (maj === 24 && (min > 16 || (min === 16))) return true;
-  if (maj >= 26) return true;
-  if (maj === 24 && min >= 16) return true;
-  return false;
-}
-
 (async () => {
   console.log(c("38;5;141", "\n◆ YORU · OpenClaw setup\n"));
 
   // 1) Node version gate — OpenClaw 2026.x needs Node >=24.16 (<25) or >=26.1.
-  if (!nodeOk()) {
+  if (!supportsOpenClawNode()) {
     err(`OpenClaw requires Node.js 24.16+ (<25) or 26.1+ — you're on v${process.versions.node}.`);
     console.log("");
     console.log(c("38;5;111", "  Linux (recommended, no root):"));
