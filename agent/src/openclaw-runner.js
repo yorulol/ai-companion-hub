@@ -16,6 +16,10 @@ const ENV_PATH = path.join(AGENT_DIR, ".env");
 
 let child = null;
 let startupAttempt = null;
+let startupOptions = null;
+let ensureAttempt = null;
+let envWrite = Promise.resolve();
+let skipConfiguredBaseOnce = false;
 let lastFailure = "gateway has not completed a live model check";
 function has(cmd) {
   try {
@@ -88,13 +92,16 @@ async function verifyGatewayModel(base = config.providers.openclaw.base) {
 }
 
 async function patchEnvBase(url) {
-  try {
-    let text = await fsp.readFile(ENV_PATH, "utf8").catch(() => "");
-    const re = /^OPENCLAW_BASE_URL=.*$/m;
-    if (re.test(text)) text = text.replace(re, `OPENCLAW_BASE_URL=${url}`);
-    else text += (text.endsWith("\n") || text === "" ? "" : "\n") + `OPENCLAW_BASE_URL=${url}\n`;
-    await fsp.writeFile(ENV_PATH, text, "utf8");
-  } catch {}
+  envWrite = envWrite.then(async () => {
+    try {
+      let text = await fsp.readFile(ENV_PATH, "utf8").catch(() => "");
+      const re = /^OPENCLAW_BASE_URL=.*$/m;
+      if (re.test(text)) text = text.replace(re, `OPENCLAW_BASE_URL=${url}`);
+      else text += (text.endsWith("\n") || text === "" ? "" : "\n") + `OPENCLAW_BASE_URL=${url}\n`;
+      await fsp.writeFile(ENV_PATH, text, "utf8");
+    } catch {}
+  });
+  return envWrite;
 }
 
 function adoptBase(url) {
@@ -348,9 +355,18 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
 
 
 export async function startOpenClaw(options = {}) {
-  if (!startupAttempt) {
-    startupAttempt = startOpenClawOnce(options).finally(() => { startupAttempt = null; });
+  if (startupAttempt) {
+    const needsStrongerAttempt = Boolean(options.force && !startupOptions?.force)
+      || Boolean(options.autoInstall && !startupOptions?.autoInstall);
+    const result = await startupAttempt;
+    if (result || !needsStrongerAttempt) return result;
+    return startOpenClaw(options);
   }
+  startupOptions = options;
+  startupAttempt = startOpenClawOnce(options).finally(() => {
+    startupAttempt = null;
+    startupOptions = null;
+  });
   return startupAttempt;
 }
 
@@ -365,19 +381,31 @@ export function getOpenClawFailure() {
  */
 /** Forget the current base URL so the next ensure() hunts for the real one. */
 export function invalidateOpenClawBase() {
-  // Compatibility hook: the configured loopback gateway remains authoritative.
+  skipConfiguredBaseOnce = true;
+}
+
+async function ensureOpenClawOnce() {
+  const skipConfigured = skipConfiguredBaseOnce;
+  skipConfiguredBaseOnce = false;
+  if (!skipConfigured && await pingBase() && await verifyGatewayModel()) {
+      lastFailure = "";
+      return true;
+    }
+    if (await discoverBase(resolveBin())) {
+      lastFailure = "";
+      return true;
+    }
+    return startOpenClaw({ force: true, autoInstall: true }).catch((error) => {
+      lastFailure = error?.message || "gateway startup failed";
+      return false;
+    });
 }
 
 export async function ensureOpenClaw() {
-  if (await pingBase() && await verifyGatewayModel()) {
-    lastFailure = "";
-    return true;
+  if (!ensureAttempt) {
+    ensureAttempt = ensureOpenClawOnce().finally(() => { ensureAttempt = null; });
   }
-  if (await discoverBase(resolveBin())) {
-    lastFailure = "";
-    return true;
-  }
-  return startOpenClaw({ force: true, autoInstall: true }).catch(() => false);
+  return ensureAttempt;
 }
 
 function shutdownGateway() { try { killTree(child); } catch {} child = null; }
