@@ -55,7 +55,7 @@ export async function startOllama() {
   if (p.codeModel === "qwen2.5-coder") p.codeModel = RECOMMENDED.coding;
 
   const installed = await listInstalled();
-  const need = [p.model, p.codeModel].filter((m) => !installed.some((i) => i === m || i.startsWith(m.split(":")[0] + ":")));
+  const need = [p.model, p.codeModel].filter((m) => !installed.includes(m));
 
   // Pre-warm the chat model into VRAM so the first chat reply isn't slow.
   if (!need.includes(p.model)) {

@@ -26,10 +26,13 @@ refreshModels(true)
   .then((models) => log.ok("ai", `${models?.free?.length ?? 0} free OpenRouter models cached`))
   .catch((e) => log.warn("ai", `model scan failed: ${e.message}`));
 
-autotuneOpenClaw()
+// OpenClaw's configured backend is Ollama. Provision the exact model first so
+// the gateway cannot report healthy and then fail its first chat with a 500.
+startOllama()
+  .catch((e) => log.warn("ollama", e.message))
+  .then(() => autotuneOpenClaw())
   .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
-  .finally(() => startOpenClaw().catch((e) => log.warn("openclaw", e.message)));
-startOllama().catch((e) => log.warn("ollama", e.message));
+  .then(() => startOpenClaw().catch((e) => log.warn("openclaw", e.message)));
 
 if (config.discord.botAutostart && config.discord.botToken) {
   startBot()
