@@ -219,7 +219,9 @@ function cleanOllamaHistory(messages) {
   const latestUser = [...messages].reverse().find((message) => message.role === "user")?.content || "";
   return messages.filter((message) => {
     if (message.role !== "assistant") return true;
-    return !SYSTEM_DATA_RE.test(String(message.content || "")) || SYSTEM_DATA_REQUEST_RE.test(latestUser);
+    const content = String(message.content || "");
+    if (MODEL_DRIFT_RE.test(content)) return false;
+    return !SYSTEM_DATA_RE.test(content) || SYSTEM_DATA_REQUEST_RE.test(latestUser);
   });
 }
 
@@ -279,8 +281,8 @@ async function ollamaChatRequest(url, model, messages, numKeep = 0, workload) {
       stream: false,
       // Keep the model loaded in VRAM so replies don't pay a 30s+ reload cost.
       keep_alive: "24h",
-      // Keep the model and KV cache fully on a 6 GB GPU. Output is bounded so
-      // casual replies do not spend minutes generating unnecessary text.
+      // The selected profile chooses full GPU or partial GPU offload. Partial
+      // offload keeps GPU acceleration while CPU and system RAM carry overflow.
       options: {
         num_ctx: workload.numCtx,
         num_predict: workload.numPredict,

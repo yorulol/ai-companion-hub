@@ -105,7 +105,7 @@ function OwnerPanel() {
 
 type Settings = {
   provider: { preferOllama: boolean; ollamaUrl: string; ollamaModel: string };
-  discord: { botEnabled: boolean; selfbotEnabled: boolean; defaultPrefix: string; hasBotToken: boolean; hasUserToken: boolean };
+  discord: { botEnabled: boolean; selfbotEnabled: boolean; defaultPrefix: string; ownerPrefix: string; hasBotToken: boolean; hasUserToken: boolean };
   persona: string;
 };
 
@@ -228,6 +228,18 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
               className="w-32 rounded-lg border border-input bg-background px-3 py-2 font-mono outline-none focus:ring-2 focus:ring-ring"
             />
             <p className="text-sm text-muted-foreground">Each server can override this on the Servers tab.</p>
+          </Card>
+
+          <Card title="Master command prefix">
+            <input
+              defaultValue={settings.discord.ownerPrefix}
+              maxLength={8}
+              onBlur={(e) => void patch({ discord: { ownerPrefix: e.target.value } })}
+              className="w-32 rounded-lg border border-input bg-background px-3 py-2 font-mono outline-none focus:ring-2 focus:ring-ring"
+            />
+            <p className="text-sm text-muted-foreground">
+              Private to the configured owner ID on both accounts. Run <code>{settings.discord.ownerPrefix}class</code> to list owner commands.
+            </p>
           </Card>
 
           <Card title="Personal account responder">
