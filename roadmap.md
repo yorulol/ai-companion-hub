@@ -9,3 +9,4 @@
 - [x] Replace destructive lockdown encryption with a safe emergency lock
 - [x] Validate owner authorization, Ollama profiles, and command registry
 - [x] Make OpenClaw readiness require a successful live chat and surface exact startup failures
+- [ ] Stop OpenClaw foreground/systemd startup conflicts and repair model readiness checks
