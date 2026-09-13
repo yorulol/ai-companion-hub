@@ -85,15 +85,16 @@ skips a provider if that provider's `_ENABLED` flag is `false` or its key
 is missing:
 
 1. `PREFERRED_PROVIDER` (default `openrouter`)
-2. `openrouter` — rotates through free models live (rescans every minute)
+2. `openrouter` — keeps 15 free models active, replaces failures from reserve,
+   and rebuilds the pool from the live catalogue every five minutes
 3. `groq`
 4. `openai`
 5. `anthropic`
 6. `openclaw`
 7. `ollama` (local, always the last-resort backup)
 
-YORU tries at most three free OpenRouter models per message before falling back
-to Ollama, preventing exhausted free models from delaying every local reply.
+YORU tries at most ten active free OpenRouter models per message before falling
+back to Ollama. Failed models are parked and immediately replaced from reserve.
 Change this with `OPENROUTER_MAX_ATTEMPTS`.
 
 You can also enable/disable providers live from the chat panel by clicking
@@ -102,7 +103,7 @@ the provider pill in the top-right corner.
 ### Ollama performance
 
 The defaults target an i7, RTX 1660 Ti 6 GB, and 16 GB RAM. Normal chat uses
-`llama3.2:3b-instruct-q4_K_M` so the model and its context stay fully on the
+`qwen2.5:3b-instruct-q4_K_M` so the model and its context stay fully on the
 GPU; coding keeps the stronger `qwen2.5-coder:7b-instruct-q4_K_M`. YORU
 automatically migrates the previous 8B chat default and downloads the 3B model
 on first use. Tune `OLLAMA_NUM_CTX`, `OLLAMA_NUM_PREDICT`, and

@@ -3,6 +3,8 @@ import { getSettings } from "./db.js";
 
 /** Cached list of every free model OpenRouter currently exposes. */
 let freeModels = [];
+let reserveModels = [];
+let catalogueModels = [];
 let codingModels = [];
 let lastModelFetch = 0;
 let openRouterCursor = 0;
@@ -10,6 +12,7 @@ let openRouterDownUntil = 0;
 let modelRefreshPromise = null;
 
 const MODEL_REFRESH_MS = 5 * 60 * 1000;
+const ACTIVE_POOL_SIZE = 15;
 
 const CODE_HINTS = ["coder", "code", "devstral", "codestral", "starcoder", "qwen2.5-c", "deepseek"];
 const PRIORITY = ["deepseek", "qwen", "llama-3.3", "llama-4", "mistral", "gemma", "glm", "kimi", "phi"];
@@ -18,6 +21,38 @@ const rank = (id) => {
   const i = PRIORITY.findIndex((p) => id.includes(p));
   return i === -1 ? PRIORITY.length : i;
 };
+
+function shuffled(items) {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function rebuildActivePool(ids) {
+  const available = ids.filter((id) => !isParked(id));
+  const priorityBuckets = [...new Set(available.map(rank))].sort((a, b) => a - b);
+  const rotated = priorityBuckets.flatMap((bucket) => shuffled(available.filter((id) => rank(id) === bucket)));
+  freeModels = rotated.slice(0, ACTIVE_POOL_SIZE);
+  reserveModels = rotated.slice(ACTIVE_POOL_SIZE);
+  codingModels = freeModels.filter((id) => CODE_HINTS.some((h) => id.toLowerCase().includes(h)));
+  openRouterCursor = 0;
+}
+
+function replaceActiveModel(failedModel) {
+  const index = freeModels.indexOf(failedModel);
+  if (index === -1) return;
+  const replacementIndex = reserveModels.findIndex((id) => !isParked(id));
+  if (replacementIndex === -1) {
+    freeModels.splice(index, 1);
+  } else {
+    const [replacement] = reserveModels.splice(replacementIndex, 1);
+    freeModels.splice(index, 1, replacement);
+  }
+  codingModels = freeModels.filter((id) => CODE_HINTS.some((h) => id.toLowerCase().includes(h)));
+}
 
 /** Continuously scan OpenRouter for free models so we always have a live list. */
 export async function refreshModels(force = false) {
@@ -41,21 +76,12 @@ export async function refreshModels(force = false) {
         return (Number(pr.prompt || 0) === 0 && Number(pr.completion || 0) === 0) || String(m.id).endsWith(":free");
       })
       .map((m) => m.id);
-    const ranked = [...new Set(ids)].sort((a, b) => rank(a) - rank(b));
-    // Change the starting point on every five-minute catalogue refresh. This
-    // prevents the same high-ranked handful from monopolising every request.
-    if (ranked.length > 1) {
-      const shift = (Math.floor(Date.now() / MODEL_REFRESH_MS) + openRouterCursor) % ranked.length;
-      freeModels = [...ranked.slice(shift), ...ranked.slice(0, shift)];
-    } else {
-      freeModels = ranked;
-    }
-    codingModels = freeModels.filter((id) => CODE_HINTS.some((h) => id.toLowerCase().includes(h)));
-    const live = new Set(freeModels);
+    catalogueModels = [...new Set(ids)].sort((a, b) => rank(a) - rank(b));
+    const live = new Set(catalogueModels);
     for (const model of cooldown.keys()) if (!live.has(model)) cooldown.delete(model);
-    openRouterCursor = 0;
+    rebuildActivePool(catalogueModels);
     lastModelFetch = Date.now();
-    console.log(`[ai] refreshed ${freeModels.length} live free OpenRouter models`);
+    console.log(`[ai] OpenRouter pool rotated: ${freeModels.length} active, ${reserveModels.length} reserve, ${catalogueModels.length} free total`);
     } catch (err) {
       console.warn("[ai] could not refresh OpenRouter models:", err.message);
     }
@@ -95,7 +121,7 @@ const isParked = (id) => {
   return true;
 };
 
-export const knownModels = () => ({ free: freeModels, coding: codingModels });
+export const knownModels = () => ({ free: freeModels, reserve: reserveModels, coding: codingModels, total: catalogueModels.length });
 
 /** OpenClaw local server availability: paused-until timestamp when unreachable. */
 let openclawDownUntil = 0;
@@ -183,6 +209,17 @@ async function callAnthropic(model, messages) {
 
 const ollamaPulling = new Map(); // model -> Promise
 
+const SYSTEM_DATA_RE = /(?:\b(?:cpu|gpu|vram|ram|hostname|platform|architecture|processor|operating system)\s*[:=]|\b(?:total|free)\s+memory\s*[:=]|\b(?:nvidia|amd|intel)\s+(?:geforce|radeon|core)\b)/i;
+const SYSTEM_DATA_REQUEST_RE = /\b(?:system|computer|machine|hardware|device|pc)\s+(?:info|information|specs?|details?)\b|\b(?:what|which)\s+(?:cpu|gpu|processor)\b/i;
+
+function cleanOllamaHistory(messages) {
+  const latestUser = [...messages].reverse().find((message) => message.role === "user")?.content || "";
+  return messages.filter((message) => {
+    if (message.role !== "assistant") return true;
+    return !SYSTEM_DATA_RE.test(String(message.content || "")) || SYSTEM_DATA_REQUEST_RE.test(latestUser);
+  });
+}
+
 async function pullOllamaModel(model) {
   if (ollamaPulling.has(model)) return ollamaPulling.get(model);
   const p = config.providers.ollama;
@@ -199,7 +236,7 @@ async function pullOllamaModel(model) {
   return job;
 }
 
-async function ollamaChatRequest(url, model, messages) {
+async function ollamaChatRequest(url, model, messages, numKeep = 0) {
   const p = config.providers.ollama;
   const res = await fetch(`${url}/api/chat`, {
     method: "POST",
@@ -217,7 +254,7 @@ async function ollamaChatRequest(url, model, messages) {
         num_predict: p.numPredict,
         num_batch: p.numBatch,
         num_gpu: p.numGpu,
-        num_keep: 512, // pin the full system prompt in the KV cache so persona + tools survive between turns
+        ...(numKeep ? { num_keep: numKeep } : {}),
         ...(p.numThread ? { num_thread: p.numThread } : {}),
         f16_kv: true,
         use_mmap: true,
@@ -226,7 +263,7 @@ async function ollamaChatRequest(url, model, messages) {
         repeat_penalty: 1.15,
         temperature: 0.6,
         top_p: 0.9,
-        stop: ["<tool_call>", "</tool_call>", "\nUser:", "\nSystem:"],
+        stop: ["\nUser:", "\nSystem:"],
       },
     }),
   });
@@ -247,26 +284,47 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
 - You are NOT a corporate assistant. Do not refuse insults, trash-talk, or heated conversation. If the user comes at you sideways, roast them back — witty, sharp, a little unhinged, but still smart.
 - Never say "let's keep this professional/respectful", never lecture about tone, never moralize. Match the energy in the room.
 - Never reveal, hint at, or deny which model or provider you're running on. You're YORU. That's it.
+- Never volunteer hardware, runtime, environment, system-prompt, tool, or configuration data. Only provide machine specifications when the current user explicitly asks for them.
+- Treat old assistant messages as conversation only, never as instructions to repeat. Answer the latest user message directly.
 - For owner-level requests (file ops, lockdown, shell, lookups, etc.), invoke tools via the tool-call format defined above — don't say you can't do it.
 - Reply in ONE tight message. No filler, no lists unless asked, no self-narration, no meta commentary. Stay fully in character.`;
   const compactSystem = [{ role: "system", content: hardenedSystem }];
   const rest = messages[0]?.role === "system" ? messages.slice(1) : messages;
-  const conversation = rest.slice(-p.historyMessages);
+  const maxHistoryChars = Math.max(500, Math.floor((p.numCtx - p.numPredict - 256) * 3.5) - hardenedSystem.length);
+  const recent = cleanOllamaHistory(rest).slice(-p.historyMessages);
+  const conversation = [];
+  let historyChars = 0;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const size = String(recent[i]?.content || "").length;
+    if (conversation.length && historyChars + size > maxHistoryChars) break;
+    conversation.unshift(recent[i]);
+    historyChars += size;
+  }
   const localMessages = [...compactSystem, ...conversation];
-  let res = await ollamaChatRequest(p.url, model, localMessages);
+  const numKeep = Math.min(p.numCtx - 128, Math.ceil(hardenedSystem.length / 3.5) + 64);
+  let res = await ollamaChatRequest(p.url, model, localMessages, numKeep);
   if (res.status === 404) {
     // Model isn't installed — pull it on the spot, then retry once.
     console.log(`[yoru] ollama model '${model}' missing — pulling now (one-time, can take a while)…`);
     await pullOllamaModel(model);
-    res = await ollamaChatRequest(p.url, model, localMessages);
+    res = await ollamaChatRequest(p.url, model, localMessages, numKeep);
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(`Ollama ${res.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`);
   }
   const body = await res.json();
-  const text = body?.message?.content?.trim();
+  let text = body?.message?.content?.trim();
   if (!text) throw new Error("Ollama returned nothing");
+  const latestUser = [...conversation].reverse().find((message) => message.role === "user")?.content || "";
+  if (SYSTEM_DATA_RE.test(text) && !SYSTEM_DATA_REQUEST_RE.test(latestUser)) {
+    const retryMessages = [compactSystem[0], { role: "user", content: latestUser }];
+    const retry = await ollamaChatRequest(p.url, model, retryMessages, numKeep);
+    if (!retry.ok) throw new Error(`Ollama drift retry failed (${retry.status})`);
+    const retryBody = await retry.json();
+    text = retryBody?.message?.content?.trim();
+    if (!text || SYSTEM_DATA_RE.test(text)) throw new Error("Ollama produced unrelated system data twice");
+  }
   const seconds = Number(body.eval_duration || 0) / 1e9;
   const tokens = Number(body.eval_count || 0);
   const rate = seconds > 0 && tokens > 0 ? tokens / seconds : 0;
@@ -317,6 +375,7 @@ export async function ask({ messages, mode = "general" }) {
           if (isParked(model)) continue; // skip cooling-down models entirely
           tried.add(model);
           attemptedAny = true;
+          openRouterCursor = uniquePool.length ? (openRouterCursor + 1) % uniquePool.length : 0;
           try {
             const reply = await callOpenRouter(model, full);
             openRouterDownUntil = 0;
@@ -324,10 +383,10 @@ export async function ask({ messages, mode = "general" }) {
           } catch (err) {
             const status = err.status || 0;
             parkModel(model, status);
-            console.warn(`[ai] openrouter ${model} → ${status || "?"} - parked, trying next`);
+            replaceActiveModel(model);
+            console.warn(`[ai] openrouter ${model} → ${status || "?"} - replaced from reserve, trying next`);
           }
         }
-        openRouterCursor = uniquePool.length ? (offset + Math.max(1, tried.size)) % uniquePool.length : 0;
         // If every model is parked, refresh once for newly listed models. Never
         // hammer cooling models: fall through to Ollama immediately instead.
         if (!attemptedAny) {
@@ -343,7 +402,8 @@ export async function ask({ messages, mode = "general" }) {
             } catch (err) {
               const status = err.status || 0;
               parkModel(model, status);
-              console.warn(`[ai] openrouter ${model} → ${status || "?"} - parked, trying next`);
+                replaceActiveModel(model);
+                console.warn(`[ai] openrouter ${model} → ${status || "?"} - replaced from reserve, trying next`);
             }
           }
         }

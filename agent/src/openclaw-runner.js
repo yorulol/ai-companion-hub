@@ -65,6 +65,26 @@ async function pingBase() {
   return probe(config.providers.openclaw.base);
 }
 
+async function verifyGatewayModel(base = config.providers.openclaw.base) {
+  const headers = {
+    "content-type": "application/json",
+    ...(config.providers.openclaw.key ? { Authorization: `Bearer ${config.providers.openclaw.key}` } : {}),
+  };
+  const response = await fetchTimeout(base + "/chat/completions", 120_000, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model: "openclaw/default",
+      messages: [{ role: "user", content: "Reply with OK only." }],
+      max_tokens: 4,
+      temperature: 0,
+    }),
+  });
+  if (!response?.ok) return false;
+  const body = await response.json().catch(() => null);
+  return Boolean(body?.choices?.[0]?.message?.content?.trim());
+}
+
 async function patchEnvBase(url) {
   try {
     let text = await fsp.readFile(ENV_PATH, "utf8").catch(() => "");
@@ -151,7 +171,14 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   if (!config.providers.openclaw.enabled) return false;
   if (!force && (!process.env.OPENCLAW_AUTOSTART || process.env.OPENCLAW_AUTOSTART === "false")) return false;
 
-  if (await pingBase()) { log.ok("openclaw", "gateway already running"); return true; }
+  const configuredGatewayAnswered = await pingBase();
+  if (configuredGatewayAnswered) {
+    if (await verifyGatewayModel()) {
+      log.ok("openclaw", "gateway and model already running");
+      return true;
+    }
+    log.warn("openclaw", "gateway answered but its model failed — repairing it once");
+  }
 
   const [maj, min] = process.versions.node.split(".").map(Number);
   const nodeOk = (maj === 24 && min >= 16) || maj >= 26;
@@ -178,7 +205,7 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   }
 
   // A daemon may already be up on a port we don't know about.
-  if (await discoverBase(bin)) return true;
+  if (!configuredGatewayAnswered && await discoverBase(bin)) return true;
 
   // `gateway start` controls an installed native service and is idempotent: it
   // will keep reporting an unhealthy registered PID forever. Yoru instead owns
@@ -225,7 +252,11 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   // is surfaced once and OpenRouter/Ollama remain available as fallbacks.
   for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 1000));
-    if (await pingBase()) { log.ok("openclaw", "gateway ready"); return true; }
+    if (await pingBase()) {
+      if (await verifyGatewayModel()) { log.ok("openclaw", "gateway and model ready"); return true; }
+      log.warn("openclaw", "gateway started but its configured model failed the live check");
+      break;
+    }
     if (i === 8 && (await discoverBase(bin))) return true;
     if (!child || child.exitCode !== null) break;
   }
