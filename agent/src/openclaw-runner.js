@@ -143,8 +143,8 @@ async function portsFromConfigFile() {
  * (that's the "service already running (pid …)" + no response case). Hunt for
  * the real one and adopt it.
  */
-async function discoverBase(bin) {
-  if (await pingBase()) {
+async function discoverBase(bin, { skipConfigured = false } = {}) {
+  if (!skipConfigured && await pingBase()) {
     if (await verifyGatewayModel()) return true;
     lastFailure = "gateway answered, but its configured Ollama model failed the live chat check";
     return false;
@@ -391,7 +391,7 @@ async function ensureOpenClawOnce() {
       lastFailure = "";
       return true;
     }
-    if (await discoverBase(resolveBin())) {
+    if (await discoverBase(resolveBin(), { skipConfigured })) {
       lastFailure = "";
       return true;
     }
