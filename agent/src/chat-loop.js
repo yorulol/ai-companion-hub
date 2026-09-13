@@ -1,6 +1,6 @@
 /** Chat with tool-use loop. Handles up to 5 sequential tool calls per reply. */
 import { ask } from "./ai.js";
-import { extractToolCall, executeTool, stripToolArtifacts, TOOL_SPEC } from "./tools.js";
+import { extractToolCall, executeTool, stripToolArtifacts, toolSpecFor } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
 
 function safeToolResult(call, result, isOwner) {
@@ -9,6 +9,26 @@ function safeToolResult(call, result, isOwner) {
     return { ...result, result: { platform, arch, cpus, memGB, freeMemGB, uptimeMin } };
   }
   return result;
+}
+
+function explicitlyRequested(call, text) {
+  const value = String(text || "").toLowerCase();
+  const patterns = {
+    system_info: /\b(?:system|computer|machine|hardware|pc)\s+(?:info|specs?|details?)\b/,
+    list_dir: /\b(?:list|show|open)\b.*\b(?:folder|directory|files?)\b/,
+    read_file: /\b(?:read|show|open)\b.*\bfile\b/,
+    write_file: /\b(?:write|create|save|overwrite)\b.*\bfile\b/,
+    move_file: /\b(?:move|rename)\b.*\bfile\b/,
+    remove_file: /\b(?:remove|delete)\b.*\bfile\b/,
+    malware_scan: /\b(?:malware|virus)\s+scan\b|\bscan\b.*\b(?:computer|machine|files?)\b/,
+    lockdown_engage: /\b(?:engage|start|enable|activate)\b.*\blockdown\b|^lockdown$/,
+    lockdown_release: /\b(?:release|stop|disable|deactivate|unlock)\b.*\blockdown\b/,
+    lockdown_status: /\blockdown\b.*\bstatus\b|\bis lockdown\b/,
+    lookup: /\b(?:lookup|look up|search|find)\b/,
+    list_lookups: /\b(?:list|show)\b.*\blookups?\b/,
+    shell: /\b(?:run|execute)\b.*\b(?:shell|terminal|command)\b/,
+  };
+  return patterns[call.tool]?.test(value) || false;
 }
 
 /**
@@ -22,6 +42,12 @@ function safeToolResult(call, result, isOwner) {
  *                                    mentioned: [{id,tag}], replyToTag }
  */
 export async function chat({ scope, userText, mode = "general", isOwner = false, context = null }) {
+  if (!isOwner && /\b(?:lockdown|unlock(?:down)?|system[_ ]?info|shell|terminal|read[_ ]?file|write[_ ]?file|remove[_ ]?file|delete\s+(?:a\s+)?file|list[_ ]?dir|malware[_ ]?scan)\b/i.test(userText)) {
+    const reply = "Those are my master's commands. Fuck off trying to use them.";
+    rememberMessage(scope, "user", userText);
+    rememberMessage(scope, "assistant", reply);
+    return { reply, provider: "policy", model: "owner-guard", tools: [] };
+  }
   rememberMessage(scope, "user", userText);
   const history = recallMessages(scope);
   const persona = getSettings().persona;
@@ -40,7 +66,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   ].join("\n");
 
   const messages = [
-    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${TOOL_SPEC}` },
+    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolSpecFor(isOwner)}` },
     ...history,
   ];
 
@@ -71,12 +97,22 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
 
     if (!call) { finalReply = stripToolArtifacts(reply); break; }
 
+    if (!explicitlyRequested(call, userText)) {
+      messages.push({ role: "assistant", content: stripToolArtifacts(reply) });
+      messages.push({ role: "system", content: "That tool was not explicitly requested in the latest user message. Do not run it. Answer the user's actual message normally, with no tool syntax or system details." });
+      continue;
+    }
+
     if (call.tool === "lookup") lookupRan = true;
 
     const visible = stripToolArtifacts(reply.replace(call.raw, ""));
     if (visible) finalReply += visible + "\n\n";
 
     const result = await executeTool(call, { requesterIsOwner: isOwner });
+    if (result?.denied) {
+      finalReply = result.error;
+      break;
+    }
     toolTrace.push({ tool: call.tool, args: call.args, result });
     const observation = safeToolResult(call, result, isOwner);
 

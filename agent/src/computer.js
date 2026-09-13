@@ -3,20 +3,21 @@
  * by config.computer.root when unrestricted is false. Cross-platform: works
  * on Linux (Parrot/Debian/Ubuntu/etc) and Windows 10/11.
  */
-import { promises as fs } from "node:fs";
-import { createReadStream, createWriteStream } from "node:fs";
+import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { exec as execCb, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import crypto from "node:crypto";
-import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
 
 const exec = promisify(execCb);
 
 function assertEnabled() {
   if (!config.computer.enabled) throw new Error("Computer control is disabled in .env (COMPUTER_CONTROL_ENABLED=false).");
+  if (typeof LOCK_STATE !== "undefined" && existsSync(LOCK_STATE)) {
+    throw new Error("Emergency lockdown is active. Release it before using computer-control actions.");
+  }
 }
 
 function resolveSafe(p) {
@@ -123,98 +124,40 @@ export function scanForMalware({ onLine } = {}) {
   });
 }
 
-// ---- Lockdown: encrypt a folder with AES-256-GCM ----
+// ---- Lockdown: reversible, non-destructive emergency gate ----
 
 const KEY_DIR = path.join(os.homedir(), ".yoru");
 const LOCK_STATE = path.join(KEY_DIR, "lockdown.json");
 
-async function walk(dir, out = []) {
-  const items = await fs.readdir(dir, { withFileTypes: true });
-  for (const item of items) {
-    const full = path.join(dir, item.name);
-    if (item.isDirectory()) await walk(full, out);
-    else if (item.isFile()) out.push(full);
-  }
-  return out;
-}
-
-async function encryptFile(file, key) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const tmp = `${file}.yoruenc`;
-  await pipeline(createReadStream(file), cipher, createWriteStream(tmp));
-  const tag = cipher.getAuthTag();
-  const original = await fs.readFile(tmp);
-  await fs.writeFile(tmp, Buffer.concat([iv, tag, original]));
-  await fs.rm(file);
-  await fs.rename(tmp, `${file}.yoru`);
-}
-
-async function decryptFile(file, key) {
-  const raw = await fs.readFile(file);
-  const iv = raw.subarray(0, 12);
-  const tag = raw.subarray(12, 28);
-  const data = raw.subarray(28);
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(tag);
-  const plain = Buffer.concat([decipher.update(data), decipher.final()]);
-  const restored = file.replace(/\.yoru$/, "");
-  await fs.writeFile(restored, plain);
-  await fs.rm(file);
-}
-
 export async function engageLockdown() {
-  assertEnabled();
+  if (!config.computer.enabled) throw new Error("Computer control is disabled in .env.");
   if (!config.computer.lockdownEnabled) throw new Error("LOCKDOWN_ENABLED=false in .env");
-  const target = config.computer.lockdownTarget;
-  if (!target) throw new Error("Set LOCKDOWN_TARGET in .env to the folder you want encrypted.");
-  const full = path.resolve(target);
+  if (existsSync(LOCK_STATE)) throw new Error("Emergency lockdown is already active.");
   await fs.mkdir(KEY_DIR, { recursive: true });
-
-  const key = crypto.randomBytes(32);
-  const files = await walk(full);
-  let done = 0;
-  for (const f of files) {
-    if (f.endsWith(".yoru")) continue;
-    try {
-      await encryptFile(f, key);
-      done++;
-    } catch (err) {
-      console.warn(`[lockdown] skip ${f}: ${err.message}`);
-    }
-  }
-  const keyHex = key.toString("hex");
+  const releaseKey = crypto.randomBytes(24).toString("hex");
+  const releaseHash = crypto.createHash("sha256").update(releaseKey).digest("hex");
   await fs.writeFile(
     LOCK_STATE,
-    JSON.stringify({ target: full, at: Date.now(), files: done }, null, 2),
+    JSON.stringify({ active: true, at: Date.now(), releaseHash }, null, 2),
   );
-  return { target: full, encryptedFiles: done, decryptionKey: keyHex };
+  return { active: true, pausedActions: true, releaseKey };
 }
 
-export async function releaseLockdown(keyHex) {
-  assertEnabled();
+export async function releaseLockdown(releaseKey) {
+  if (!config.computer.enabled) throw new Error("Computer control is disabled in .env.");
   const state = JSON.parse(await fs.readFile(LOCK_STATE, "utf8").catch(() => "{}"));
-  if (!state.target) throw new Error("No lockdown state found.");
-  const key = Buffer.from(keyHex, "hex");
-  if (key.length !== 32) throw new Error("Invalid decryption key length.");
-  const files = (await walk(state.target)).filter((f) => f.endsWith(".yoru"));
-  let done = 0;
-  for (const f of files) {
-    try {
-      await decryptFile(f, key);
-      done++;
-    } catch (err) {
-      throw new Error(`Wrong key or corrupt file: ${err.message}`);
-    }
-  }
+  if (!state.active || !state.releaseHash) throw new Error("No emergency lockdown is active.");
+  const supplied = crypto.createHash("sha256").update(String(releaseKey || "")).digest();
+  const expected = Buffer.from(state.releaseHash, "hex");
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) throw new Error("Invalid release key.");
   await fs.rm(LOCK_STATE, { force: true });
-  return { restoredFiles: done, target: state.target };
+  return { active: false, resumedActions: true };
 }
 
 export async function lockdownStatus() {
   try {
     const state = JSON.parse(await fs.readFile(LOCK_STATE, "utf8"));
-    return { active: true, ...state };
+    return { active: true, at: state.at, pausedActions: true };
   } catch {
     return { active: false };
   }

@@ -89,6 +89,11 @@
             <div class="muted" style="margin-top:10px">Discord ToS discourages selfbots. Use an account you don't mind losing.</div>
           </div>
         </div>
+        <div class="card">
+          <strong>Master command prefix</strong>
+          <div class="muted">Used by your owner ID on both the bot and alt account. Run <code>class</code> with this prefix to browse private commands.</div>
+          <div class="row" style="margin-top:10px"><input id="ownerPrefix" maxlength="8" style="max-width:120px"/><button class="sm primary" id="ownerPrefixSave">Save prefix</button></div>
+        </div>
       </section>
 
       <!-- ============ Guilds ============ -->
@@ -179,10 +184,10 @@
         </div>
         <div class="card">
           <strong>Lockdown</strong>
-          <div class="muted">Encrypts the target folder with AES-256-GCM. Keep the key — it's the only way back.</div>
+          <div class="muted">Pauses computer-control actions without changing or encrypting files.</div>
           <div class="row" style="margin-top:10px">
             <button class="sm danger" id="engageBtn">Engage lockdown</button>
-            <input id="releaseKey" placeholder="paste decryption key" />
+            <input id="releaseKey" placeholder="paste release key" />
             <button class="sm primary" id="releaseBtn">Release</button>
           </div>
           <pre class="out" id="lockOut" style="margin-top:10px">—</pre>

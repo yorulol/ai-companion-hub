@@ -105,7 +105,7 @@ function OwnerPanel() {
 
 type Settings = {
   provider: { preferOllama: boolean; ollamaUrl: string; ollamaModel: string };
-  discord: { botEnabled: boolean; selfbotEnabled: boolean; defaultPrefix: string; hasBotToken: boolean; hasUserToken: boolean };
+  discord: { botEnabled: boolean; selfbotEnabled: boolean; defaultPrefix: string; ownerPrefix: string; hasBotToken: boolean; hasUserToken: boolean };
   persona: string;
 };
 
@@ -228,6 +228,18 @@ function OwnerDashboard({ onLock }: { onLock: () => void }) {
               className="w-32 rounded-lg border border-input bg-background px-3 py-2 font-mono outline-none focus:ring-2 focus:ring-ring"
             />
             <p className="text-sm text-muted-foreground">Each server can override this on the Servers tab.</p>
+          </Card>
+
+          <Card title="Master command prefix">
+            <input
+              defaultValue={settings.discord.ownerPrefix}
+              maxLength={8}
+              onBlur={(e) => void patch({ discord: { ownerPrefix: e.target.value } })}
+              className="w-32 rounded-lg border border-input bg-background px-3 py-2 font-mono outline-none focus:ring-2 focus:ring-ring"
+            />
+            <p className="text-sm text-muted-foreground">
+              Private to the configured owner ID on both accounts. Run <code>{settings.discord.ownerPrefix}class</code> to list owner commands.
+            </p>
           </Card>
 
           <Card title="Personal account responder">
@@ -749,7 +761,7 @@ function Stat({ label, value, ok }: { label: string; value: string; ok: boolean 
 
 function ComputerTab() {
   const [sys, setSys] = useState<Record<string, unknown> | null>(null);
-  const [lock, setLock] = useState<{ active: boolean; target?: string; files?: number } | null>(null);
+  const [lock, setLock] = useState<{ active: boolean; pausedActions?: boolean; at?: number } | null>(null);
   const [lookupFiles, setLookupFiles] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [lookupResult, setLookupResult] = useState<string>("");
@@ -773,19 +785,19 @@ function ComputerTab() {
     finally { setBusy(""); }
   };
   const doLockdown = async () => {
-    if (!confirm("Encrypt every file in LOCKDOWN_TARGET? Save the key somewhere safe.")) return;
+    if (!confirm("Pause all computer-control actions? Save the release key somewhere safe.")) return;
     setBusy("lock");
     try {
       const r = await api.lockdownEngage();
-      setKey(r.decryptionKey);
-      setNote(`🔒 Encrypted ${r.encryptedFiles} files. SAVE THE KEY.`);
+      setKey(r.releaseKey);
+      setNote("🔒 Computer-control actions paused. SAVE THE RELEASE KEY.");
       refresh();
     } catch (e) { setNote(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(""); }
   };
   const doRelease = async () => {
     setBusy("release");
-    try { const r = await api.lockdownRelease(releaseKey.trim()); setNote(`🔓 Restored ${r.restoredFiles} files.`); refresh(); }
+    try { await api.lockdownRelease(releaseKey.trim()); setNote("🔓 Computer-control actions resumed."); refresh(); }
     catch (e) { setNote(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(""); }
   };
@@ -818,31 +830,30 @@ function ComputerTab() {
       </div>
 
       <div className="panel space-y-3 p-4 lg:col-span-2">
-        <h3 className="font-semibold">Lockdown / encryption</h3>
+        <h3 className="font-semibold">Emergency lockdown</h3>
         <p className="text-sm text-muted-foreground">
-          Encrypts every file inside <code>LOCKDOWN_TARGET</code> with AES-256-GCM. You get a one-time hex key —
-          store it somewhere safe. Paste the key below to decrypt.
+          Pauses computer-control actions without changing any files. Save the one-time release key to resume them.
         </p>
-        <p className="text-sm">Status: {lock?.active ? <span style={{ color: "var(--warning)" }}>🔒 ACTIVE ({lock.files} files)</span> : "🟢 Not active"}</p>
+        <p className="text-sm">Status: {lock?.active ? <span style={{ color: "var(--warning)" }}>🔒 ACTIVE — actions paused</span> : "🟢 Not active"}</p>
         <div className="flex flex-wrap gap-2">
           <button onClick={doLockdown} disabled={!!busy}
             className="rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground disabled:opacity-40">
-            {busy === "lock" ? "Encrypting…" : "Engage lockdown"}
+            {busy === "lock" ? "Pausing…" : "Engage lockdown"}
           </button>
         </div>
         {key && (
           <div className="rounded-lg border border-warning/50 bg-warning/10 p-3">
-            <p className="mb-1 text-xs uppercase tracking-wide">Decryption key — copy now</p>
+            <p className="mb-1 text-xs uppercase tracking-wide">Release key — copy now</p>
             <code className="break-all text-sm">{key}</code>
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
           <input value={releaseKey} onChange={(e) => setReleaseKey(e.target.value)}
-            placeholder="Paste decryption key…"
+            placeholder="Paste release key…"
             className="min-w-64 flex-1 rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs" />
           <button onClick={doRelease} disabled={!!busy || !releaseKey}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40">
-            {busy === "release" ? "Restoring…" : "Release lockdown"}
+            {busy === "release" ? "Releasing…" : "Release lockdown"}
           </button>
         </div>
         {note && <p className="text-sm" style={{ color: "var(--success)" }}>{note}</p>}

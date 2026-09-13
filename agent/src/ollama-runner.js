@@ -10,6 +10,7 @@ import { log } from "./boot-ui.js";
 //   - qwen2.5-coder:7b-instruct-q4_K_M → ~4.4 GB, strongest small coder
 const RECOMMENDED = {
   general: "qwen2.5:3b-instruct-q4_K_M",
+  reasoning: "qwen2.5:7b-instruct-q4_K_M",
   coding: "qwen2.5-coder:7b-instruct-q4_K_M",
 };
 
@@ -55,7 +56,7 @@ export async function startOllama() {
   if (p.codeModel === "qwen2.5-coder") p.codeModel = RECOMMENDED.coding;
 
   const installed = await listInstalled();
-  const need = [p.model, p.codeModel].filter((m) => !installed.includes(m));
+  const need = [...new Set([p.model, p.reasoningModel, p.codeModel])].filter((m) => !installed.includes(m));
 
   // Pre-warm the chat model into VRAM so the first chat reply isn't slow.
   if (!need.includes(p.model)) {
@@ -76,7 +77,7 @@ export async function startOllama() {
   }
 
   if (!need.length) {
-    log.ok("ollama", `ready (chat=${p.model}, code=${p.codeModel})`);
+    log.ok("ollama", `ready (chat=${p.model}, reasoning=${p.reasoningModel}, code=${p.codeModel})`);
     return;
   }
 

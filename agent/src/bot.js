@@ -94,16 +94,22 @@ export async function startBot() {
         }
       }
 
-      if (!message.content.startsWith(guildCfg.prefix)) return;
-      const [name, ...args] = message.content.slice(guildCfg.prefix.length).trim().split(/\s+/);
+      const ownerPrefix = config.discord.ownerPrefix;
+      const matchedPrefix = message.content.startsWith(ownerPrefix) ? ownerPrefix
+        : message.content.startsWith(guildCfg.prefix) ? guildCfg.prefix : null;
+      if (!matchedPrefix) return;
+      const [name, ...args] = message.content.slice(matchedPrefix.length).trim().split(/\s+/);
       const cmd = findCommand(name);
       if (!cmd) return;
+      const isOwner = isOwnerId(message.author.id);
+      if (cmd.permission === "owner" && !isOwner) {
+        return void message.reply({ embeds: [errEmbed("Owner only", "Those are my master's commands. Fuck off trying to use them.")] }).catch(() => {});
+      }
       if (guildCfg.disabledCommands.includes(cmd.name)) {
         return void message.reply({ embeds: [warnEmbed("Command disabled", `\`${cmd.name}\` is turned off in this server.`)] }).catch(() => {});
       }
 
       const member = await message.guild.members.fetch(message.author.id).catch(() => null);
-      const isOwner = isOwnerId(message.author.id);
       if (!isOwner && !canRun(member, guildCfg, cmd.permission)) {
         return void message.reply({
           embeds: [errEmbed("Not allowed", `\`${cmd.name}\` needs **${cmd.permission}** permission.`)],
@@ -121,7 +127,7 @@ export async function startBot() {
       cooldowns.set(key, Date.now() + 2000);
 
       await cmd.run({ message, args, client, guildCfg, isOwner });
-      logActivity("bot", `${message.author.tag} ran !${cmd.name}`, { guild: message.guild.name });
+      logActivity("bot", `${message.author.tag} ran ${matchedPrefix}${cmd.name}`, { guild: message.guild.name });
     } catch (err) {
       console.error("[bot] handler error", err);
       message.reply({
