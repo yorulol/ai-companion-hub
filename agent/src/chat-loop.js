@@ -2,6 +2,7 @@
 import { ask } from "./ai.js";
 import { extractToolCall, executeTool, stripToolArtifacts, toolSpecFor } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
+import { isDead, activateKillswitch, jumpstart, detectKillswitchIntent } from "./killswitch.js";
 
 function safeToolResult(call, result, isOwner) {
   if (call.tool === "system_info" && !isOwner && result?.result) {
