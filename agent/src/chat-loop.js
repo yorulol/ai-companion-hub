@@ -11,6 +11,26 @@ function safeToolResult(call, result, isOwner) {
   return result;
 }
 
+function explicitlyRequested(call, text) {
+  const value = String(text || "").toLowerCase();
+  const patterns = {
+    system_info: /\b(?:system|computer|machine|hardware|pc)\s+(?:info|specs?|details?)\b/,
+    list_dir: /\b(?:list|show|open)\b.*\b(?:folder|directory|files?)\b/,
+    read_file: /\b(?:read|show|open)\b.*\bfile\b/,
+    write_file: /\b(?:write|create|save|overwrite)\b.*\bfile\b/,
+    move_file: /\b(?:move|rename)\b.*\bfile\b/,
+    remove_file: /\b(?:remove|delete)\b.*\bfile\b/,
+    malware_scan: /\b(?:malware|virus)\s+scan\b|\bscan\b.*\b(?:computer|machine|files?)\b/,
+    lockdown_engage: /\b(?:engage|start|enable|activate)\b.*\blockdown\b|^lockdown$/,
+    lockdown_release: /\b(?:release|stop|disable|deactivate|unlock)\b.*\blockdown\b/,
+    lockdown_status: /\blockdown\b.*\bstatus\b|\bis lockdown\b/,
+    lookup: /\b(?:lookup|look up|search|find)\b/,
+    list_lookups: /\b(?:list|show)\b.*\blookups?\b/,
+    shell: /\b(?:run|execute)\b.*\b(?:shell|terminal|command)\b/,
+  };
+  return patterns[call.tool]?.test(value) || false;
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.scope       memory scope key
@@ -76,6 +96,12 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
     }
 
     if (!call) { finalReply = stripToolArtifacts(reply); break; }
+
+    if (!explicitlyRequested(call, userText)) {
+      messages.push({ role: "assistant", content: stripToolArtifacts(reply) });
+      messages.push({ role: "system", content: "That tool was not explicitly requested in the latest user message. Do not run it. Answer the user's actual message normally, with no tool syntax or system details." });
+      continue;
+    }
 
     if (call.tool === "lookup") lookupRan = true;
 
