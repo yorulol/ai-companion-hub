@@ -130,9 +130,9 @@ export const api = {
   fsMove: (from: string, to: string) => request("/api/owner/fs/move", { method: "POST", owner: true, body: JSON.stringify({ from, to }) }),
   fsRemove: (path: string) => request("/api/owner/fs/remove", { method: "POST", owner: true, body: JSON.stringify({ path }) }),
   scan: () => request<{ code: number; target: string; output: string }>("/api/owner/scan", { method: "POST", owner: true }),
-  lockdownEngage: () => request<{ target: string; encryptedFiles: number; decryptionKey: string }>("/api/owner/lockdown/engage", { method: "POST", owner: true }),
-  lockdownRelease: (key: string) => request<{ restoredFiles: number; target: string }>("/api/owner/lockdown/release", { method: "POST", owner: true, body: JSON.stringify({ key }) }),
-  lockdownStatus: () => request<{ active: boolean; target?: string; files?: number }>("/api/owner/lockdown", { owner: true }),
+  lockdownEngage: () => request<{ active: boolean; pausedActions: boolean; releaseKey: string }>("/api/owner/lockdown/engage", { method: "POST", owner: true }),
+  lockdownRelease: (key: string) => request<{ active: boolean; resumedActions: boolean }>("/api/owner/lockdown/release", { method: "POST", owner: true, body: JSON.stringify({ key }) }),
+  lockdownStatus: () => request<{ active: boolean; pausedActions?: boolean; at?: number }>("/api/owner/lockdown", { owner: true }),
 
   // ---- Lookups ----
   lookupFiles: () => request<{ files: string[] }>("/api/owner/lookups", { owner: true }),

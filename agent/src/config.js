@@ -170,3 +170,11 @@ export async function setPreferredProvider(name) {
   config.providers.preferred = name;
   await writeEnv({ PREFERRED_PROVIDER: name });
 }
+
+export async function setOwnerPrefix(prefix) {
+  const value = String(prefix || "").trim();
+  if (!value || value.length > 8 || /\s/.test(value)) throw new Error("Owner prefix must be 1-8 non-space characters.");
+  config.discord.ownerPrefix = value;
+  await writeEnv({ OWNER_PREFIX: value });
+  return value;
+}

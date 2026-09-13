@@ -53,6 +53,7 @@ async function init() {
   document.getElementById("scanBtn").onclick = runScan;
   document.getElementById("engageBtn").onclick = engageLockdown;
   document.getElementById("releaseBtn").onclick = releaseLockdown;
+  document.getElementById("ownerPrefixSave").onclick = saveOwnerPrefix;
   document.getElementById("fsListBtn").onclick = listFs;
   document.getElementById("lookupBtn").onclick = runLookup;
   document.getElementById("cmdSearch").oninput = renderCommands;
@@ -171,6 +172,7 @@ async function refreshHealth() {
 let SETTINGS = null;
 async function loadSettings() {
   SETTINGS = await api("/api/owner/settings");
+  document.getElementById("ownerPrefix").value = SETTINGS.discord?.ownerPrefix || "!";
   const p = SETTINGS.provider || {};
   document.getElementById("preferred").value = p.preferred || "openrouter";
   const checks = document.getElementById("providerChecks");
@@ -183,6 +185,11 @@ async function loadSettings() {
     `<label><input type="checkbox" data-key="${k}" ${p[k] ? "checked" : ""}/> ${label}</label>`,
   ).join("");
   refreshModels();
+}
+async function saveOwnerPrefix() {
+  const ownerPrefix = document.getElementById("ownerPrefix").value.trim();
+  try { await api("/api/owner/settings", { method: "POST", body: { discord: { ownerPrefix } } }); toast("Master prefix saved."); }
+  catch (err) { toast(err.message); }
 }
 async function saveProviders() {
   const patch = {
@@ -290,18 +297,18 @@ async function runScan() {
   catch (err) { out.textContent = err.message; }
 }
 async function engageLockdown() {
-  if (!confirm("Encrypt the lockdown target folder now?")) return;
+  if (!confirm("Pause all computer-control actions now?")) return;
   try {
     const r = await api("/api/owner/lockdown/engage", { method: "POST" });
-    document.getElementById("lockOut").textContent = `Encrypted ${r.encryptedFiles} files.\nDecryption key (SAVE THIS):\n${r.decryptionKey}`;
-    document.getElementById("releaseKey").value = r.decryptionKey;
+    document.getElementById("lockOut").textContent = `Computer control paused.\nRelease key (SAVE THIS):\n${r.releaseKey}`;
+    document.getElementById("releaseKey").value = r.releaseKey;
   } catch (err) { document.getElementById("lockOut").textContent = err.message; }
 }
 async function releaseLockdown() {
   const key = document.getElementById("releaseKey").value.trim();
   if (!key) return toast("Paste the key first.");
   try { const r = await api("/api/owner/lockdown/release", { method: "POST", body: { key } });
-    document.getElementById("lockOut").textContent = `Released. Decrypted ${r.decrypted || 0} files.`; }
+    document.getElementById("lockOut").textContent = "Released. Computer-control actions are available again."; }
   catch (err) { document.getElementById("lockOut").textContent = err.message; }
 }
 async function listFs() {

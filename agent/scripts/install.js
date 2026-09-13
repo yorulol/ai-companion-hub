@@ -177,17 +177,17 @@ const TIERS = [
   {
     // RTX 1660 Ti / 2060 / 3050 class — 3B chat keeps replies snappy.
     vram: 5.5, label: "midrange",
-    chat: "qwen2.5:3b-instruct-q4_K_M", code: "qwen2.5-coder:7b-instruct-q4_K_M",
+    chat: "qwen2.5:3b-instruct-q4_K_M", reasoning: "qwen2.5:7b-instruct-q4_K_M", code: "qwen2.5-coder:7b-instruct-q4_K_M",
     ctx: 2048, predict: 220, batch: 512,
   },
   {
     vram: 3.5, label: "entry GPU",
-    chat: "qwen2.5:3b-instruct-q4_K_M", code: "qwen2.5-coder:3b-instruct-q4_K_M",
+    chat: "qwen2.5:3b-instruct-q4_K_M", reasoning: "qwen2.5:3b-instruct-q4_K_M", code: "qwen2.5-coder:3b-instruct-q4_K_M",
     ctx: 2048, predict: 200, batch: 384,
   },
   {
     vram: 0, label: "CPU-only / integrated",
-    chat: "qwen2.5:1.5b-instruct-q4_K_M", code: "qwen2.5-coder:1.5b-instruct-q4_K_M",
+    chat: "qwen2.5:1.5b-instruct-q4_K_M", reasoning: "qwen2.5:3b-instruct-q4_K_M", code: "qwen2.5-coder:1.5b-instruct-q4_K_M",
     ctx: 1536, predict: 180, batch: 256,
   },
 ];
@@ -204,12 +204,14 @@ function pickModels(specs) {
   const effective = gpu?.unified ? Math.min(vram, ramCeiling) : vram > 0 ? vram : Math.min(4, ramCeiling);
 
   const tier = TIERS.find((t) => effective >= t.vram) || TIERS[TIERS.length - 1];
+  const reasoning = tier.reasoning || tier.chat;
 
   // Threads: leave headroom for the OS, and never exceed physical-ish cores.
   const threads = Math.max(2, Math.min(specs.cpuCores - 2, 16));
 
   return {
     ...tier,
+    reasoning,
     effectiveVram: effective,
     threads: gpu && !gpu.unified && vram >= 3.5 ? 0 : threads, // 0 = let Ollama decide on GPU rigs
     numGpu: gpu ? 999 : 0,
@@ -481,25 +483,28 @@ async function main() {
   console.log("");
   console.log(`${C.purple}  selected profile ${C.reset}${C.bold}${pickedModels.label}${C.reset} ${C.grey}(~${pickedModels.effectiveVram} GB usable)${C.reset}`);
   console.log(`${C.grey}   chat   ${C.reset}${C.green}${pickedModels.chat}${C.reset}`);
+  console.log(`${C.grey}   reason ${C.reset}${C.green}${pickedModels.reasoning}${C.reset}`);
   console.log(`${C.grey}   code   ${C.reset}${C.green}${pickedModels.code}${C.reset}`);
   console.log(`${C.grey}   tuning ${C.reset}ctx ${pickedModels.ctx} · predict ${pickedModels.predict} · batch ${pickedModels.batch}`);
   console.log("");
 
   await patchEnv({
     OLLAMA_MODEL: pickedModels.chat,
+    OLLAMA_REASONING_MODEL: pickedModels.reasoning,
     OLLAMA_CODE_MODEL: pickedModels.code,
     OLLAMA_NUM_CTX: pickedModels.ctx,
     OLLAMA_NUM_PREDICT: pickedModels.predict,
     OLLAMA_NUM_BATCH: pickedModels.batch,
     OLLAMA_NUM_GPU: pickedModels.numGpu,
     OLLAMA_NUM_THREAD: pickedModels.threads,
+    OLLAMA_BALANCED_GPU_LAYERS: pickedModels.effectiveVram >= 5.5 ? 24 : 12,
     OLLAMA_HISTORY_MESSAGES: pickedModels.ctx >= 4096 ? 8 : 4,
   });
   ok("tuned Ollama settings written to .env");
 
   if (await ollamaReachable()) {
     const have = await installedModels();
-    const want = [pickedModels.chat, pickedModels.code];
+    const want = [...new Set([pickedModels.chat, pickedModels.reasoning, pickedModels.code])];
     const missing = want.filter((m) => !have.includes(m));
     if (!missing.length) ok("all selected models already installed");
     for (const m of missing) {
