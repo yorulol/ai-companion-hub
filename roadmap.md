@@ -1,5 +1,5 @@
 # Roadmap
 
-- [ ] Fix and validate OpenClaw request routing
-- [ ] Keep a healthy rotating OpenRouter pool of 10-20 free models with five-minute replacement
-- [ ] Prevent Ollama from leaking system/spec data and degrading over long chats
+- [x] Fix OpenClaw request routing and add a live model readiness check
+- [x] Keep a rotating 15-model OpenRouter pool with five-minute refresh and immediate reserve replacement
+- [x] Prevent Ollama from leaking system/spec data and degrading over long chats
