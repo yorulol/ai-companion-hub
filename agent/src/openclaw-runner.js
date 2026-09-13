@@ -149,6 +149,28 @@ async function discoverBase(bin) {
   return false;
 }
 
+/** Is anything at all holding this TCP port? (probe-agnostic) */
+async function portBusy(port) {
+  const { createConnection } = await import("node:net");
+  return new Promise((resolve) => {
+    const sock = createConnection({ host: "127.0.0.1", port });
+    const done = (v) => { try { sock.destroy(); } catch {} resolve(v); };
+    sock.setTimeout(1200);
+    sock.on("connect", () => done(true));
+    sock.on("timeout", () => done(false));
+    sock.on("error", () => done(false));
+  });
+}
+
+/** Kill a spawned gateway and every child it created (Windows needs the tree). */
+function killTree(proc) {
+  if (!proc || proc.killed || proc.exitCode !== null) return;
+  try {
+    if (platform() === "win32") execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: "ignore" });
+    else proc.kill("SIGTERM");
+  } catch { try { proc.kill(); } catch {} }
+}
+
 async function stopUnhealthyService(bin) {
   const output = await run(bin, ["gateway", "stop", "--force", "--json"], {
     timeout: 30000,
@@ -166,6 +188,7 @@ async function stopUnhealthyService(bin) {
   }
   return true;
 }
+
 
 async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   if (!config.providers.openclaw.enabled) return false;
@@ -213,13 +236,39 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   // a fresh process directly and wait for its actual HTTP API.
   await stopUnhealthyService(bin);
 
+  const port = Number(new URL(config.providers.openclaw.base).port || 18789);
+
+  // A previous `npm start` can leave an orphan gateway squatting on the port
+  // (that's the "heartbeat on the first run, nothing on the second" case).
+  // Give the stop command a moment, then free the port before we bind it.
+  for (let i = 0; i < 12 && (await portBusy(port)); i++) {
+    if (await pingBase()) break;
+    if (i === 0) log.info("openclaw", `port ${port} still held by an old gateway — clearing it…`);
+    if (i === 4) {
+      try {
+        if (platform() === "win32") {
+          execSync(
+            `for /f "tokens=5" %a in ('netstat -ano ^| findstr :${port} ^| findstr LISTENING') do taskkill /PID %a /T /F`,
+            { stdio: "ignore", shell: "cmd.exe" },
+          );
+        } else {
+          execSync(`lsof -ti tcp:${port} | xargs -r kill -9`, { stdio: "ignore" });
+        }
+      } catch {}
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (await pingBase()) {
+    if (await verifyGatewayModel()) { log.ok("openclaw", "gateway and model already running"); return true; }
+  }
+
+  let lastLine = "";
   if (child && !child.killed && child.exitCode === null) {
     // Already spawned; just wait for readiness below.
   } else {
     log.info("openclaw", `starting one local gateway (${bin === "openclaw" ? "openclaw" : "local install"})…`);
     try {
-      const port = new URL(config.providers.openclaw.base).port || "18789";
-      child = spawn(bin, ["gateway", "run", "--port", port, "--bind", "loopback"], {
+      child = spawn(bin, ["gateway", "run", "--port", String(port), "--bind", "loopback"], {
         stdio: ["ignore", "pipe", "pipe"],
         shell: platform() === "win32",
         detached: false,
@@ -231,13 +280,16 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
       child.stdout.on("data", (b) => {
         const line = b.toString().trim();
         if (!line) return;
+        lastLine = line.split("\n").pop().slice(0, 200);
         log.info("openclaw", line.split("\n")[0].slice(0, 160));
       });
       child.stderr.on("data", (b) => {
         const line = b.toString().trim();
         if (!line) return;
+        lastLine = line.split("\n").pop().slice(0, 200);
         log.warn("openclaw", line.split("\n")[0].slice(0, 160));
       });
+      child.on("error", (e) => { lastLine = e.message; });
       child.on("exit", (code) => {
         if (code !== 0) log.warn("openclaw", `gateway exited (${code}). Re-run: npm run openclaw:setup`);
         child = null;
@@ -250,7 +302,7 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
 
   // Wait for the one process above. Do not restart inside this loop: a failure
   // is surfaced once and OpenRouter/Ollama remain available as fallbacks.
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 45; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     if (await pingBase()) {
       if (await verifyGatewayModel()) { log.ok("openclaw", "gateway and model ready"); return true; }
@@ -260,9 +312,13 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
     if (i === 8 && (await discoverBase(bin))) return true;
     if (!child || child.exitCode !== null) break;
   }
-  log.warn("openclaw", "gateway did not become ready; OpenRouter/Ollama will continue working. Run `npm run openclaw:status` for details");
+  log.warn(
+    "openclaw",
+    `gateway did not become ready${lastLine ? ` (last output: ${lastLine})` : ""}; OpenRouter/Ollama will continue working. Run \`npm run openclaw:status\` for details`,
+  );
   return false;
 }
+
 
 export async function startOpenClaw(options = {}) {
   if (!startupAttempt) {
@@ -287,5 +343,7 @@ export async function ensureOpenClaw() {
   return startOpenClaw({ force: true, autoInstall: true }).catch(() => false);
 }
 
-process.on("exit", () => { try { child?.kill(); } catch {} });
-process.on("SIGINT", () => { try { child?.kill(); } catch {} });
+function shutdownGateway() { try { killTree(child); } catch {} child = null; }
+process.on("exit", shutdownGateway);
+process.on("SIGINT", () => { shutdownGateway(); process.exit(0); });
+process.on("SIGTERM", () => { shutdownGateway(); process.exit(0); });
