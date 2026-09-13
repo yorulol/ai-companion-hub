@@ -171,7 +171,8 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   if (!config.providers.openclaw.enabled) return false;
   if (!force && (!process.env.OPENCLAW_AUTOSTART || process.env.OPENCLAW_AUTOSTART === "false")) return false;
 
-  if (await pingBase()) {
+  const configuredGatewayAnswered = await pingBase();
+  if (configuredGatewayAnswered) {
     if (await verifyGatewayModel()) {
       log.ok("openclaw", "gateway and model already running");
       return true;
@@ -204,7 +205,7 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   }
 
   // A daemon may already be up on a port we don't know about.
-  if (await discoverBase(bin)) return true;
+  if (!configuredGatewayAnswered && await discoverBase(bin)) return true;
 
   // `gateway start` controls an installed native service and is idempotent: it
   // will keep reporting an unhealthy registered PID forever. Yoru instead owns
