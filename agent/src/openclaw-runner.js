@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import path from "node:path";
 import { config } from "./config.js";
 import { log } from "./boot-ui.js";
+import { OPENCLAW_NODE_REQUIREMENT, supportsOpenClawNode } from "./openclaw-runtime.js";
 
 const run = promisify(execFile);
 const AGENT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -15,6 +16,11 @@ const ENV_PATH = path.join(AGENT_DIR, ".env");
 
 let child = null;
 let startupAttempt = null;
+let startupOptions = null;
+let ensureAttempt = null;
+let envWrite = Promise.resolve();
+let skipConfiguredBaseOnce = false;
+let lastFailure = "gateway has not completed a live model check";
 function has(cmd) {
   try {
     execSync(platform() === "win32" ? `where ${cmd}` : `command -v ${cmd}`, { stdio: "ignore" });
@@ -86,13 +92,16 @@ async function verifyGatewayModel(base = config.providers.openclaw.base) {
 }
 
 async function patchEnvBase(url) {
-  try {
-    let text = await fsp.readFile(ENV_PATH, "utf8").catch(() => "");
-    const re = /^OPENCLAW_BASE_URL=.*$/m;
-    if (re.test(text)) text = text.replace(re, `OPENCLAW_BASE_URL=${url}`);
-    else text += (text.endsWith("\n") || text === "" ? "" : "\n") + `OPENCLAW_BASE_URL=${url}\n`;
-    await fsp.writeFile(ENV_PATH, text, "utf8");
-  } catch {}
+  envWrite = envWrite.then(async () => {
+    try {
+      let text = await fsp.readFile(ENV_PATH, "utf8").catch(() => "");
+      const re = /^OPENCLAW_BASE_URL=.*$/m;
+      if (re.test(text)) text = text.replace(re, `OPENCLAW_BASE_URL=${url}`);
+      else text += (text.endsWith("\n") || text === "" ? "" : "\n") + `OPENCLAW_BASE_URL=${url}\n`;
+      await fsp.writeFile(ENV_PATH, text, "utf8");
+    } catch {}
+  });
+  return envWrite;
 }
 
 function adoptBase(url) {
@@ -134,8 +143,12 @@ async function portsFromConfigFile() {
  * (that's the "service already running (pid …)" + no response case). Hunt for
  * the real one and adopt it.
  */
-async function discoverBase(bin) {
-  if (await pingBase()) return true;
+async function discoverBase(bin, { skipConfigured = false } = {}) {
+  if (!skipConfigured && await pingBase()) {
+    if (await verifyGatewayModel()) return true;
+    lastFailure = "gateway answered, but its configured Ollama model failed the live chat check";
+    return false;
+  }
   const seen = new Set();
   const ports = [...(await portsFromCli(bin)), ...(await portsFromConfigFile()), ...CANDIDATE_PORTS]
     .filter((p) => Number.isFinite(p) && ![8787, 8788, 8789].includes(p) && !seen.has(p) && seen.add(p));
@@ -143,7 +156,12 @@ async function discoverBase(bin) {
     for (const host of ["127.0.0.1", "localhost"]) {
       const base = `http://${host}:${port}/v1`;
       if (base === config.providers.openclaw.base) continue;
-      if (await probe(base)) { adoptBase(base); return true; }
+      if (await probe(base)) {
+        adoptBase(base);
+        if (await verifyGatewayModel(base)) return true;
+        lastFailure = `gateway at ${base} answered, but its configured Ollama model failed the live chat check`;
+        return false;
+      }
     }
   }
   return false;
@@ -191,22 +209,28 @@ async function stopUnhealthyService(bin) {
 
 
 async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
-  if (!config.providers.openclaw.enabled) return false;
-  if (!force && (!process.env.OPENCLAW_AUTOSTART || process.env.OPENCLAW_AUTOSTART === "false")) return false;
+  if (!config.providers.openclaw.enabled) {
+    lastFailure = "OpenClaw is disabled";
+    return false;
+  }
+  if (!force && (!process.env.OPENCLAW_AUTOSTART || process.env.OPENCLAW_AUTOSTART === "false")) {
+    lastFailure = "OpenClaw autostart is disabled";
+    return false;
+  }
 
   const configuredGatewayAnswered = await pingBase();
   if (configuredGatewayAnswered) {
     if (await verifyGatewayModel()) {
+      lastFailure = "";
       log.ok("openclaw", "gateway and model already running");
       return true;
     }
     log.warn("openclaw", "gateway answered but its model failed — repairing it once");
   }
 
-  const [maj, min] = process.versions.node.split(".").map(Number);
-  const nodeOk = (maj === 24 && min >= 16) || maj >= 26;
-  if (!nodeOk) {
-    log.warn("openclaw", `needs Node 24.16+ or 26.1+, you're on v${process.versions.node}. Upgrade Node, then run: npm run openclaw:setup`);
+  if (!supportsOpenClawNode()) {
+    lastFailure = `requires ${OPENCLAW_NODE_REQUIREMENT}; current runtime is v${process.versions.node}`;
+    log.warn("openclaw", `${lastFailure}. Upgrade Node, then run: npm run openclaw:setup`);
     return false;
   }
 
@@ -218,17 +242,22 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
       const { autotuneOpenClaw } = await import("./openclaw-autotune.js");
       await autotuneOpenClaw({ force: true });
     } catch (e) {
+      lastFailure = `automatic setup failed: ${e.message}`;
       log.warn("openclaw", `auto-setup failed: ${e.message}`);
     }
     bin = resolveBin();
   }
   if (!bin) {
+    lastFailure = "OpenClaw is not installed";
     log.warn("openclaw", "not installed. Run: npm run openclaw:setup");
     return false;
   }
 
   // A daemon may already be up on a port we don't know about.
-  if (!configuredGatewayAnswered && await discoverBase(bin)) return true;
+  if (!configuredGatewayAnswered && await discoverBase(bin)) {
+    lastFailure = "";
+    return true;
+  }
 
   // `gateway start` controls an installed native service and is idempotent: it
   // will keep reporting an unhealthy registered PID forever. Yoru instead owns
@@ -259,7 +288,7 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
     await new Promise((r) => setTimeout(r, 500));
   }
   if (await pingBase()) {
-    if (await verifyGatewayModel()) { log.ok("openclaw", "gateway and model already running"); return true; }
+    if (await verifyGatewayModel()) { lastFailure = ""; log.ok("openclaw", "gateway and model already running"); return true; }
   }
 
   let lastLine = "";
@@ -295,6 +324,7 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
         child = null;
       });
     } catch (e) {
+      lastFailure = `failed to start the gateway process: ${e.message}`;
       log.err("openclaw", `failed to spawn: ${e.message}`);
       return false;
     }
@@ -305,12 +335,16 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   for (let i = 0; i < 45; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     if (await pingBase()) {
-      if (await verifyGatewayModel()) { log.ok("openclaw", "gateway and model ready"); return true; }
+      if (await verifyGatewayModel()) { lastFailure = ""; log.ok("openclaw", "gateway and model ready"); return true; }
+      lastFailure = "gateway started, but its configured Ollama model failed the live chat check";
       log.warn("openclaw", "gateway started but its configured model failed the live check");
       break;
     }
     if (i === 8 && (await discoverBase(bin))) return true;
     if (!child || child.exitCode !== null) break;
+  }
+  if (!lastFailure || lastFailure === "gateway has not completed a live model check") {
+    lastFailure = lastLine ? `gateway did not become ready; last output: ${lastLine}` : "gateway did not become ready before the timeout";
   }
   log.warn(
     "openclaw",
@@ -321,10 +355,23 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
 
 
 export async function startOpenClaw(options = {}) {
-  if (!startupAttempt) {
-    startupAttempt = startOpenClawOnce(options).finally(() => { startupAttempt = null; });
+  if (startupAttempt) {
+    const needsStrongerAttempt = Boolean(options.force && !startupOptions?.force)
+      || Boolean(options.autoInstall && !startupOptions?.autoInstall);
+    const result = await startupAttempt;
+    if (result || !needsStrongerAttempt) return result;
+    return startOpenClaw(options);
   }
+  startupOptions = options;
+  startupAttempt = startOpenClawOnce(options).finally(() => {
+    startupAttempt = null;
+    startupOptions = null;
+  });
   return startupAttempt;
+}
+
+export function getOpenClawFailure() {
+  return lastFailure;
 }
 
 /**
@@ -334,13 +381,31 @@ export async function startOpenClaw(options = {}) {
  */
 /** Forget the current base URL so the next ensure() hunts for the real one. */
 export function invalidateOpenClawBase() {
-  // Compatibility hook: the configured loopback gateway remains authoritative.
+  skipConfiguredBaseOnce = true;
+}
+
+async function ensureOpenClawOnce() {
+  const skipConfigured = skipConfiguredBaseOnce;
+  skipConfiguredBaseOnce = false;
+  if (!skipConfigured && await pingBase() && await verifyGatewayModel()) {
+      lastFailure = "";
+      return true;
+    }
+    if (await discoverBase(resolveBin(), { skipConfigured })) {
+      lastFailure = "";
+      return true;
+    }
+    return startOpenClaw({ force: true, autoInstall: true }).catch((error) => {
+      lastFailure = error?.message || "gateway startup failed";
+      return false;
+    });
 }
 
 export async function ensureOpenClaw() {
-  if (await pingBase()) return true;
-  if (await discoverBase(resolveBin())) return true;
-  return startOpenClaw({ force: true, autoInstall: true }).catch(() => false);
+  if (!ensureAttempt) {
+    ensureAttempt = ensureOpenClawOnce().finally(() => { ensureAttempt = null; });
+  }
+  return ensureAttempt;
 }
 
 function shutdownGateway() { try { killTree(child); } catch {} child = null; }

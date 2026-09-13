@@ -20,6 +20,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import { supportsOpenClawNode } from "../src/openclaw-runtime.js";
 
 const run = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -388,8 +389,7 @@ async function writeOpenclawConfig(profile) {
 }
 
 function openclawNodeOk() {
-  const [maj, min] = process.versions.node.split(".").map(Number);
-  return (maj === 24 && min >= 16) || maj >= 26;
+  return supportsOpenClawNode();
 }
 
 async function installOpenclawVendored() {

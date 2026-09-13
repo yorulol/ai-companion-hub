@@ -15,7 +15,7 @@
     "dev": "node --watch src/index.js",
     "openclaw:setup": "node scripts/openclaw-setup.js",
     "openclaw:start": "node -e \"import('./src/openclaw-runner.js').then(m => m.startOpenClaw({ force: true, autoInstall: true }))\"",
-    "openclaw:status": "openclaw gateway status --deep"
+    "openclaw:status": "node scripts/openclaw-status.js"
   },
   "engines": { "node": ">=20" },
   "dependencies": {

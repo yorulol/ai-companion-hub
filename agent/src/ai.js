@@ -479,7 +479,7 @@ export async function ask({ messages, mode = "general" }) {
           const unreachable = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
           if (unreachable || status === 404) {
             try {
-              const { ensureOpenClaw, invalidateOpenClawBase } = await import("./openclaw-runner.js");
+              const { ensureOpenClaw, getOpenClawFailure, invalidateOpenClawBase } = await import("./openclaw-runner.js");
               if (status === 404) invalidateOpenClawBase();
               const ready = await ensureOpenClaw();
               if (ready) {
@@ -488,9 +488,13 @@ export async function ask({ messages, mode = "general" }) {
                 openclawDownUntil = 0;
                 return { reply, provider: "openclaw", model };
               }
+              const reason = getOpenClawFailure();
+              errors.push(`openclaw: ${reason || "gateway not ready"} (run \`npm run openclaw:status\`) — falling back`);
             } catch {}
             openclawDownUntil = Date.now() + 30 * 1000;
-            errors.push("openclaw: gateway not ready (run `npm run openclaw:status`) — falling back");
+            if (!errors.some((error) => error.startsWith("openclaw:"))) {
+              errors.push("openclaw: gateway startup check failed (run `npm run openclaw:status`) — falling back");
+            }
             continue;
           }
           // 500 / 4xx from the gateway itself: model missing or upstream broken.

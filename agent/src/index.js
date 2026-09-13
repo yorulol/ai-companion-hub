@@ -32,7 +32,7 @@ startOllama()
   .catch((e) => log.warn("ollama", e.message))
   .then(() => autotuneOpenClaw())
   .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
-  .then(() => startOpenClaw().catch((e) => log.warn("openclaw", e.message)));
+  .then(() => startOpenClaw({ autoInstall: true }).catch((e) => log.warn("openclaw", e.message)));
 
 const { isDead } = await import("./killswitch.js");
 if (isDead()) {
