@@ -149,6 +149,28 @@ async function discoverBase(bin) {
   return false;
 }
 
+/** Is anything at all holding this TCP port? (probe-agnostic) */
+async function portBusy(port) {
+  const { createConnection } = await import("node:net");
+  return new Promise((resolve) => {
+    const sock = createConnection({ host: "127.0.0.1", port });
+    const done = (v) => { try { sock.destroy(); } catch {} resolve(v); };
+    sock.setTimeout(1200);
+    sock.on("connect", () => done(true));
+    sock.on("timeout", () => done(false));
+    sock.on("error", () => done(false));
+  });
+}
+
+/** Kill a spawned gateway and every child it created (Windows needs the tree). */
+function killTree(proc) {
+  if (!proc || proc.killed || proc.exitCode !== null) return;
+  try {
+    if (platform() === "win32") execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: "ignore" });
+    else proc.kill("SIGTERM");
+  } catch { try { proc.kill(); } catch {} }
+}
+
 async function stopUnhealthyService(bin) {
   const output = await run(bin, ["gateway", "stop", "--force", "--json"], {
     timeout: 30000,
@@ -166,6 +188,7 @@ async function stopUnhealthyService(bin) {
   }
   return true;
 }
+
 
 async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   if (!config.providers.openclaw.enabled) return false;
