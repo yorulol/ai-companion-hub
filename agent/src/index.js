@@ -23,7 +23,7 @@ if (config.panels.enabled) {
 }
 
 refreshModels(true)
-  .then((n) => log.ok("ai", `${n ?? 0} free OpenRouter models cached`))
+  .then((models) => log.ok("ai", `${models?.free?.length ?? 0} free OpenRouter models cached`))
   .catch((e) => log.warn("ai", `model scan failed: ${e.message}`));
 
 autotuneOpenClaw()

@@ -7,6 +7,9 @@ let codingModels = [];
 let lastModelFetch = 0;
 let openRouterCursor = 0;
 let openRouterDownUntil = 0;
+let modelRefreshPromise = null;
+
+const MODEL_REFRESH_MS = 5 * 60 * 1000;
 
 const CODE_HINTS = ["coder", "code", "devstral", "codestral", "starcoder", "qwen2.5-c", "deepseek"];
 const PRIORITY = ["deepseek", "qwen", "llama-3.3", "llama-4", "mistral", "gemma", "glm", "kimi", "phi"];
@@ -20,10 +23,12 @@ const rank = (id) => {
 export async function refreshModels(force = false) {
   const p = config.providers.openrouter;
   if (!p.enabled || !p.key) return { free: [], coding: [] };
-  if (!force && Date.now() - lastModelFetch < 60 * 1000 && freeModels.length) {
+  if (!force && Date.now() - lastModelFetch < MODEL_REFRESH_MS && freeModels.length) {
     return { free: freeModels, coding: codingModels };
   }
-  try {
+  if (modelRefreshPromise) return modelRefreshPromise;
+  modelRefreshPromise = (async () => {
+    try {
     const res = await fetch(`${p.base}/models`, {
       headers: { Authorization: `Bearer ${p.key}` },
       signal: AbortSignal.timeout(10_000),
@@ -36,18 +41,32 @@ export async function refreshModels(force = false) {
         return (Number(pr.prompt || 0) === 0 && Number(pr.completion || 0) === 0) || String(m.id).endsWith(":free");
       })
       .map((m) => m.id);
-    freeModels = [...new Set(ids)].sort((a, b) => rank(a) - rank(b));
+    const ranked = [...new Set(ids)].sort((a, b) => rank(a) - rank(b));
+    // Change the starting point on every five-minute catalogue refresh. This
+    // prevents the same high-ranked handful from monopolising every request.
+    if (ranked.length > 1) {
+      const shift = (Math.floor(Date.now() / MODEL_REFRESH_MS) + openRouterCursor) % ranked.length;
+      freeModels = [...ranked.slice(shift), ...ranked.slice(0, shift)];
+    } else {
+      freeModels = ranked;
+    }
     codingModels = freeModels.filter((id) => CODE_HINTS.some((h) => id.toLowerCase().includes(h)));
+    const live = new Set(freeModels);
+    for (const model of cooldown.keys()) if (!live.has(model)) cooldown.delete(model);
+    openRouterCursor = 0;
     lastModelFetch = Date.now();
-  } catch (err) {
-    console.warn("[ai] could not refresh OpenRouter models:", err.message);
-  }
-  return { free: freeModels, coding: codingModels };
+    console.log(`[ai] refreshed ${freeModels.length} live free OpenRouter models`);
+    } catch (err) {
+      console.warn("[ai] could not refresh OpenRouter models:", err.message);
+    }
+    return { free: freeModels, coding: codingModels };
+  })().finally(() => { modelRefreshPromise = null; });
+  return modelRefreshPromise;
 }
 
-// Background rescanner: every minute, so newly-listed free models appear fast
-// and rate-limited ones get replaced automatically.
-setInterval(() => refreshModels(true).catch(() => {}), 60 * 1000).unref?.();
+// Replace the catalogue every five minutes so listings removed by OpenRouter
+// disappear and newly-free models enter the live rotation automatically.
+setInterval(() => refreshModels(true).catch(() => {}), MODEL_REFRESH_MS).unref?.();
 
 /**
  * Cooldown map: model id → epoch ms when it becomes eligible again.
@@ -80,34 +99,12 @@ export const knownModels = () => ({ free: freeModels, coding: codingModels });
 
 /** OpenClaw local server availability: paused-until timestamp when unreachable. */
 let openclawDownUntil = 0;
-let openclawModelCache = { at: 0, model: null };
-
-/**
- * The gateway decides its own model ids. Asking it for a name it doesn't know
- * is what produces `500 internal error`, so read the live list instead of
- * trusting the configured placeholder.
- */
-async function resolveOpenClawModel(cfg) {
-  if (openclawModelCache.model && Date.now() - openclawModelCache.at < 5 * 60 * 1000) {
-    return openclawModelCache.model;
-  }
-  let picked = null;
-  try {
-    const res = await fetch(`${cfg.base}/models`, {
-      headers: cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {},
-      signal: AbortSignal.timeout(5000),
-    });
-    if (res.ok) {
-      const body = await res.json();
-      const ids = (body.data || body.models || [])
-        .map((m) => (typeof m === "string" ? m : m.id || m.name))
-        .filter(Boolean);
-      picked = ids.find((id) => id === cfg.model) || ids.find((id) => /ollama|qwen|llama/i.test(id)) || ids[0] || null;
-    }
-  } catch {}
-  const model = picked || cfg.model;
-  openclawModelCache = { at: Date.now(), model };
-  return model;
+/** OpenClaw's model field selects an agent, not a provider model from /models. */
+function resolveOpenClawModel(cfg) {
+  const configured = String(cfg.model || "").trim();
+  return /^(?:openclaw(?:[/:][a-zA-Z0-9._-]+)?|agent:[a-zA-Z0-9._-]+)$/.test(configured)
+    ? configured
+    : "openclaw/default";
 }
 
 export async function ollamaModels() {
@@ -149,10 +146,10 @@ async function callOpenRouter(model, messages) {
   return text;
 }
 
-async function callOpenAIStyle(base, key, model, messages) {
+async function callOpenAIStyle(base, key, model, messages, extraHeaders = {}) {
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+    headers: { Authorization: `Bearer ${key}`, "content-type": "application/json", ...extraHeaders },
     body: JSON.stringify({ model, messages, temperature: 0.7 }),
   });
   if (!res.ok) throw new Error(`${base} ${res.status}: ${(await res.text()).slice(0, 160)}`);
@@ -312,7 +309,6 @@ export async function ask({ messages, mode = "general" }) {
         const uniquePool = [...new Set(sourcePool)];
         const offset = uniquePool.length ? openRouterCursor % uniquePool.length : 0;
         const pool = [...uniquePool.slice(offset), ...uniquePool.slice(0, offset)];
-        openRouterCursor = uniquePool.length ? (offset + 1) % uniquePool.length : 0;
         const tried = new Set();
         let attemptedAny = false;
         for (const model of pool) {
@@ -327,10 +323,11 @@ export async function ask({ messages, mode = "general" }) {
             return { reply, provider: "openrouter", model };
           } catch (err) {
             const status = err.status || 0;
-            if ([429, 402, 403, 500, 502, 503, 504].includes(status)) parkModel(model, status);
+            parkModel(model, status);
             console.warn(`[ai] openrouter ${model} → ${status || "?"} - parked, trying next`);
           }
         }
+        openRouterCursor = uniquePool.length ? (offset + Math.max(1, tried.size)) % uniquePool.length : 0;
         // If every model is parked, refresh once for newly listed models. Never
         // hammer cooling models: fall through to Ollama immediately instead.
         if (!attemptedAny) {
@@ -345,7 +342,7 @@ export async function ask({ messages, mode = "general" }) {
               return { reply, provider: "openrouter", model };
             } catch (err) {
               const status = err.status || 0;
-              if ([429, 402, 403, 500, 502, 503, 504].includes(status)) parkModel(model, status);
+              parkModel(model, status);
               console.warn(`[ai] openrouter ${model} → ${status || "?"} - parked, trying next`);
             }
           }
@@ -372,7 +369,7 @@ export async function ask({ messages, mode = "general" }) {
         const otherEnabled = ["openrouter", "groq", "openai", "anthropic", "ollama"].some((n) => P[n]?.enabled && (n === "ollama" || !!P[n].key));
         if (openclawDownUntil > Date.now() && otherEnabled) continue;
         try {
-          const model = await resolveOpenClawModel(cfg);
+          const model = resolveOpenClawModel(cfg);
           const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", model, full);
           openclawDownUntil = 0;
           return { reply, provider: "openclaw", model };
@@ -386,8 +383,7 @@ export async function ask({ messages, mode = "general" }) {
               if (status === 404) invalidateOpenClawBase();
               const ready = await ensureOpenClaw();
               if (ready) {
-                openclawModelCache = { at: 0, model: null };
-                const model = await resolveOpenClawModel(cfg);
+                const model = resolveOpenClawModel(cfg);
                 const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", model, full);
                 openclawDownUntil = 0;
                 return { reply, provider: "openclaw", model };
