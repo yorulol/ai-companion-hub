@@ -749,7 +749,7 @@ function Stat({ label, value, ok }: { label: string; value: string; ok: boolean 
 
 function ComputerTab() {
   const [sys, setSys] = useState<Record<string, unknown> | null>(null);
-  const [lock, setLock] = useState<{ active: boolean; target?: string; files?: number } | null>(null);
+  const [lock, setLock] = useState<{ active: boolean; pausedActions?: boolean; at?: number } | null>(null);
   const [lookupFiles, setLookupFiles] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [lookupResult, setLookupResult] = useState<string>("");
@@ -773,19 +773,19 @@ function ComputerTab() {
     finally { setBusy(""); }
   };
   const doLockdown = async () => {
-    if (!confirm("Encrypt every file in LOCKDOWN_TARGET? Save the key somewhere safe.")) return;
+    if (!confirm("Pause all computer-control actions? Save the release key somewhere safe.")) return;
     setBusy("lock");
     try {
       const r = await api.lockdownEngage();
-      setKey(r.decryptionKey);
-      setNote(`🔒 Encrypted ${r.encryptedFiles} files. SAVE THE KEY.`);
+      setKey(r.releaseKey);
+      setNote("🔒 Computer-control actions paused. SAVE THE RELEASE KEY.");
       refresh();
     } catch (e) { setNote(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(""); }
   };
   const doRelease = async () => {
     setBusy("release");
-    try { const r = await api.lockdownRelease(releaseKey.trim()); setNote(`🔓 Restored ${r.restoredFiles} files.`); refresh(); }
+    try { await api.lockdownRelease(releaseKey.trim()); setNote("🔓 Computer-control actions resumed."); refresh(); }
     catch (e) { setNote(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(""); }
   };
