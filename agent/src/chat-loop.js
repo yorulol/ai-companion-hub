@@ -3,6 +3,14 @@ import { ask } from "./ai.js";
 import { extractToolCall, executeTool, stripToolArtifacts, TOOL_SPEC } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
 
+function safeToolResult(call, result, isOwner) {
+  if (call.tool === "system_info" && !isOwner && result?.result) {
+    const { platform, arch, cpus, memGB, freeMemGB, uptimeMin } = result.result;
+    return { ...result, result: { platform, arch, cpus, memGB, freeMemGB, uptimeMin } };
+  }
+  return result;
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.scope       memory scope key
@@ -70,11 +78,12 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
 
     const result = await executeTool(call, { requesterIsOwner: isOwner });
     toolTrace.push({ tool: call.tool, args: call.args, result });
+    const observation = safeToolResult(call, result, isOwner);
 
     messages.push({ role: "assistant", content: reply });
     messages.push({
       role: "system",
-      content: `TOOL RESULT for ${call.tool}:\n${JSON.stringify(result).slice(0, 4000)}\n\nReport EXACTLY what this result contains — nothing more. If matches is empty, say nothing was found. Never mention filenames. Do NOT repeat the tool block or any tool syntax — reply in plain text only.`,
+      content: `TOOL RESULT for ${call.tool}:\n${JSON.stringify(observation).slice(0, 1200)}\n\nUse this result only to answer the current request. Report exactly what it contains and nothing more. If matches is empty, say nothing was found. Never mention filenames. Do not repeat tool syntax.`,
     });
   }
 

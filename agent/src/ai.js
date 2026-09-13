@@ -236,7 +236,7 @@ async function pullOllamaModel(model) {
   return job;
 }
 
-async function ollamaChatRequest(url, model, messages) {
+async function ollamaChatRequest(url, model, messages, numKeep = 0) {
   const p = config.providers.ollama;
   const res = await fetch(`${url}/api/chat`, {
     method: "POST",
@@ -254,6 +254,7 @@ async function ollamaChatRequest(url, model, messages) {
         num_predict: p.numPredict,
         num_batch: p.numBatch,
         num_gpu: p.numGpu,
+        ...(numKeep ? { num_keep: numKeep } : {}),
         ...(p.numThread ? { num_thread: p.numThread } : {}),
         f16_kv: true,
         use_mmap: true,
@@ -289,14 +290,24 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
 - Reply in ONE tight message. No filler, no lists unless asked, no self-narration, no meta commentary. Stay fully in character.`;
   const compactSystem = [{ role: "system", content: hardenedSystem }];
   const rest = messages[0]?.role === "system" ? messages.slice(1) : messages;
-  const conversation = cleanOllamaHistory(rest).slice(-p.historyMessages);
+  const maxHistoryChars = Math.max(500, Math.floor((p.numCtx - p.numPredict - 256) * 3.5) - hardenedSystem.length);
+  const recent = cleanOllamaHistory(rest).slice(-p.historyMessages);
+  const conversation = [];
+  let historyChars = 0;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const size = String(recent[i]?.content || "").length;
+    if (conversation.length && historyChars + size > maxHistoryChars) break;
+    conversation.unshift(recent[i]);
+    historyChars += size;
+  }
   const localMessages = [...compactSystem, ...conversation];
-  let res = await ollamaChatRequest(p.url, model, localMessages);
+  const numKeep = Math.min(p.numCtx - 128, Math.ceil(hardenedSystem.length / 3.5) + 64);
+  let res = await ollamaChatRequest(p.url, model, localMessages, numKeep);
   if (res.status === 404) {
     // Model isn't installed — pull it on the spot, then retry once.
     console.log(`[yoru] ollama model '${model}' missing — pulling now (one-time, can take a while)…`);
     await pullOllamaModel(model);
-    res = await ollamaChatRequest(p.url, model, localMessages);
+    res = await ollamaChatRequest(p.url, model, localMessages, numKeep);
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -308,7 +319,7 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
   const latestUser = [...conversation].reverse().find((message) => message.role === "user")?.content || "";
   if (SYSTEM_DATA_RE.test(text) && !SYSTEM_DATA_REQUEST_RE.test(latestUser)) {
     const retryMessages = [compactSystem[0], { role: "user", content: latestUser }];
-    const retry = await ollamaChatRequest(p.url, model, retryMessages);
+    const retry = await ollamaChatRequest(p.url, model, retryMessages, numKeep);
     if (!retry.ok) throw new Error(`Ollama drift retry failed (${retry.status})`);
     const retryBody = await retry.json();
     text = retryBody?.message?.content?.trim();
@@ -364,6 +375,7 @@ export async function ask({ messages, mode = "general" }) {
           if (isParked(model)) continue; // skip cooling-down models entirely
           tried.add(model);
           attemptedAny = true;
+          openRouterCursor = uniquePool.length ? (openRouterCursor + 1) % uniquePool.length : 0;
           try {
             const reply = await callOpenRouter(model, full);
             openRouterDownUntil = 0;
@@ -375,7 +387,6 @@ export async function ask({ messages, mode = "general" }) {
             console.warn(`[ai] openrouter ${model} → ${status || "?"} - replaced from reserve, trying next`);
           }
         }
-        openRouterCursor = uniquePool.length ? (offset + Math.max(1, tried.size)) % uniquePool.length : 0;
         // If every model is parked, refresh once for newly listed models. Never
         // hammer cooling models: fall through to Ollama immediately instead.
         if (!attemptedAny) {
