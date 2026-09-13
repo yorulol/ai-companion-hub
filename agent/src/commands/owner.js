@@ -15,7 +15,7 @@ export const commands = [];
 const add = (c) => commands.push(c);
 
 const deny = (message) =>
-  message.reply({ embeds: [errEmbed("Owner only", "Only the configured owner ID can run this.")] }).catch(() => {});
+  message.reply({ embeds: [errEmbed("Owner only", "Those are my master's commands. Fuck off trying to use them.")] }).catch(() => {});
 
 const guard = (run) => async (ctx) => {
   if (!ctx.isOwner) return void deny(ctx.message);
@@ -127,21 +127,18 @@ add({ name: "scan", category: "owner", description: "Full malware scan.", usage:
   })});
 
 // 8 — lockdown
-add({ name: "lockdown", category: "owner", description: "Encrypt the lockdown target.", usage: "lockdown", permission: "owner",
+add({ name: "lockdown", category: "owner", description: "Pause all computer-control actions.", usage: "lockdown", permission: "owner",
   run: guard(async ({ message }) => {
-    const first = await confirm(message, { title: "Engage lockdown?", description: `Everything under \`${config.computer.lockdownTarget || "(LOCKDOWN_TARGET not set)"}\` gets encrypted.` });
+    const first = await confirm(message, { title: "Engage emergency lockdown?", description: "Computer-control actions will pause until you release them." });
     if (!first) return;
-    const second = await confirm(message, { title: "Last chance", description: "Without the key those files stay locked. Continue?" });
-    if (!second) return;
     try {
       const res = await engageLockdown();
       await message.author.send({ embeds: [embed({
-        title: "🔐 Lockdown key",
-        description: `Keep this safe — it's the only way back.\n${codeBlock(res.decryptionKey)}`,
+        title: "🔐 Emergency release key",
+        description: `Keep this private.\n${codeBlock(res.releaseKey)}`,
         color: COLORS.danger,
-        fields: [{ name: "Target", value: `\`${res.target}\`` }, { name: "Files encrypted", value: fmt(res.encryptedFiles) }],
       })] });
-      message.channel.send({ embeds: [okEmbed("Lockdown engaged", `${fmt(res.encryptedFiles)} files encrypted. The key is in your DMs — never posted here.`)] });
+      message.channel.send({ embeds: [okEmbed("Lockdown engaged", "Computer-control actions are paused. The release key is in your DMs.")] });
     } catch (err) { message.channel.send({ embeds: [errEmbed("Lockdown failed", String(err.message))] }); }
   })});
 
@@ -151,13 +148,13 @@ add({ name: "unlock", category: "owner", description: "Release lockdown with you
     const dm = await message.author.createDM().catch(() => null);
     if (!dm) return void message.reply({ embeds: [errEmbed("DMs closed", "Open your DMs so the key never appears in a channel.")] });
     await message.reply({ embeds: [infoEmbed("Check your DMs", "Send me the decryption key there.")] });
-    await dm.send({ embeds: [infoEmbed("Send the decryption key", "Reply here with the key from lockdown.")] });
+    await dm.send({ embeds: [infoEmbed("Send the release key", "Reply here with the key from lockdown.")] });
     const collected = await dm.awaitMessages({ filter: (m) => m.author.id === message.author.id, max: 1, time: 120_000 }).catch(() => null);
     const key = collected?.first()?.content?.trim();
     if (!key) return void dm.send({ embeds: [infoEmbed("Timed out", "Nothing was changed.")] });
     try {
       const res = await releaseLockdown(key);
-      dm.send({ embeds: [okEmbed("Lockdown released", `${fmt(res.restoredFiles)} files restored in \`${res.target}\`.`)] });
+      dm.send({ embeds: [okEmbed("Lockdown released", "Computer-control actions are available again.")] });
     } catch (err) { dm.send({ embeds: [errEmbed("Wrong key", String(err.message))] }); }
   })});
 
@@ -167,9 +164,16 @@ add({ name: "lockdownstatus", category: "owner", description: "Is lockdown activ
     try {
       const s = await lockdownStatus();
       message.reply({ embeds: [s.active
-        ? warnEmbed("Lockdown active", `\`${s.target}\` · ${fmt(s.files || 0)} files encrypted.`)
+        ? warnEmbed("Lockdown active", "Computer-control actions are paused.")
         : okEmbed("All clear", "No lockdown is active.")] });
     } catch (err) { message.reply({ embeds: [errEmbed("Couldn't check", String(err.message))] }); }
+  })});
+
+add({ name: "class", category: "owner", description: "Show the private owner command class.", usage: "class", permission: "owner",
+  run: guard(async ({ message }) => {
+    const ownerCommands = COMMANDS.filter((command) => command.permission === "owner");
+    const rows = ownerCommands.map((command) => `\`${config.discord.ownerPrefix}${command.usage || command.name}\` — ${command.description}`);
+    await paginate(message, listPages(rows, { title: `🔐 Master's command class (${ownerCommands.length})`, perPage: 8 }), { userId: message.author.id });
   })});
 
 // 11 — lookupsources

@@ -6,6 +6,7 @@ import { config, isOwnerId } from "./config.js";
 import { chat } from "./chat-loop.js";
 import { logActivity } from "./activity.js";
 import { attachPlugins, runOutgoing } from "./selfbot-plugins.js";
+import { findCommand } from "./commands.js";
 
 let client = null;
 let running = false;
@@ -27,6 +28,21 @@ export async function startSelfbot() {
     try {
       if (message.author.id === client.user.id) return;
       const isDm = !message.guild;
+      const ownerPrefix = config.discord.ownerPrefix;
+      if (message.content.startsWith(ownerPrefix)) {
+        const [name, ...args] = message.content.slice(ownerPrefix.length).trim().split(/\s+/);
+        const command = findCommand(name);
+        if (command?.permission === "owner") {
+          const isOwner = isOwnerId(message.author.id);
+          if (!isOwner) {
+            await message.reply("Those are my master's commands. Fuck off trying to use them.").catch(() => {});
+            return;
+          }
+          await command.run({ message, args, client, guildCfg: null, isOwner: true });
+          logActivity("selfbot", `owner ran ${ownerPrefix}${command.name}`, { channel: message.channelId });
+          return;
+        }
+      }
       // DMs: always respond. Servers: only when @mentioned or replied-to.
       const mentionedMe = message.mentions.has(client.user);
       const repliedToMe =
