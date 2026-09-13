@@ -254,3 +254,22 @@ add({ name: "shutdown", category: "owner", description: "Stop the Discord bot.",
     const { stopBot } = await import("../bot.js");
     await stopBot();
   })});
+
+// 17 — killswitch
+add({ name: "killswitch", category: "owner", description: "Full shutdown of all response surfaces.", usage: "killswitch", permission: "owner",
+  run: guard(async ({ message }) => {
+    const yes = await confirm(message, { title: "Activate killswitch?", description: "Bot and alt account go offline and stay dead across restarts until you jumpstart me." });
+    if (!yes) return;
+    await message.channel.send({ embeds: [warnEmbed("Activating killswitch", "Going dark. You'll need to jumpstart my system to bring me back online.")] });
+    const { activateKillswitch } = await import("../killswitch.js");
+    setTimeout(() => activateKillswitch({ reason: "owner command", source: "bot" }).catch(() => {}), 500);
+  })});
+
+// 18 — jumpstart
+add({ name: "jumpstart", category: "owner", description: "Revive the agent after a killswitch.", usage: "jumpstart", permission: "owner",
+  run: guard(async ({ message }) => {
+    const { jumpstart, isDead } = await import("../killswitch.js");
+    if (!isDead()) return void message.reply({ embeds: [okEmbed("Already awake", "No killswitch is engaged.")] });
+    const res = await jumpstart();
+    message.channel.send({ embeds: [okEmbed("Jumpstart complete", `bot: ${res.bot || "skipped"} · selfbot: ${res.selfbot || "skipped"}`)] });
+  })});
