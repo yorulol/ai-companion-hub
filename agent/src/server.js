@@ -88,6 +88,24 @@ const ROUTES = {
     return { events: listActivity({ since, limit: 200 }) };
   },
 
+  "GET /api/owner/killswitch": async (req) => {
+    requireOwner(req);
+    const { killswitchStatus } = await import("./killswitch.js");
+    return killswitchStatus();
+  },
+  "POST /api/owner/killswitch": async (req) => {
+    requireOwner(req);
+    const { activateKillswitch } = await import("./killswitch.js");
+    const body = await readBody(req).catch(() => ({}));
+    const res = await activateKillswitch({ reason: body?.reason || "panel", source: "owner-panel" });
+    return { ok: true, ...res };
+  },
+  "POST /api/owner/jumpstart": async (req) => {
+    requireOwner(req);
+    const { jumpstart } = await import("./killswitch.js");
+    return await jumpstart();
+  },
+
   "GET /api/models": async () => {
     await refreshModels();
     const known = knownModels();

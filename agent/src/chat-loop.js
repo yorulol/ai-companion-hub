@@ -2,6 +2,7 @@
 import { ask } from "./ai.js";
 import { extractToolCall, executeTool, stripToolArtifacts, toolSpecFor } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
+import { isDead, activateKillswitch, jumpstart, detectKillswitchIntent } from "./killswitch.js";
 
 function safeToolResult(call, result, isOwner) {
   if (call.tool === "system_info" && !isOwner && result?.result) {
@@ -42,7 +43,31 @@ function explicitlyRequested(call, text) {
  *                                    mentioned: [{id,tag}], replyToTag }
  */
 export async function chat({ scope, userText, mode = "general", isOwner = false, context = null }) {
-  if (!isOwner && /\b(?:lockdown|unlock(?:down)?|system[_ ]?info|shell|terminal|read[_ ]?file|write[_ ]?file|remove[_ ]?file|delete\s+(?:a\s+)?file|list[_ ]?dir|malware[_ ]?scan)\b/i.test(userText)) {
+  // Killswitch: if the agent is dead, only the owner can revive it.
+  if (isDead()) {
+    if (isOwner && detectKillswitchIntent(userText) === "jumpstart") {
+      const res = await jumpstart();
+      const reply = res.restarted
+        ? "Jumpstart accepted. Systems coming back online. Give me a moment to reconnect."
+        : "Already awake.";
+      return { reply, provider: "killswitch", model: "jumpstart", tools: [] };
+    }
+    return {
+      reply: "Killswitch is engaged. I'm offline until my master jumpstarts me.",
+      provider: "killswitch", model: "dead", tools: [],
+    };
+  }
+
+  // Owner-triggered killswitch from any surface (panel, bot, selfbot).
+  if (isOwner && detectKillswitchIntent(userText) === "activate") {
+    const reply = "Activating my killswitch. I'm going dark — you'll need to jumpstart my system again to bring me back online.";
+    rememberMessage(scope, "user", userText);
+    rememberMessage(scope, "assistant", reply);
+    setTimeout(() => { activateKillswitch({ reason: "owner command", source: context?.platform || "chat" }).catch(() => {}); }, 250);
+    return { reply, provider: "killswitch", model: "activate", tools: [] };
+  }
+
+  if (!isOwner && /\b(?:killswitch|kill[\s-]switch|lockdown|unlock(?:down)?|system[_ ]?info|shell|terminal|read[_ ]?file|write[_ ]?file|remove[_ ]?file|delete\s+(?:a\s+)?file|list[_ ]?dir|malware[_ ]?scan)\b/i.test(userText)) {
     const reply = "Those are my master's commands. Fuck off trying to use them.";
     rememberMessage(scope, "user", userText);
     rememberMessage(scope, "assistant", reply);
