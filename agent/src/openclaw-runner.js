@@ -248,7 +248,9 @@ async function stopUnhealthyService(bin) {
   const output = await run(bin, ["gateway", "stop", "--force", "--json"], {
     timeout: 30000,
     windowsHide: true,
+    env: serviceFreeEnv(),
   }).then((r) => `${r.stdout || ""}${r.stderr || ""}`).catch((e) => `${e?.stdout || ""}${e?.stderr || ""}`);
+
 
   // OpenClaw owns the native service, so let its service command clean up its
   // own PID and registration. Never scrape a PID and kill an unrelated process.
@@ -319,6 +321,8 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   // one foreground `gateway run` process. Stop the stale service once, then run
   // a fresh process directly and wait for its actual HTTP API.
   await stopUnhealthyService(bin);
+  await disableManagedService(bin);
+
 
   const port = Number(new URL(config.providers.openclaw.base).port || 18789);
 
