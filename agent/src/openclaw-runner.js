@@ -171,8 +171,8 @@ async function portsFromConfigFile() {
 async function discoverBase(bin, { skipConfigured = false } = {}) {
   if (!skipConfigured && await pingBase()) {
     if (await verifyGatewayModel()) return true;
-    lastFailure = "gateway answered, but its configured Ollama model failed the live chat check";
     return false;
+
   }
   const seen = new Set();
   const ports = [...(await portsFromCli(bin)), ...(await portsFromConfigFile()), ...CANDIDATE_PORTS]
@@ -184,8 +184,8 @@ async function discoverBase(bin, { skipConfigured = false } = {}) {
       if (await probe(base)) {
         adoptBase(base);
         if (await verifyGatewayModel(base)) return true;
-        lastFailure = `gateway at ${base} answered, but its configured Ollama model failed the live chat check`;
         return false;
+
       }
     }
   }
@@ -250,7 +250,7 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
       log.ok("openclaw", "gateway and model already running");
       return true;
     }
-    log.warn("openclaw", "gateway answered but its model failed — repairing it once");
+    log.warn("openclaw", `${lastFailure} — repairing it once`);
   }
 
   if (!supportsOpenClawNode()) {
@@ -327,10 +327,11 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
         shell: platform() === "win32",
         detached: false,
         env: {
-          ...process.env,
+          ...serviceFreeEnv(),
           OPENCLAW_GATEWAY_TOKEN: config.providers.openclaw.key || process.env.OPENCLAW_GATEWAY_TOKEN || "",
         },
       });
+
       child.stdout.on("data", (b) => {
         const line = b.toString().trim();
         if (!line) return;
@@ -361,8 +362,8 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
     await new Promise((r) => setTimeout(r, 1000));
     if (await pingBase()) {
       if (await verifyGatewayModel()) { lastFailure = ""; log.ok("openclaw", "gateway and model ready"); return true; }
-      lastFailure = "gateway started, but its configured Ollama model failed the live chat check";
-      log.warn("openclaw", "gateway started but its configured model failed the live check");
+      log.warn("openclaw", lastFailure);
+
       break;
     }
     if (i === 8 && (await discoverBase(bin))) return true;
