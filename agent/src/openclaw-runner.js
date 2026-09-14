@@ -76,7 +76,8 @@ async function verifyGatewayModel(base = config.providers.openclaw.base) {
     "content-type": "application/json",
     ...(config.providers.openclaw.key ? { Authorization: `Bearer ${config.providers.openclaw.key}` } : {}),
   };
-  const response = await fetchTimeout(base + "/chat/completions", 120_000, {
+  const started = Date.now();
+  const response = await fetchTimeout(base + "/chat/completions", 180_000, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -86,10 +87,34 @@ async function verifyGatewayModel(base = config.providers.openclaw.base) {
       temperature: 0,
     }),
   });
-  if (!response?.ok) return false;
-  const body = await response.json().catch(() => null);
-  return Boolean(body?.choices?.[0]?.message?.content?.trim());
+  if (!response) {
+    lastFailure = `gateway model check got no response after ${Math.round((Date.now() - started) / 1000)}s`;
+    return false;
+  }
+  const raw = await response.text().catch(() => "");
+  if (!response.ok) {
+    let detail = raw.slice(0, 240);
+    try { detail = JSON.parse(raw)?.error?.message || detail; } catch {}
+    if (response.status === 401 || response.status === 403) {
+      lastFailure = `gateway rejected the API token (HTTP ${response.status}) — rerun: npm run openclaw:setup`;
+    } else if (/not found|unknown model|no such model/i.test(detail)) {
+      lastFailure = `gateway model missing in Ollama (HTTP ${response.status}): ${detail}`;
+    } else if (/context|too large|num_ctx/i.test(detail)) {
+      lastFailure = `gateway rejected the configured context window (HTTP ${response.status}): ${detail}`;
+    } else {
+      lastFailure = `gateway model check failed (HTTP ${response.status}): ${detail || "no detail"}`;
+    }
+    return false;
+  }
+  let body = null;
+  try { body = JSON.parse(raw); } catch {}
+  if (!body?.choices?.[0]?.message?.content?.trim()) {
+    lastFailure = `gateway answered with empty content after ${Math.round((Date.now() - started) / 1000)}s`;
+    return false;
+  }
+  return true;
 }
+
 
 async function patchEnvBase(url) {
   envWrite = envWrite.then(async () => {
