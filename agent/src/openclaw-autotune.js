@@ -58,14 +58,18 @@ async function detectSpecs() {
 }
 
 /** Pick a real Ollama model that fits locally. OpenClaw is the agent gateway,
- * not a model provider, so its HTTP API uses these through ollama/<model>. */
+ * not a model provider, so its HTTP API uses these through ollama/<model>.
+ * OpenClaw refuses to run an agent on a model advertising less than 16K of
+ * context, so every tier stays at or above that floor. */
+const MIN_CTX = 16384;
 const TIERS = [
-  { min: 22, label: "workstation", model: "qwen2.5:14b-instruct-q4_K_M", ctx: 8192, threads: 0 },
-  { min: 11, label: "high-end", model: "qwen2.5:7b-instruct-q4_K_M", ctx: 8192, threads: 0 },
-  { min: 5, label: "midrange", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 4096, threads: 0 },
-  { min: 3, label: "entry GPU", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 2048, threads: 0 },
-  { min: 0, label: "cpu-only", model: "qwen2.5:1.5b-instruct-q4_K_M", ctx: 2048, threads: 0 },
+  { min: 22, label: "workstation", model: "qwen2.5:14b-instruct-q4_K_M", ctx: 32768, threads: 0 },
+  { min: 11, label: "high-end", model: "qwen2.5:7b-instruct-q4_K_M", ctx: 32768, threads: 0 },
+  { min: 5, label: "midrange", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 16384, threads: 0 },
+  { min: 3, label: "entry GPU", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 16384, threads: 0 },
+  { min: 0, label: "cpu-only", model: "qwen2.5:1.5b-instruct-q4_K_M", ctx: 16384, threads: 0 },
 ];
+
 
 function pickProfile(specs) {
   const gpu = specs.gpu;
