@@ -58,14 +58,18 @@ async function detectSpecs() {
 }
 
 /** Pick a real Ollama model that fits locally. OpenClaw is the agent gateway,
- * not a model provider, so its HTTP API uses these through ollama/<model>. */
+ * not a model provider, so its HTTP API uses these through ollama/<model>.
+ * OpenClaw refuses to run an agent on a model advertising less than 16K of
+ * context, so every tier stays at or above that floor. */
+const MIN_CTX = 16384;
 const TIERS = [
-  { min: 22, label: "workstation", model: "qwen2.5:14b-instruct-q4_K_M", ctx: 8192, threads: 0 },
-  { min: 11, label: "high-end", model: "qwen2.5:7b-instruct-q4_K_M", ctx: 8192, threads: 0 },
-  { min: 5, label: "midrange", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 4096, threads: 0 },
-  { min: 3, label: "entry GPU", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 2048, threads: 0 },
-  { min: 0, label: "cpu-only", model: "qwen2.5:1.5b-instruct-q4_K_M", ctx: 2048, threads: 0 },
+  { min: 22, label: "workstation", model: "qwen2.5:14b-instruct-q4_K_M", ctx: 32768, threads: 0 },
+  { min: 11, label: "high-end", model: "qwen2.5:7b-instruct-q4_K_M", ctx: 32768, threads: 0 },
+  { min: 5, label: "midrange", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 16384, threads: 0 },
+  { min: 3, label: "entry GPU", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 16384, threads: 0 },
+  { min: 0, label: "cpu-only", model: "qwen2.5:1.5b-instruct-q4_K_M", ctx: 16384, threads: 0 },
 ];
+
 
 function pickProfile(specs) {
   const gpu = specs.gpu;
@@ -92,6 +96,40 @@ async function patchEnv(updates) {
  * Write the documented OpenClaw config without clobbering onboarding fields.
  * The OpenAI-compatible HTTP endpoint is disabled unless explicitly enabled.
  */
+/** Resolve the single model id both Ollama and OpenClaw must agree on. */
+export function resolveTunedModel(profile) {
+  return String(process.env.OLLAMA_MODEL || profile.model || config.providers.ollama.model).trim();
+}
+
+/** Make sure the exact tag OpenClaw will call is present in Ollama. */
+async function ensureOllamaModel(modelId) {
+  const url = config.providers.ollama.url;
+  let installed = [];
+  try {
+    const r = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(4000) });
+    installed = ((await r.json())?.models || []).map((m) => m.name);
+  } catch {
+    log.warn("openclaw", `Ollama is not reachable at ${url} — the gateway cannot answer until it is running`);
+    return false;
+  }
+  if (installed.includes(modelId)) return true;
+  log.info("openclaw", `pulling ${modelId} for the gateway (one-time)…`);
+  try {
+    const res = await fetch(`${url}/api/pull`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: modelId, stream: false }),
+      signal: AbortSignal.timeout(30 * 60 * 1000),
+    });
+    if (!res.ok) throw new Error(`pull returned ${res.status}`);
+    log.ok("openclaw", `${modelId} ready in Ollama`);
+    return true;
+  } catch (e) {
+    log.warn("openclaw", `could not pull ${modelId}: ${e.message}`);
+    return false;
+  }
+}
+
 async function writeOpenclawConfig(profile) {
   const cfgDir = path.join(os.homedir(), ".openclaw");
   const cfgPath = path.join(cfgDir, "openclaw.json");
@@ -99,7 +137,8 @@ async function writeOpenclawConfig(profile) {
   let existing = {};
   try { existing = JSON.parse(await fs.readFile(cfgPath, "utf8")); } catch {}
   const token = (process.env.OPENCLAW_API_KEY || existing.gateway?.auth?.token || randomBytes(32).toString("hex")).trim();
-  const modelId = (config.providers.ollama.model || profile.model).trim();
+  const modelId = resolveTunedModel(profile);
+  const ctx = Math.max(MIN_CTX, Number(profile.ctx) || MIN_CTX);
   const merged = {
     ...existing,
     gateway: {
@@ -125,7 +164,19 @@ async function writeOpenclawConfig(profile) {
           baseUrl: config.providers.ollama.url,
           apiKey: "ollama-local",
           api: "ollama",
-          models: [{ id: modelId, name: modelId, input: ["text"], contextTokens: profile.ctx, params: { num_ctx: profile.ctx, keep_alive: "24h" } }],
+          models: [{
+            id: modelId,
+            name: modelId,
+            input: ["text"],
+            output: ["text"],
+            reasoning: false,
+            toolCall: true,
+            contextTokens: ctx,
+            maxOutputTokens: 4096,
+            limit: { context: ctx, output: 4096 },
+            cost: { input: 0, output: 0 },
+            params: { num_ctx: ctx, keep_alive: "24h" },
+          }],
         },
       },
     },
@@ -135,8 +186,9 @@ async function writeOpenclawConfig(profile) {
     },
   };
   await fs.writeFile(cfgPath, JSON.stringify(merged, null, 2), "utf8");
-  return { token, port: merged.gateway.port };
+  return { token, port: merged.gateway.port, modelId, ctx, modelReady: await ensureOllamaModel(modelId) };
 }
+
 
 /** Install openclaw locally & non-interactively into agent/vendor/openclaw. */
 async function installVendored() {

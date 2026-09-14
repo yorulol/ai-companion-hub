@@ -76,7 +76,8 @@ async function verifyGatewayModel(base = config.providers.openclaw.base) {
     "content-type": "application/json",
     ...(config.providers.openclaw.key ? { Authorization: `Bearer ${config.providers.openclaw.key}` } : {}),
   };
-  const response = await fetchTimeout(base + "/chat/completions", 120_000, {
+  const started = Date.now();
+  const response = await fetchTimeout(base + "/chat/completions", 180_000, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -86,10 +87,34 @@ async function verifyGatewayModel(base = config.providers.openclaw.base) {
       temperature: 0,
     }),
   });
-  if (!response?.ok) return false;
-  const body = await response.json().catch(() => null);
-  return Boolean(body?.choices?.[0]?.message?.content?.trim());
+  if (!response) {
+    lastFailure = `gateway model check got no response after ${Math.round((Date.now() - started) / 1000)}s`;
+    return false;
+  }
+  const raw = await response.text().catch(() => "");
+  if (!response.ok) {
+    let detail = raw.slice(0, 240);
+    try { detail = JSON.parse(raw)?.error?.message || detail; } catch {}
+    if (response.status === 401 || response.status === 403) {
+      lastFailure = `gateway rejected the API token (HTTP ${response.status}) — rerun: npm run openclaw:setup`;
+    } else if (/not found|unknown model|no such model/i.test(detail)) {
+      lastFailure = `gateway model missing in Ollama (HTTP ${response.status}): ${detail}`;
+    } else if (/context|too large|num_ctx/i.test(detail)) {
+      lastFailure = `gateway rejected the configured context window (HTTP ${response.status}): ${detail}`;
+    } else {
+      lastFailure = `gateway model check failed (HTTP ${response.status}): ${detail || "no detail"}`;
+    }
+    return false;
+  }
+  let body = null;
+  try { body = JSON.parse(raw); } catch {}
+  if (!body?.choices?.[0]?.message?.content?.trim()) {
+    lastFailure = `gateway answered with empty content after ${Math.round((Date.now() - started) / 1000)}s`;
+    return false;
+  }
+  return true;
 }
+
 
 async function patchEnvBase(url) {
   envWrite = envWrite.then(async () => {
@@ -146,8 +171,8 @@ async function portsFromConfigFile() {
 async function discoverBase(bin, { skipConfigured = false } = {}) {
   if (!skipConfigured && await pingBase()) {
     if (await verifyGatewayModel()) return true;
-    lastFailure = "gateway answered, but its configured Ollama model failed the live chat check";
     return false;
+
   }
   const seen = new Set();
   const ports = [...(await portsFromCli(bin)), ...(await portsFromConfigFile()), ...CANDIDATE_PORTS]
@@ -159,8 +184,8 @@ async function discoverBase(bin, { skipConfigured = false } = {}) {
       if (await probe(base)) {
         adoptBase(base);
         if (await verifyGatewayModel(base)) return true;
-        lastFailure = `gateway at ${base} answered, but its configured Ollama model failed the live chat check`;
         return false;
+
       }
     }
   }
@@ -189,11 +214,43 @@ function killTree(proc) {
   } catch { try { proc.kill(); } catch {} }
 }
 
+/**
+ * OpenClaw treats inherited service-manager markers as proof that it is already
+ * running under systemd/launchd and then refuses to start in the foreground
+ * ("already running under systemd; waiting before retrying startup"). Yoru owns
+ * this process, so strip those markers from the child environment.
+ */
+function serviceFreeEnv() {
+  const env = { ...process.env };
+  const drop = [
+    "INVOCATION_ID", "JOURNAL_STREAM", "NOTIFY_SOCKET", "SYSTEMD_EXEC_PID",
+    "MANAGERPID", "LISTEN_PID", "LISTEN_FDS", "LISTEN_FDNAMES", "WATCHDOG_PID",
+    "WATCHDOG_USEC", "SERVICE_RESULT", "EXIT_CODE", "EXIT_STATUS",
+    "LAUNCHD_SOCKET", "XPC_SERVICE_NAME",
+    "OPENCLAW_SERVICE", "OPENCLAW_SERVICE_MANAGER", "OPENCLAW_MANAGED",
+    "OPENCLAW_RUN_AS_SERVICE", "OPENCLAW_SYSTEMD",
+  ];
+  for (const key of drop) delete env[key];
+  env.OPENCLAW_SERVICE_MANAGER = "none";
+  env.OPENCLAW_DISABLE_SERVICE_DETECTION = "1";
+  return env;
+}
+
+async function disableManagedService(bin) {
+  // Remove the stale managed registration so the foreground gateway is the only
+  // one OpenClaw knows about. Both commands are no-ops when nothing is managed.
+  for (const args of [["gateway", "stop", "--force", "--json"], ["gateway", "uninstall", "--json"]]) {
+    await run(bin, args, { timeout: 30000, windowsHide: true, env: serviceFreeEnv() }).catch(() => {});
+  }
+}
+
 async function stopUnhealthyService(bin) {
   const output = await run(bin, ["gateway", "stop", "--force", "--json"], {
     timeout: 30000,
     windowsHide: true,
+    env: serviceFreeEnv(),
   }).then((r) => `${r.stdout || ""}${r.stderr || ""}`).catch((e) => `${e?.stdout || ""}${e?.stderr || ""}`);
+
 
   // OpenClaw owns the native service, so let its service command clean up its
   // own PID and registration. Never scrape a PID and kill an unrelated process.
@@ -225,7 +282,7 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
       log.ok("openclaw", "gateway and model already running");
       return true;
     }
-    log.warn("openclaw", "gateway answered but its model failed — repairing it once");
+    log.warn("openclaw", `${lastFailure} — repairing it once`);
   }
 
   if (!supportsOpenClawNode()) {
@@ -264,6 +321,8 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   // one foreground `gateway run` process. Stop the stale service once, then run
   // a fresh process directly and wait for its actual HTTP API.
   await stopUnhealthyService(bin);
+  await disableManagedService(bin);
+
 
   const port = Number(new URL(config.providers.openclaw.base).port || 18789);
 
@@ -302,10 +361,11 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
         shell: platform() === "win32",
         detached: false,
         env: {
-          ...process.env,
+          ...serviceFreeEnv(),
           OPENCLAW_GATEWAY_TOKEN: config.providers.openclaw.key || process.env.OPENCLAW_GATEWAY_TOKEN || "",
         },
       });
+
       child.stdout.on("data", (b) => {
         const line = b.toString().trim();
         if (!line) return;
@@ -336,8 +396,8 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
     await new Promise((r) => setTimeout(r, 1000));
     if (await pingBase()) {
       if (await verifyGatewayModel()) { lastFailure = ""; log.ok("openclaw", "gateway and model ready"); return true; }
-      lastFailure = "gateway started, but its configured Ollama model failed the live chat check";
-      log.warn("openclaw", "gateway started but its configured model failed the live check");
+      log.warn("openclaw", lastFailure);
+
       break;
     }
     if (i === 8 && (await discoverBase(bin))) return true;
