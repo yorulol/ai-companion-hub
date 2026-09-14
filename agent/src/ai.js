@@ -270,7 +270,7 @@ function ollamaWorkload(messages, mode) {
   return { name: "gpu-fast", model: p.model, numGpu: p.numGpu, numThread: p.numThread, numCtx: p.numCtx, numPredict: p.numPredict };
 }
 
-async function ollamaChatRequest(url, model, messages, numKeep = 0, workload) {
+async function ollamaChatRequest(url, model, messages, numKeep = 0, workload, overrides = {}) {
   const p = config.providers.ollama;
   const res = await fetch(`${url}/api/chat`, {
     method: "POST",
@@ -300,11 +300,61 @@ async function ollamaChatRequest(url, model, messages, numKeep = 0, workload) {
         top_p: 0.85,
         top_k: 40,
         stop: ["\nUser:", "\nSystem:"],
+        ...overrides,
       },
     }),
   });
   return res;
 }
+
+/** Pull usable text out of an Ollama chat body, tolerating reasoning-model shapes. */
+function ollamaText(body) {
+  const m = body?.message || {};
+  const raw = m.content ?? body?.response ?? "";
+  let text = String(raw).trim();
+  // Some models emit only a <think> block; strip the wrapper and keep what's left.
+  if (text.includes("<think>")) text = text.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/<\/?think>/g, "").trim();
+  if (!text && typeof m.thinking === "string") text = m.thinking.trim();
+  return text;
+}
+
+/**
+ * Ask Ollama and guarantee non-empty text, retrying with progressively more
+ * forgiving decode settings. Empty replies usually come from a stop-token hit
+ * on the very first token, a zero-length generation after a model reload, or a
+ * reasoning-only response — all recoverable without failing the whole turn.
+ */
+async function ollamaChatText(url, model, messages, numKeep, workload) {
+  const attempts = [
+    {},
+    { stop: [], temperature: 0.6, num_predict: Math.max(workload.numPredict, 384) },
+    { stop: [], temperature: 0.8, top_p: 0.95, repeat_penalty: 1.05, num_predict: Math.max(workload.numPredict, 512) },
+  ];
+  let lastErr = "";
+  for (let i = 0; i < attempts.length; i++) {
+    // Last-chance attempt: drop history entirely, keep system + latest user turn.
+    const payload = i === attempts.length - 1
+      ? [messages[0], ...[...messages].reverse().filter((m) => m.role === "user").slice(0, 1)]
+      : messages;
+    let res = await ollamaChatRequest(url, model, payload, numKeep, workload, attempts[i]);
+    if (res.status === 404) {
+      console.log(`[yoru] ollama model '${model}' missing — pulling now (one-time, can take a while)…`);
+      await pullOllamaModel(model);
+      res = await ollamaChatRequest(url, model, payload, numKeep, workload, attempts[i]);
+    }
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(`Ollama ${res.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`);
+    }
+    const body = await res.json().catch(() => null);
+    const text = ollamaText(body);
+    if (text) return { text, body };
+    lastErr = body?.done_reason ? `done_reason=${body.done_reason}` : "empty content";
+    console.log(`[ollama] empty reply (${lastErr}) — retry ${i + 1}/${attempts.length - 1}`);
+  }
+  throw new Error(`Ollama returned nothing (${lastErr})`);
+}
+
 
 async function callOllama(messages, mode) {
   const p = config.providers.ollama;
