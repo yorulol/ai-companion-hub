@@ -391,30 +391,17 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
   }
   const localMessages = [...compactSystem, ...conversation];
   const numKeep = Math.min(workload.numCtx - 128, Math.ceil(hardenedSystem.length / 3.5) + 64);
-  let res = await ollamaChatRequest(p.url, model, localMessages, numKeep, workload);
-  if (res.status === 404) {
-    // Model isn't installed — pull it on the spot, then retry once.
-    console.log(`[yoru] ollama model '${model}' missing — pulling now (one-time, can take a while)…`);
-    await pullOllamaModel(model);
-    res = await ollamaChatRequest(p.url, model, localMessages, numKeep, workload);
-  }
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Ollama ${res.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`);
-  }
-  const body = await res.json();
-  let text = body?.message?.content?.trim();
-  if (!text) throw new Error("Ollama returned nothing");
+  const { text: firstText, body } = await ollamaChatText(p.url, model, localMessages, numKeep, workload);
+  let text = firstText;
   const latestUser = [...conversation].reverse().find((message) => message.role === "user")?.content || "";
   const drifted = (SYSTEM_DATA_RE.test(text) && !SYSTEM_DATA_REQUEST_RE.test(latestUser)) || MODEL_DRIFT_RE.test(text);
   if (drifted) {
     const retryMessages = [compactSystem[0], { role: "user", content: latestUser }];
-    const retry = await ollamaChatRequest(p.url, model, retryMessages, numKeep, workload);
-    if (!retry.ok) throw new Error(`Ollama drift retry failed (${retry.status})`);
-    const retryBody = await retry.json();
-    text = retryBody?.message?.content?.trim();
+    const { text: retryText } = await ollamaChatText(p.url, model, retryMessages, numKeep, workload);
+    text = retryText;
     if (!text || (SYSTEM_DATA_RE.test(text) && !SYSTEM_DATA_REQUEST_RE.test(latestUser)) || MODEL_DRIFT_RE.test(text)) throw new Error("Ollama produced an unrelated or unsafe response twice");
   }
+
   const seconds = Number(body.eval_duration || 0) / 1e9;
   const tokens = Number(body.eval_count || 0);
   const rate = seconds > 0 && tokens > 0 ? tokens / seconds : 0;
