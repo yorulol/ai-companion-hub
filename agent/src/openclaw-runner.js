@@ -214,6 +214,36 @@ function killTree(proc) {
   } catch { try { proc.kill(); } catch {} }
 }
 
+/**
+ * OpenClaw treats inherited service-manager markers as proof that it is already
+ * running under systemd/launchd and then refuses to start in the foreground
+ * ("already running under systemd; waiting before retrying startup"). Yoru owns
+ * this process, so strip those markers from the child environment.
+ */
+function serviceFreeEnv() {
+  const env = { ...process.env };
+  const drop = [
+    "INVOCATION_ID", "JOURNAL_STREAM", "NOTIFY_SOCKET", "SYSTEMD_EXEC_PID",
+    "MANAGERPID", "LISTEN_PID", "LISTEN_FDS", "LISTEN_FDNAMES", "WATCHDOG_PID",
+    "WATCHDOG_USEC", "SERVICE_RESULT", "EXIT_CODE", "EXIT_STATUS",
+    "LAUNCHD_SOCKET", "XPC_SERVICE_NAME",
+    "OPENCLAW_SERVICE", "OPENCLAW_SERVICE_MANAGER", "OPENCLAW_MANAGED",
+    "OPENCLAW_RUN_AS_SERVICE", "OPENCLAW_SYSTEMD",
+  ];
+  for (const key of drop) delete env[key];
+  env.OPENCLAW_SERVICE_MANAGER = "none";
+  env.OPENCLAW_DISABLE_SERVICE_DETECTION = "1";
+  return env;
+}
+
+async function disableManagedService(bin) {
+  // Remove the stale managed registration so the foreground gateway is the only
+  // one OpenClaw knows about. Both commands are no-ops when nothing is managed.
+  for (const args of [["gateway", "stop", "--force", "--json"], ["gateway", "uninstall", "--json"]]) {
+    await run(bin, args, { timeout: 30000, windowsHide: true, env: serviceFreeEnv() }).catch(() => {});
+  }
+}
+
 async function stopUnhealthyService(bin) {
   const output = await run(bin, ["gateway", "stop", "--force", "--json"], {
     timeout: 30000,
