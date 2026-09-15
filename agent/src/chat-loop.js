@@ -2,7 +2,7 @@
 import { ask } from "./ai.js";
 import { extractToolCall, executeTool, stripToolArtifacts, toolSpecFor } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
-import { isDead, activateKillswitch, jumpstart, detectKillswitchIntent } from "./killswitch.js";
+import { isDead, activateKillswitch, jumpstart, detectKillswitchIntent, canControlKillswitch } from "./killswitch.js";
 
 function safeToolResult(call, result, isOwner) {
   if (call.tool === "system_info" && !isOwner && result?.result) {
@@ -42,25 +42,28 @@ function explicitlyRequested(call, text) {
  *                                    authorTag, authorId, selfId,
  *                                    mentioned: [{id,tag}], replyToTag }
  */
-export async function chat({ scope, userText, mode = "general", isOwner = false, context = null }) {
-  // Killswitch: if the agent is dead, only the owner can revive it.
+export async function chat({ scope, userText, mode = "general", isOwner = false, context = null, requesterId = null }) {
+  const controllerId = requesterId || context?.authorId || null;
+  const canControl = isOwner || canControlKillswitch(controllerId);
+
+  // Killswitch: if the agent is dead, only the owner or a killswitch admin can revive it.
   if (isDead()) {
-    if (isOwner && detectKillswitchIntent(userText) === "jumpstart") {
+    if (canControl && detectKillswitchIntent(userText) === "jumpstart") {
       const res = await jumpstart();
       const reply = res.restarted
-        ? "Jumpstart accepted. Systems coming back online. Give me a moment to reconnect."
+        ? "Killswitch released. Systems back online."
         : "Already awake.";
       return { reply, provider: "killswitch", model: "jumpstart", tools: [] };
     }
     return {
-      reply: "Killswitch is engaged. I'm offline until my master jumpstarts me.",
+      reply: "Killswitch is engaged. I'm offline until my master (or a killswitch admin) tells me to disable it.",
       provider: "killswitch", model: "dead", tools: [],
     };
   }
 
-  // Owner-triggered killswitch from any surface (panel, bot, selfbot).
-  if (isOwner && detectKillswitchIntent(userText) === "activate") {
-    const reply = "Activating my killswitch. I'm going dark — you'll need to jumpstart my system again to bring me back online.";
+  // Owner or killswitch-admin can trigger the killswitch from any surface.
+  if (canControl && detectKillswitchIntent(userText) === "activate") {
+    const reply = "Activating my killswitch. I'm going dark — tell me to disable my killswitch (or jumpstart me) to bring me back.";
     rememberMessage(scope, "user", userText);
     rememberMessage(scope, "assistant", reply);
     setTimeout(() => { activateKillswitch({ reason: "owner command", source: context?.platform || "chat" }).catch(() => {}); }, 250);

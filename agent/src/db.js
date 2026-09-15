@@ -119,6 +119,8 @@ const DEFAULT_SETTINGS = {
   persona: PERSONA_DEFAULT,
   provider: { preferOllama: false },
   discord: { defaultPrefix: config.discord.defaultPrefix },
+  // Extra Discord IDs (besides OWNER_DISCORD_ID) allowed to engage/release the killswitch.
+  killswitchAdmins: [],
 };
 
 export function getSettings() {
