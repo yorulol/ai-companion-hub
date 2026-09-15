@@ -1,65 +1,17 @@
-import { api, particles, MASCOT, render, toast, esc, OWNER_KEY } from "./common.js";
+import { api, particles, MASCOT, render, toast, esc } from "./common.js";
 
-/* ---------- owner sign-in (so the AI recognizes you as master here too) ---------- */
-async function promptOwnerSignIn() {
-  const current = localStorage.getItem(OWNER_KEY) || "";
-  const id = window.prompt(
-    "Enter your Discord user ID (must match OWNER_DISCORD_ID in agent/.env).\nLeave blank and press OK to sign out.",
-    current,
-  );
-  if (id === null) return;
-  const trimmed = id.trim();
-  if (!trimmed) {
-    localStorage.removeItem(OWNER_KEY);
-    toast("Signed out. YORU will treat you as a normal user here.");
-    updateOwnerBadge(false);
-    return;
-  }
-  try {
-    const res = await fetch("/api/owner/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-owner-id": trimmed },
-    });
-    if (!res.ok) throw new Error("That ID doesn't match OWNER_DISCORD_ID in agent/.env.");
-    localStorage.setItem(OWNER_KEY, trimmed);
-    toast("Owner recognized. YORU will comply with your commands here.");
-    updateOwnerBadge(true);
-  } catch (err) {
-    toast(err.message);
-  }
-}
-
-function updateOwnerBadge(isOwner) {
+/* The chat panel is local and single-user. The agent server reads
+   OWNER_DISCORD_ID from .env and treats /api/chat requests as owner
+   automatically — no sign-in required here. */
+function updateOwnerBadge() {
   const label = document.getElementById("agentText");
-  if (!label) return;
-  if (isOwner) label.textContent = "online · owner";
+  if (label) label.textContent = "online · owner";
 }
-
-async function checkOwnerOnBoot() {
-  const id = localStorage.getItem(OWNER_KEY);
-  if (!id) return;
-  try {
-    const res = await fetch("/api/owner/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-owner-id": id },
-    });
-    if (res.ok) updateOwnerBadge(true);
-    else localStorage.removeItem(OWNER_KEY);
-  } catch {}
-}
-checkOwnerOnBoot();
-
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = document.getElementById("ownerSignBtn");
-  if (btn) btn.addEventListener("click", promptOwnerSignIn);
-});
-// In case DOMContentLoaded already fired (script is a module, loaded async):
+updateOwnerBadge();
+// Hide the legacy sign-in button if the HTML still ships it.
 queueMicrotask(() => {
   const btn = document.getElementById("ownerSignBtn");
-  if (btn && !btn.dataset.bound) {
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", promptOwnerSignIn);
-  }
+  if (btn) btn.style.display = "none";
 });
 
 particles(document.getElementById("particles"));
