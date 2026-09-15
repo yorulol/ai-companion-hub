@@ -125,6 +125,22 @@
           <strong>Browser verification</strong>
           <p class="muted">Members run <code>!verify</code>, receive a private one-time browser link, and get the selected role after completion. Events are appended to <code>lookups/verify.txt</code>.</p>
         </div>
+        <div class="card">
+          <strong>Killswitch</strong>
+          <p class="muted">When engaged, YORU stops answering everywhere. The bot and alt account stay connected so you can tell it to disable its killswitch from Discord or the chat panel.</p>
+          <pre class="out" id="ksOut">—</pre>
+          <div class="row" style="margin-top:10px">
+            <button class="sm danger" id="ksEngage">Engage killswitch</button>
+            <button class="sm primary" id="ksRelease">Disable killswitch</button>
+          </div>
+          <div class="field" style="margin-top:16px">
+            <label>Killswitch admins (Discord IDs, one per line)</label>
+            <textarea id="ksAdmins" rows="4" placeholder="123456789012345678"></textarea>
+          </div>
+          <p class="muted">These IDs can engage and disable the killswitch by asking YORU — they get no other owner powers.</p>
+          <button class="sm" id="ksAdminsSave">Save admins</button>
+          <div id="ksAdminsOut" class="muted" style="margin-top:8px"></div>
+        </div>
       </section>
 
       <!-- ============ Providers ============ -->
