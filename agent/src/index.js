@@ -36,21 +36,23 @@ startOllama()
 
 const { isDead } = await import("./killswitch.js");
 if (isDead()) {
-  log.warn("killswitch", "engaged — bot and selfbot will stay offline until the owner jumpstarts from the panel");
-} else {
-  if (config.discord.botAutostart && config.discord.botToken) {
-    startBot()
-      .then(() => log.ok("bot", "discord bot online"))
-      .catch((err) => log.err("bot", `failed to start: ${err.message}`));
-  } else {
-    log.info("bot", "autostart off or no token — skipping");
-  }
+  log.warn("killswitch", "engaged — YORU stays silent, but the bot/alt stay connected so the owner can tell it to disable the killswitch");
+}
 
-  if (config.discord.selfbotAutostart && config.discord.userToken) {
-    startSelfbot()
-      .then(() => log.ok("selfbot", "alt account responder online"))
-      .catch((err) => log.err("selfbot", `failed to start: ${err.message}`));
-  }
+// The bot and selfbot always connect. The killswitch gate lives in chat-loop,
+// so a dead agent can still hear "disable your killswitch" from Discord.
+if (config.discord.botAutostart && config.discord.botToken) {
+  startBot()
+    .then(() => log.ok("bot", "discord bot online"))
+    .catch((err) => log.err("bot", `failed to start: ${err.message}`));
+} else {
+  log.info("bot", "autostart off or no token — skipping");
+}
+
+if (config.discord.selfbotAutostart && config.discord.userToken) {
+  startSelfbot()
+    .then(() => log.ok("selfbot", "alt account responder online"))
+    .catch((err) => log.err("selfbot", `failed to start: ${err.message}`));
 }
 
 process.on("SIGINT", () => {
