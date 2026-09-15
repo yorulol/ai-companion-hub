@@ -384,6 +384,51 @@ function initSecurity() {
   document.getElementById("securityGuild").onchange = loadSecurity;
   document.getElementById("securitySave").onclick = saveSecurity;
   loadSecurity();
+  initKillswitch();
+}
+
+/* ---------- killswitch ---------- */
+async function refreshKillswitch() {
+  const out = document.getElementById("ksOut");
+  if (!out) return;
+  try {
+    const s = await api("/api/owner/killswitch");
+    out.textContent = s.active
+      ? `ENGAGED — ${s.reason || "no reason"} (${s.source || "unknown"})${s.at ? ` at ${new Date(s.at).toLocaleString()}` : ""}`
+      : "Not engaged. YORU is responding normally.";
+  } catch (err) { out.textContent = err.message; }
+}
+async function loadKillswitchAdmins() {
+  const box = document.getElementById("ksAdmins");
+  if (!box) return;
+  try { box.value = ((await api("/api/owner/killswitch-admins")).admins || []).join("\n"); }
+  catch {}
+}
+function initKillswitch() {
+  const engage = document.getElementById("ksEngage");
+  if (!engage || engage.dataset.bound) return;
+  engage.dataset.bound = "1";
+  engage.onclick = async () => {
+    try { await api("/api/owner/killswitch", { method: "POST", body: { reason: "owner panel" } }); toast("Killswitch engaged."); }
+    catch (err) { toast(err.message); }
+    refreshKillswitch();
+  };
+  document.getElementById("ksRelease").onclick = async () => {
+    try { await api("/api/owner/jumpstart", { method: "POST" }); toast("Killswitch disabled."); }
+    catch (err) { toast(err.message); }
+    refreshKillswitch();
+  };
+  document.getElementById("ksAdminsSave").onclick = async () => {
+    const out = document.getElementById("ksAdminsOut");
+    const admins = document.getElementById("ksAdmins").value.split(/\s|,/).map((s) => s.trim()).filter(Boolean);
+    try {
+      const r = await api("/api/owner/killswitch-admins", { method: "POST", body: { admins } });
+      document.getElementById("ksAdmins").value = (r.admins || []).join("\n");
+      out.innerHTML = `<span style="color:var(--ok)">Saved ${(r.admins || []).length} admin ID(s).</span>`;
+    } catch (err) { out.innerHTML = `<span style="color:var(--bad)">${esc(err.message)}</span>`; }
+  };
+  refreshKillswitch();
+  loadKillswitchAdmins();
 }
 async function loadSecurity() {
   const select = document.getElementById("securityGuild");
