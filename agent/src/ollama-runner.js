@@ -64,9 +64,8 @@ export async function startOllama() {
     try {
       const { ensureUfModel } = await import("./uf-model.js");
       const r = await ensureUfModel({ url: p.url, log: (m) => log.info("uf", m) });
-      if (r.created) log.ok("uf", `${p.uf.model} built from UF/Modelfile`);
-      else installed.push(p.uf.model);
-      if (r.created) installed.push(p.uf.model);
+      if (r.created) { log.ok("uf", `${p.uf.model} built from UF/Modelfile`); installed.push(p.uf.model); }
+      else if (r.reason !== "exists") log.warn("uf", `variant not built (${r.reason})`);
     } catch (e) { log.warn("uf", `could not build ${p.uf.model}: ${e.message}`); }
   }
 
