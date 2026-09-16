@@ -58,6 +58,17 @@ export async function startOllama() {
   const installed = await listInstalled();
   const need = [...new Set([p.model, p.reasoningModel, p.codeModel])].filter((m) => !installed.includes(m));
 
+  // UF variant enabled but not built yet (e.g. ollama was offline during
+  // npm install): build it now from agent/UF/Modelfile.
+  if (p.uf?.enabled && !installed.includes(p.uf.model) && !installed.includes(`${p.uf.model}:latest`)) {
+    try {
+      const { ensureUfModel } = await import("./uf-model.js");
+      const r = await ensureUfModel({ url: p.url, log: (m) => log.info("uf", m) });
+      if (r.created) { log.ok("uf", `${p.uf.model} built from UF/Modelfile`); installed.push(p.uf.model); }
+      else if (r.reason !== "exists") log.warn("uf", `variant not built (${r.reason})`);
+    } catch (e) { log.warn("uf", `could not build ${p.uf.model}: ${e.message}`); }
+  }
+
   // Pre-warm the chat model into VRAM so the first chat reply isn't slow.
   if (!need.includes(p.model)) {
     try {

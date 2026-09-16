@@ -267,7 +267,8 @@ function ollamaWorkload(messages, mode) {
       numPredict: Math.max(p.numPredict, 320),
     };
   }
-  return { name: "gpu-fast", model: p.model, numGpu: p.numGpu, numThread: p.numThread, numCtx: p.numCtx, numPredict: p.numPredict };
+  // Fast chat path: use the UF variant (qwen-yoru) when enabled, else the plain model.
+  return { name: "gpu-fast", model: p.uf?.enabled ? p.uf.model : p.model, numGpu: p.numGpu, numThread: p.numThread, numCtx: p.uf?.enabled ? Math.max(p.numCtx, 4096) : p.numCtx, numPredict: p.numPredict };
 }
 
 async function ollamaChatRequest(url, model, messages, numKeep = 0, workload, overrides = {}) {
