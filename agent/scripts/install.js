@@ -21,6 +21,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { supportsOpenClawNode } from "../src/openclaw-runtime.js";
+import { UF, writeUfModelfile, ufModelfileContents } from "../src/uf-model.js";
 
 const run = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -283,6 +284,62 @@ function ollamaInstallHint() {
     warn("Ollama not detected. Install it:");
     console.log(`${C.grey}            curl -fsSL https://ollama.com/install.sh | sh${C.reset}`);
     console.log(`${C.grey}            ollama serve   ${C.dim}# then re-run: npm run setup${C.reset}`);
+  }
+}
+
+// ─────────────────────────── UF custom variant ───────────────────────────
+
+/**
+ * Builds the qwen-yoru variant from agent/UF/Modelfile — the automated
+ * equivalent of `ollama create qwen-yoru -f agent/UF/Modelfile`. Pulls the
+ * base model (qwen2.5:1.5b) when Ollama is up, creates the variant, and saves
+ * the OLLAMA_UF_* settings to .env. Flip OLLAMA_UF_ENABLED=true to chat with
+ * the variant, false to use the plain base model.
+ */
+async function setupUfVariant() {
+  console.log("");
+  console.log(`${C.purple}  uf variant ${C.reset}${C.bold}${UF.model}${C.reset} ${C.grey}(from ${UF.baseModel})${C.reset}`);
+  try {
+    const file = await writeUfModelfile();
+    ok(`Modelfile written → ${path.relative(ROOT, file)}`);
+  } catch (e) {
+    warn(`could not write UF Modelfile: ${e.message}`);
+    return;
+  }
+  // Preserve an existing OLLAMA_UF_ENABLED choice; default to off.
+  const envText = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
+  const existing = envText.match(/^OLLAMA_UF_ENABLED=(.*)$/m)?.[1]?.trim();
+  await patchEnv({
+    OLLAMA_UF_ENABLED: existing || "false",
+    OLLAMA_UF_BASE_MODEL: UF.baseModel,
+    OLLAMA_UF_MODEL: UF.model,
+    OLLAMA_UF_MODELFILE: "agent/UF/Modelfile",
+  });
+  ok("OLLAMA_UF_* settings written to .env");
+
+  if (!(await ollamaReachable())) {
+    info("ollama offline — Modelfile saved; run `npm run setup` with `ollama serve` running to build the variant");
+    return;
+  }
+  const have = await installedModels();
+  const has = (n) => have.includes(n) || have.includes(`${n}:latest`);
+  if (!has(UF.baseModel)) {
+    try { await pull(UF.baseModel); }
+    catch (e) { warn(`could not pull ${UF.baseModel}: ${e.message} — variant build skipped`); return; }
+  }
+  if (has(UF.model)) { ok(`${UF.model} variant already built`); return; }
+  info(`building ${C.bold}${UF.model}${C.reset}${C.grey} from UF/Modelfile…`);
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/create`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: UF.model, modelfile: ufModelfileContents(), stream: false }),
+      signal: AbortSignal.timeout(10 * 60 * 1000),
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
+    ok(`${UF.model} built — set OLLAMA_UF_ENABLED=true to chat with it`);
+  } catch (e) {
+    warn(`variant build failed: ${e.message} — retry with: npm run setup`);
   }
 }
 
