@@ -572,6 +572,9 @@ async function main() {
     ollamaInstallHint();
   }
 
+  try { await setupUfVariant(); }
+  catch (e) { warn(`uf variant setup skipped: ${e.message}`); }
+
   try { await setupOpenclaw(specs); }
   catch (e) { warn(`openclaw setup skipped: ${e.message}`); }
 
