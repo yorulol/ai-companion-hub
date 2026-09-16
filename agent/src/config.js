@@ -61,6 +61,14 @@ export const config = {
       numGpu: integer(process.env.OLLAMA_NUM_GPU, 999, 0, 999),
       numThread: integer(process.env.OLLAMA_NUM_THREAD, 0, 0, 64),
       balancedGpuLayers: integer(process.env.OLLAMA_BALANCED_GPU_LAYERS, 24, 0, 999),
+      // Optional custom variant built from agent/UF/Modelfile (npm run setup).
+      // When enabled, chat uses OLLAMA_UF_MODEL instead of OLLAMA_MODEL.
+      uf: {
+        enabled: bool(process.env.OLLAMA_UF_ENABLED, false),
+        baseModel: process.env.OLLAMA_UF_BASE_MODEL || "qwen2.5:1.5b",
+        model: process.env.OLLAMA_UF_MODEL || "qwen-yoru",
+        modelfile: process.env.OLLAMA_UF_MODELFILE || "agent/UF/Modelfile",
+      },
     },
     openai: {
       enabled: bool(process.env.OPENAI_ENABLED, false),
