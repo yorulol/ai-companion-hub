@@ -27,8 +27,12 @@ export const config = {
 
   panels: {
     enabled: bool(process.env.PANELS_ENABLED, true),
-    chatPort: Number(process.env.CHAT_PANEL_PORT || 8788),
-    ownerPort: Number(process.env.OWNER_PANEL_PORT || 8789),
+    // ONE merged panel (chat + owner + workspace hub) lives on this port.
+    chatPort: Number(process.env.CHAT_PANEL_PORT || process.env.PANEL_PORT || 8788),
+    // Dedicated WorkSpace panel port (also reachable inside the merged panel).
+    workspacePort: Number(process.env.WORKSPACE_PANEL_PORT || process.env.OWNER_PANEL_PORT || 8790),
+    // Legacy alias so older code reading ownerPort keeps working.
+    get ownerPort() { return this.workspacePort; },
     siteUrl: (process.env.SITE_URL || "http://localhost:8080").replace(/\/$/, ""),
   },
 
