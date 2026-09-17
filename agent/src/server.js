@@ -22,7 +22,7 @@ import { listActivity, logActivity } from "./activity.js";
 import { attachRoutes as verifyRoutes } from "./verify.js";
 import { getAutomod, setAutomod } from "./automod.js";
 import { startWorkspaceSession, getWorkspaceSession, stopWorkspaceSession, workspaceInfo, WORKSPACE_HOME } from "./workspace.js";
-import { joinVoiceChannel, leaveVoiceChannel, addMeetingNote, latestMeetingRecap, voiceStatus } from "./voice.js";
+import { joinVoiceChannel, leaveVoiceChannel, addMeetingNote, latestMeetingRecap, voiceStatus, listCallFiles } from "./voice.js";
 
 const json = (res, code, body) => {
   res.writeHead(code, {
