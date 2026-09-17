@@ -678,7 +678,9 @@ async function main() {
   banner();
 
   checkNode();
+  await ensureDependencies();
   verifyNativeModules();
+
 
   const created = await ensureEnv();
   ok(created ? ".env created from .env.example" : ".env found (existing values preserved)");
