@@ -576,6 +576,9 @@ async function main() {
     ollamaInstallHint();
   }
 
+  try { await setupCallsFolder(); }
+  catch (e) { warn(`calls folder setup skipped: ${e.message}`); }
+
   try { await setupUfVariant(); }
   catch (e) { warn(`uf variant setup skipped: ${e.message}`); }
 
