@@ -360,10 +360,13 @@ function ollamaText(body) {
  * reasoning-only response — all recoverable without failing the whole turn.
  */
 async function ollamaChatText(url, model, messages, numKeep, workload) {
+  // Retries stay inside the latency budget — a recovery attempt must not turn a
+  // 5s reply into a 40s one.
+  const retryPredict = budgetPredict(model, Math.max(workload.numPredict, 256));
   const attempts = [
     {},
-    { stop: [], temperature: 0.6, num_predict: Math.max(workload.numPredict, 384) },
-    { stop: [], temperature: 0.8, top_p: 0.95, repeat_penalty: 1.05, num_predict: Math.max(workload.numPredict, 512) },
+    { stop: [], temperature: 0.6, num_predict: retryPredict },
+    { stop: [], temperature: 0.8, top_p: 0.95, repeat_penalty: 1.05, num_predict: retryPredict },
   ];
   let lastErr = "";
   for (let i = 0; i < attempts.length; i++) {
