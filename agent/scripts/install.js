@@ -691,9 +691,21 @@ async function setupCallsFolder() {
   );
   ok("agent/calls folder ready (PDF transcripts + call recordings)");
 
+  // Recording is a bonus feature — if its audio extras couldn't install on
+  // this machine, disable it cleanly and keep going. Everything else
+  // (chat, providers, Discord bot/selfbot, owner panel) works regardless.
+  if (!recordingCapable()) {
+    await patchEnv({ CALL_RECORDING_ENABLED: "false" });
+    warn("call recording disabled — audio extras didn't install on this machine");
+    warn("  the agent works normally without it; re-run `npm install` later to retry");
+    return;
+  }
+
   await patchEnv({ CALL_RECORDING_ENABLED: "true" });
-  await setupFfmpeg();
-  await setupStt();
+  try { await setupFfmpeg(); }
+  catch (e) { warn(`ffmpeg setup skipped: ${e.message} — calls still record/transcribe`); }
+  try { await setupStt(); }
+  catch (e) { warn(`speech-to-text setup skipped: ${e.message} — recordings still saved`); }
 }
 
 
