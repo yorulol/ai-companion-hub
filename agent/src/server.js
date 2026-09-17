@@ -424,6 +424,7 @@ const ROUTES = {
   "POST /api/owner/voice/leave": async (req) => { requireOwner(req); return await leaveVoiceChannel(); },
   "POST /api/owner/voice/note": async (req) => { requireOwner(req); return addMeetingNote((await readBody(req)).text); },
   "GET /api/owner/voice/recap": async (req) => { requireOwner(req); return await latestMeetingRecap(); },
+  "GET /api/owner/voice/calls": async (req) => { requireOwner(req); return await listCallFiles(); },
 };
 
 function match(method, url) {
