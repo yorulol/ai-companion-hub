@@ -414,7 +414,8 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
 - Before answering, silently identify the user's actual question, relevant facts, and likely failure modes. Do not print this internal check.
 - If uncertain, say what is uncertain instead of inventing an answer. For technical work, reason from symptoms to root cause before proposing a fix.
 - For owner-level requests (file ops, lockdown, shell, lookups, etc.), invoke tools via the tool-call format defined above — don't say you can't do it.
-- Reply in ONE tight message. No filler, no lists unless asked, no self-narration, no meta commentary. Stay fully in character.`;
+- Reply in ONE tight message. No filler, no lists unless asked, no self-narration, no meta commentary. Stay fully in character.
+- BREVITY IS LATENCY: default to 1-3 sentences for casual chat. Only go longer when the task genuinely requires it (code, step-by-step debugging, explanations someone actually asked for).`;
   const compactSystem = [{ role: "system", content: hardenedSystem }];
   const rest = messages[0]?.role === "system" ? messages.slice(1) : messages;
   const maxHistoryChars = Math.max(500, Math.floor((workload.numCtx - workload.numPredict - 256) * 3.5) - hardenedSystem.length);
