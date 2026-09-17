@@ -557,7 +557,9 @@ async function main() {
     OLLAMA_NUM_GPU: pickedModels.numGpu,
     OLLAMA_NUM_THREAD: pickedModels.threads,
     OLLAMA_BALANCED_GPU_LAYERS: pickedModels.effectiveVram >= 5.5 ? 24 : 12,
-    OLLAMA_HISTORY_MESSAGES: pickedModels.ctx >= 4096 ? 8 : 4,
+    OLLAMA_HISTORY_MESSAGES: pickedModels.ctx >= 4096 ? 6 : 3,
+    OLLAMA_LATENCY_BUDGET_MS: 9000,
+    OLLAMA_MIN_PREDICT: 64,
   });
   ok("tuned Ollama settings written to .env");
 
