@@ -64,6 +64,27 @@ function resolveHome(rel = ".") {
   return full;
 }
 
+/** Panel file browser helpers (same confinement as the agent tools). */
+export async function listHome(rel = ".") {
+  const dir = resolveHome(rel);
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  return entries
+    .filter((e) => !["node_modules", ".git"].includes(e.name))
+    .map((e) => ({ name: e.name, dir: e.isDirectory(), path: path.relative(WORKSPACE_HOME, path.join(dir, e.name)) || "." }))
+    .sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+}
+
+export async function readHomeFile(rel) {
+  return await fs.readFile(resolveHome(rel), "utf8");
+}
+
+export async function writeHomeFile(rel, content) {
+  const file = resolveHome(rel);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, String(content ?? ""), "utf8");
+  return { ok: true };
+}
+
 async function runWsTool(call) {
   const { tool, args = {} } = call;
   switch (tool) {

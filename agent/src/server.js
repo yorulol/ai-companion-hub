@@ -380,6 +380,15 @@ const ROUTES = {
   },
   "GET /api/owner/guilds/:id/welcome": async (req, id) => { requireOwner(req); return getWelcome(id); },
   "POST /api/owner/guilds/:id/welcome": async (req, id) => { requireOwner(req); return setWelcome(id, await readBody(req)); },
+  "GET /api/owner/guilds/:id/reaction-roles": async (req, id) => { requireOwner(req); return { items: listReactionRoles(id) }; },
+  "POST /api/owner/guilds/:id/reaction-roles": async (req, id) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (b.delete) deleteReactionRole(id, b.message_id, b.emoji);
+    else setReactionRole(id, b.message_id, b.emoji, b.role_id);
+    return { items: listReactionRoles(id) };
+  },
+
   // ---- WorkSpace (multi-agent: YORU on Ollama + ACE on OpenRouter/OpenClaw) ----
   "GET /api/workspace/info": async () => workspaceInfo(),
   "POST /api/workspace/run": async (req) => {
@@ -388,9 +397,21 @@ const ROUTES = {
   },
   "GET /api/workspace/session/:id": async (req, id) => getWorkspaceSession(id),
   "POST /api/workspace/stop/:id": async (req, id) => stopWorkspaceSession(id),
+  // File browser confined to the agent home folder.
   "POST /api/workspace/fs/list": async (req) => {
-    const { resolveWorkspacePath } = await import("./workspace.js");
-    return { items: [] };
+    const b = await readBody(req);
+    const { listHome } = await import("./workspace.js");
+    return { items: await listHome(b.path || ".") };
+  },
+  "POST /api/workspace/fs/read": async (req) => {
+    const b = await readBody(req);
+    const { readHomeFile } = await import("./workspace.js");
+    return { content: await readHomeFile(b.path) };
+  },
+  "POST /api/workspace/fs/write": async (req) => {
+    const b = await readBody(req);
+    const { writeHomeFile } = await import("./workspace.js");
+    return await writeHomeFile(b.path, b.content);
   },
 
   // ---- Voice meetings via the alt account (owner only / loopback panels) ----
