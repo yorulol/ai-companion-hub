@@ -554,7 +554,32 @@ async function ensureDependencies() {
   const missingOpt = optional.filter((name) => {
     try { requireFrom.resolve(name); return false; } catch { return true; }
   });
-  if (missingOpt.length) info(`optional extras unavailable here: ${missingOpt.join(", ")} (fallbacks in use)`);
+  if (missingOpt.length) {
+    info(`optional extras unavailable here: ${missingOpt.join(", ")} (fallbacks in use)`);
+    // Best-effort retry, one package at a time — a broken audio package must
+    // never take down the rest of the install.
+    for (const name of missingOpt) {
+      try {
+        execFileSync("npm", ["install", "--no-audit", "--no-fund", "--no-save", name], {
+          cwd: ROOT, stdio: "ignore", timeout: 10 * 60 * 1000,
+        });
+        requireFrom.resolve(name);
+        ok(`optional extra recovered: ${name}`);
+      } catch {
+        warn(`skipping optional extra: ${name} — the agent runs fine without it`);
+      }
+    }
+  }
+}
+
+/** Packages needed for call recording/transcription specifically. */
+const RECORDING_PACKAGES = ["@discordjs/voice", "prism-media"];
+
+/** True when the audio-capture extras actually loaded. */
+function recordingCapable() {
+  return RECORDING_PACKAGES.every((name) => {
+    try { requireFrom.resolve(name); return true; } catch { return false; }
+  });
 }
 
 /** Package-manager install attempts for ffmpeg, per platform. */
