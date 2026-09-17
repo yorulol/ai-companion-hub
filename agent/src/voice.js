@@ -92,8 +92,27 @@ export async function joinVoiceChannel(channelIdOrName) {
   };
   client.on("voiceStateUpdate", current.onVoiceState);
 
-  logActivity("selfbot", `joined voice channel #${channel.name} for meeting notes`);
-  return { ok: true, channel: channel.name, guild: current.guildName };
+  // Start recording every speaker (own WAV per utterance, tagged with user + ID).
+  try {
+    current.recorder = await startCallRecorder(connection, client, {
+      onError: (e) => current?.events.push({ at: stamp(), text: `recorder warning: ${e.message}` }),
+    });
+    if (current.recorder.unsupported) {
+      current.events.push({ at: stamp(), text: "audio capture unavailable — notes-only mode" });
+    }
+  } catch (e) {
+    current.recorder = null;
+    current.events.push({ at: stamp(), text: `audio capture failed: ${e.message}` });
+  }
+
+  logActivity("selfbot", `joined voice channel #${channel.name} — recording + notes`);
+  return {
+    ok: true,
+    channel: channel.name,
+    guild: current.guildName,
+    recording: !!current.recorder && !current.recorder.unsupported,
+    transcription: sttAvailable(),
+  };
 }
 
 /** Owner marks down a timestamped note during the meeting. */
