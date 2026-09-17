@@ -84,12 +84,44 @@ async function apiTranscribe(file, cfg) {
   return String(body.text || "").trim();
 }
 
+/** Local whisper through @huggingface/transformers — no keys, no server. */
+let localPipe = null;
+async function localTranscribe(file, cfg) {
+  if (localPipe === false) return "";
+  if (!localPipe) {
+    try {
+      const { pipeline } = await import("@huggingface/transformers");
+      localPipe = await pipeline("automatic-speech-recognition", cfg.model);
+    } catch {
+      localPipe = false;
+      return "";
+    }
+  }
+  const { resolveFfmpeg } = await import("./call-recorder.js");
+  const bin = await resolveFfmpeg();
+  if (!bin) return "";
+  const pcm = await new Promise((resolve, reject) => {
+    const p = spawn(bin, ["-hide_banner", "-loglevel", "error", "-i", file,
+      "-ac", "1", "-ar", "16000", "-f", "f32le", "pipe:1"], { stdio: ["ignore", "pipe", "ignore"] });
+    const chunks = [];
+    p.stdout.on("data", (d) => chunks.push(d));
+    p.on("error", reject);
+    p.on("close", () => resolve(Buffer.concat(chunks)));
+  });
+  if (!pcm.length) return "";
+  const audio = new Float32Array(pcm.buffer, pcm.byteOffset, Math.floor(pcm.length / 4));
+  const out = await localPipe(audio, { chunk_length_s: 30, stride_length_s: 5 });
+  return String(out?.text || "").trim();
+}
+
 /** Transcribes one utterance WAV. Returns "" when STT is off or fails. */
 export async function transcribeFile(file) {
   const cfg = sttConfig();
   if (cfg.mode === "off") return "";
   try {
-    return cfg.mode === "whisper-cpp" ? await whisperCpp(file, cfg) : await apiTranscribe(file, cfg);
+    if (cfg.mode === "whisper-cpp") return await whisperCpp(file, cfg);
+    if (cfg.mode === "api") return await apiTranscribe(file, cfg);
+    return await localTranscribe(file, cfg);
   } catch { return ""; }
 }
 
@@ -99,9 +131,12 @@ export async function transcribeFile(file) {
  */
 export async function transcribeUtterances(utterances, { concurrency = 3, onProgress } = {}) {
   if (!sttAvailable() || !utterances.length) return [];
+  const local = sttConfig().mode === "local";
+  const lanes = local ? 1 : concurrency; // local model is single-threaded
   const lines = [];
   let i = 0;
-  const workers = Array.from({ length: Math.min(concurrency, utterances.length) }, async () => {
+  const workers = Array.from({ length: Math.min(lanes, utterances.length) }, async () => {
+
     while (i < utterances.length) {
       const idx = i++;
       const u = utterances[idx];
