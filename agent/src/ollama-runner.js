@@ -58,32 +58,36 @@ export async function startOllama() {
   const installed = await listInstalled();
   const need = [...new Set([p.model, p.reasoningModel, p.codeModel])].filter((m) => !installed.includes(m));
 
-  // UF variant enabled but not built yet (e.g. ollama was offline during
-  // npm install): build it now from agent/UF/Modelfile.
-  if (p.uf?.enabled && !installed.includes(p.uf.model) && !installed.includes(`${p.uf.model}:latest`)) {
+  // UF variant enabled: (re)build from agent/UF/Modelfile whenever it's missing
+  // or its tuning changed — ensureUfModel compares a content hash itself.
+  if (p.uf?.enabled) {
     try {
       const { ensureUfModel } = await import("./uf-model.js");
       const r = await ensureUfModel({ url: p.url, log: (m) => log.info("uf", m) });
-      if (r.created) { log.ok("uf", `${p.uf.model} built from UF/Modelfile`); installed.push(p.uf.model); }
-      else if (r.reason !== "exists") log.warn("uf", `variant not built (${r.reason})`);
+      if (r.created) {
+        log.ok("uf", `${p.uf.model} ${r.rebuilt ? "rebuilt with new speed tuning" : "built"} from UF/Modelfile`);
+        if (!installed.includes(p.uf.model)) installed.push(p.uf.model);
+      } else if (r.reason !== "exists") log.warn("uf", `variant not built (${r.reason})`);
     } catch (e) { log.warn("uf", `could not build ${p.uf.model}: ${e.message}`); }
   }
 
-  // Pre-warm the chat model into VRAM so the first chat reply isn't slow.
-  if (!need.includes(p.model)) {
+  // Pre-warm the active chat model into VRAM so the first reply isn't slow.
+  // A cold load costs 10-30s — far past the latency budget.
+  const warmModel = p.uf?.enabled ? p.uf.model : p.model;
+  if (!need.includes(warmModel)) {
     try {
       await fetch(`${p.url}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          model: p.model,
-          messages: [],
+          model: warmModel,
+          messages: [{ role: "user", content: "hi" }],
           keep_alive: "24h",
           options: { num_ctx: p.numCtx, num_predict: 1, num_gpu: p.numGpu, num_batch: p.numBatch },
         }),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(180_000),
       });
-      log.ok("ollama", `${p.model} pre-loaded into memory`);
+      log.ok("ollama", `${warmModel} pre-loaded into memory (target reply time ≤ ${Math.round(p.latencyBudgetMs / 1000)}s)`);
     } catch { /* non-fatal */ }
   }
 
