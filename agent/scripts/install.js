@@ -549,11 +549,8 @@ async function setupCallsFolder() {
 
   await patchEnv({ CALL_RECORDING_ENABLED: "true", STT_ENABLED: "true" });
 
-  const ffmpeg = await new Promise((resolve) => {
-    const p = spawn("ffmpeg", ["-version"], { stdio: "ignore" });
-    p.on("error", () => resolve(false));
-    p.on("close", (c) => resolve(c === 0));
-  });
+  let ffmpeg = false;
+  try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); ffmpeg = true; } catch {}
   if (ffmpeg) ok("ffmpeg detected — call audio will be mixed into one mp3");
   else warn("ffmpeg not found — install it or calls get a transcript only (no mp3)");
 
