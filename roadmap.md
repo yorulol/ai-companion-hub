@@ -1,12 +1,8 @@
 # Roadmap
 
-- [x] Fix OpenClaw request routing and add a live model readiness check
-- [x] Keep a rotating 15-model OpenRouter pool with five-minute refresh and immediate reserve replacement
-- [x] Prevent Ollama from leaking system/spec data and degrading over long chats
-- [x] Add adaptive Ollama CPU/RAM/GPU routing and stronger local reasoning
-- [x] Prevent Ollama tool/system-data drift and unauthorized owner actions
-- [x] Add owner-prefix `class` commands to bot and alt account
-- [x] Replace destructive lockdown encryption with a safe emergency lock
-- [x] Validate owner authorization, Ollama profiles, and command registry
-- [x] Make OpenClaw readiness require a successful live chat and surface exact startup failures
-- [x] Stop OpenClaw foreground/systemd startup conflicts and repair model readiness checks
+- [x] Merge chat + owner panels into ONE panel on ONE localhost port (hub.html on 8788; chat/owner/workspace embedded), full redesign (black/white glossy glass, cursor-following particles, animated dropdowns, glossy buttons, dropdowns layered above content)
+- [x] Provider services (Ollama :11434, OpenClaw :18789, OpenRouter) reachable from the new panel (Services dropdown)
+- [x] Panels auto-owner: loopback requests trusted in server.js; owner gate auto-unlocks; only alt account / Discord bot verify owner ID
+- [x] Selfbot: owner voice commands joinvoice/leavevoice/meetingnote/meetingnotes + Meetings controls in the panel; recap saved to agent/data/meetings/
+- [x] Selfbot: never respond to @everyone / @here pings
+- [x] WorkSpace panel (8789, and embedded in the hub): YORU (Ollama default) + ACE (OpenRouter/OpenClaw) collaborate; home auto-detected as agent/; both can edit their own code files via confined tools

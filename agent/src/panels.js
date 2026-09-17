@@ -1,12 +1,17 @@
 /**
- * Two self-contained panels, each on its own port:
- *   - Chat panel   (default 8788) -> agent/panel/index.html
- *   - Owner panel  (default 8789) -> agent/panel/owner.html
+ * Panel hosting. Everything is static HTML/CSS/JS bundled INSIDE the agent
+ * folder, so this runs anywhere Node runs with no frontend build step.
  *
- * Both are pure static HTML/CSS/JS bundled INSIDE the agent folder, so this
- * runs anywhere Node runs — your laptop, a VPS, a raspberry pi — with no
- * separate frontend build step. They talk to the same-origin agent service
- * on PORT for every /api/* call.
+ *   - Main panel   (default 8788) -> agent/panel/hub.html
+ *       ONE merged panel: chat, owner controls, services, and the workspace
+ *       all in a single tabbed shell. The legacy standalone pages are still
+ *       served at /chat (index.html) and /owner (owner.html) because the hub
+ *       embeds them, and they work standalone too.
+ *   - WorkSpace    (default 8790) -> agent/panel/workspace.html
+ *       Multi-agent panel where YORU (Ollama) and ACE (OpenRouter/OpenClaw)
+ *       collaborate. Also embedded inside the main panel.
+ *
+ * Every /api/* call is proxied to the same-origin agent service on PORT.
  */
 import http from "node:http";
 import { promises as fs } from "node:fs";
@@ -79,7 +84,19 @@ function notFound(res) {
   res.end("Not found");
 }
 
-function startPanel({ name, port, entryHtml, blockOwner }) {
+// Friendly page routes -> bundled HTML files.
+const PAGES = {
+  "/chat": "index.html",
+  "/index.html": "index.html",
+  "/owner": "owner.html",
+  "/owner.html": "owner.html",
+  "/workspace": "workspace.html",
+  "/workspace.html": "workspace.html",
+  "/hub": "hub.html",
+  "/hub.html": "hub.html",
+};
+
+function startPanel({ name, port, entryHtml }) {
   const server = http.createServer(async (req, res) => {
     try {
       const [urlPath] = req.url.split("?");
@@ -89,23 +106,26 @@ function startPanel({ name, port, entryHtml, blockOwner }) {
         if (urlPath === "/api/panel-info") {
           res.writeHead(200, { "content-type": "application/json" });
           return res.end(JSON.stringify({
+            port: config.panels.chatPort,
             chatPort: config.panels.chatPort,
-            ownerPort: config.panels.ownerPort,
+            ownerPort: config.panels.workspacePort, // legacy field name
+            workspacePort: config.panels.workspacePort,
             name,
           }));
         }
         return await forwardApi(req, res);
       }
 
-      // Owner route is only served on the owner port.
-      if (blockOwner && (urlPath === "/owner" || urlPath === "/owner.html")) {
-        res.writeHead(302, { location: `http://${req.headers.host?.split(":")[0] || "localhost"}:${config.panels.ownerPort}/` });
-        return res.end();
+      // Entry page.
+      if (urlPath === "/" || urlPath === "/index") {
+        const file = path.join(PANEL_DIR, entryHtml);
+        if (await serveStatic(res, file)) return;
+        return notFound(res);
       }
 
-      // Entry pages.
-      if (urlPath === "/" || urlPath === "/index.html" || urlPath === "/owner" || urlPath === "/owner.html") {
-        const file = path.join(PANEL_DIR, entryHtml);
+      // Named pages.
+      if (PAGES[urlPath]) {
+        const file = path.join(PANEL_DIR, PAGES[urlPath]);
         if (await serveStatic(res, file)) return;
         return notFound(res);
       }
@@ -130,6 +150,6 @@ function startPanel({ name, port, entryHtml, blockOwner }) {
 
 export function startPanels() {
   if (!config.panels.enabled) return;
-  startPanel({ name: "YORU chat panel", port: config.panels.chatPort, entryHtml: "index.html", blockOwner: true });
-  startPanel({ name: "YORU owner panel", port: config.panels.ownerPort, entryHtml: "owner.html", blockOwner: false });
+  startPanel({ name: "YORU panel", port: config.panels.chatPort, entryHtml: "hub.html" });
+  startPanel({ name: "YORU WorkSpace", port: config.panels.workspacePort, entryHtml: "workspace.html" });
 }

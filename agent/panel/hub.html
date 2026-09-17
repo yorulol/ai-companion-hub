@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>YORU · Panel</title>
+<meta name="description" content="YORU — one merged panel: chat, owner controls, services, and the multi-agent WorkSpace." />
+<link rel="stylesheet" href="/assets/panel.css" />
+</head>
+<body>
+<canvas id="particles"></canvas>
+
+<div class="hub-shell">
+  <header class="bar glass">
+    <div class="brand">
+      <div id="miniMascot" style="width:44px"></div>
+      <div><h1>YORU</h1><small>control panel</small></div>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill"><span id="dotAgent" class="dot wait"></span><span id="agentText">connecting…</span></span>
+    <span class="pill"><span id="dotBot" class="dot"></span> bot</span>
+    <span class="pill"><span id="dotSelf" class="dot"></span> alt</span>
+  </header>
+
+  <nav class="hub-nav glass grouped-tabs" id="hubNav">
+    <button data-view="chat" aria-pressed="true">Chat</button>
+    <button data-view="owner" aria-pressed="false">Owner controls</button>
+    <button data-view="workspace" aria-pressed="false">WorkSpace</button>
+
+    <details class="tab-group" id="servicesGroup">
+      <summary>Services</summary>
+      <div class="tab-menu glass">
+        <button data-service="ollama">Ollama · localhost:11434</button>
+        <button data-service="openclaw">OpenClaw gateway · localhost:18789</button>
+        <button data-service="openrouter">OpenRouter · openrouter.ai</button>
+      </div>
+    </details>
+
+    <details class="tab-group" id="voiceGroup">
+      <summary>Meetings</summary>
+      <div class="tab-menu glass" style="min-width:280px;padding:12px">
+        <div class="muted" style="margin-bottom:8px">Alt account joins a voice channel and keeps a timestamped recap. Everyone in the server knows it's taking notes.</div>
+        <input id="vcChannel" placeholder="voice channel ID or exact name" style="margin-bottom:8px" />
+        <div class="row" style="gap:6px;flex-wrap:wrap">
+          <button class="sm primary" id="vcJoin">Join</button>
+          <button class="sm danger" id="vcLeave">Leave &amp; save recap</button>
+          <button class="sm ghost" id="vcRecap">Last recap</button>
+        </div>
+        <div id="vcStatus" class="muted" style="margin-top:8px">—</div>
+      </div>
+    </details>
+  </nav>
+
+  <div class="hub-frame-wrap glass">
+    <iframe class="hub-frame" data-frame="chat" title="Chat" src="/chat?embed=1"></iframe>
+    <iframe class="hub-frame" data-frame="owner" title="Owner controls" data-src="/owner?embed=1"></iframe>
+    <iframe class="hub-frame" data-frame="workspace" title="WorkSpace" data-src="/workspace?embed=1"></iframe>
+  </div>
+</div>
+
+<script type="module" src="/assets/hub.js"></script>
+</body>
+</html>

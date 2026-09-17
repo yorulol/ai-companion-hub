@@ -458,7 +458,7 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
  * Try providers in order: preferred → openrouter (all free models) → groq → openai → anthropic → ollama.
  * Every provider gate is checked here; disabled providers are skipped.
  */
-export async function ask({ messages, mode = "general" }) {
+export async function ask({ messages, mode = "general", only = null }) {
   const settings = getSettings();
   const system = { role: "system", content: settings.persona };
   const full = messages[0]?.role === "system" ? messages : [system, ...messages];
@@ -470,8 +470,11 @@ export async function ask({ messages, mode = "general" }) {
     attempts.push(name);
   };
 
-  tryProvider(P.preferred);
-  ["openrouter", "groq", "openai", "anthropic", "openclaw", "ollama"].forEach(tryProvider);
+  if (only) tryProvider(only);
+  else {
+    tryProvider(P.preferred);
+    ["openrouter", "groq", "openai", "anthropic", "openclaw", "ollama"].forEach(tryProvider);
+  }
 
   const errors = [];
   for (const name of attempts) {

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>YORU · WorkSpace</title>
+<meta name="description" content="Multi-agent WorkSpace — YORU (Ollama) and ACE (OpenRouter/OpenClaw) collaborating on plans and code." />
+<link rel="stylesheet" href="/assets/panel.css" />
+</head>
+<body>
+<canvas id="particles"></canvas>
+
+<div class="hub-shell">
+  <header class="bar glass">
+    <div class="brand">
+      <div id="miniMascot" style="width:44px"></div>
+      <div><h1>WORKSPACE</h1><small id="homeLabel">home: detecting…</small></div>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill"><span id="dotAgent" class="dot wait"></span><span id="agentText">connecting…</span></span>
+  </header>
+
+  <div class="ws-wrap">
+    <aside class="ws-files glass">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <strong style="font-size:13px;letter-spacing:1px">HOME FILES</strong>
+        <button class="sm ghost" id="fsUp" title="Up">↑</button>
+      </div>
+      <div class="muted" id="fsPath" style="margin-bottom:8px;word-break:break-all">.</div>
+      <div id="fsList" style="overflow-y:auto;flex:1"></div>
+      <div class="muted" style="margin-top:10px;font-size:11px">Agents read &amp; write inside this folder on their own during sessions.</div>
+    </aside>
+
+    <main class="ws-main">
+      <div class="glass" style="padding:14px;margin-bottom:12px">
+        <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px">
+            <label>Task for YORU &amp; ACE</label>
+            <textarea id="task" rows="2" placeholder="e.g. Plan and build a new utility command module, then review each other's code…"></textarea>
+          </div>
+          <div style="width:110px">
+            <label>Rounds</label>
+            <input id="rounds" type="number" min="1" max="12" value="4" />
+          </div>
+          <div style="width:190px">
+            <label>ACE runs on</label>
+            <select id="aceProvider">
+              <option value="openrouter">OpenRouter</option>
+              <option value="openclaw">OpenClaw</option>
+            </select>
+          </div>
+          <button class="primary" id="run">Run session</button>
+          <button class="danger hidden" id="stop">Stop</button>
+        </div>
+        <div class="muted" style="margin-top:8px">YORU defaults to Ollama. ACE uses the provider above. Both can edit files in their home folder.</div>
+      </div>
+
+      <div class="ws-feed glass" id="feed">
+        <div class="muted" style="text-align:center;margin-top:20px">No session yet — give the agents a task.</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script type="module" src="/assets/workspace.js"></script>
+</body>
+</html>
