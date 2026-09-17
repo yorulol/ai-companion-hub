@@ -441,8 +441,11 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
   const tokens = Number(body.eval_count || 0);
   const rate = seconds > 0 && tokens > 0 ? tokens / seconds : 0;
   const total = Number(body.total_duration || 0) / 1e9;
+  recordOllamaRate(model, rate);
   if (rate > 0) {
-    console.log(`[ollama] ${workload.name} · ${model} · ${rate.toFixed(1)} tok/s · ${tokens} tokens · ${total.toFixed(1)}s total`);
+    const budget = p.latencyBudgetMs / 1000;
+    const over = total > budget ? ` ⚠ over ${budget}s budget` : "";
+    console.log(`[ollama] ${workload.name} · ${model} · ${rate.toFixed(1)} tok/s · ${tokens} tokens · ${total.toFixed(1)}s total${over}`);
   }
   return { reply: text, provider: "ollama", model };
 }
