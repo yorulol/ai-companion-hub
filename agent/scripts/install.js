@@ -518,6 +518,49 @@ async function setupOpenclaw(specs) {
   catch (e) { warn(`openclaw install failed: ${e.message} — retry with: npm run openclaw:setup`); }
 }
 
+// ──────────────────────── call recordings folder ────────────────────────
+
+/**
+ * Creates agent/calls/ — where every finished voice call is saved as a PDF
+ * transcript (speaker name + Discord ID next to each line) plus an MP3
+ * recording of the whole call.
+ */
+async function setupCallsFolder() {
+  const dir = path.resolve(ROOT, "calls");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    path.join(dir, "README.txt"),
+    [
+      "YORU call recordings",
+      "",
+      "Every time YORU leaves a voice call it drops three files here:",
+      "  <Server Name> (<Server ID>) - YYYY-MM-DD HH-MM-SS.pdf   transcript",
+      "  ... .txt                                                plain-text transcript",
+      "  ... .mp3                                                recording of the call",
+      "",
+      "Each spoken line is tagged with the speaker's Discord username and ID.",
+      "Transcription needs whisper.cpp or an OpenAI-compatible STT server —",
+      "see the STT_* settings in agent/.env. Audio mixdown needs ffmpeg.",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  ok("agent/calls folder ready (PDF transcripts + call recordings)");
+
+  await patchEnv({ CALL_RECORDING_ENABLED: "true", STT_ENABLED: "true" });
+
+  let ffmpeg = false;
+  try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); ffmpeg = true; } catch {}
+  if (ffmpeg) ok("ffmpeg detected — call audio will be mixed into one mp3");
+  else warn("ffmpeg not found — install it or calls get a transcript only (no mp3)");
+
+  const cfg = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
+  const hasStt = /^STT_(WHISPER_BIN|BASE_URL)=\s*\S/m.test(cfg);
+  if (!hasStt) {
+    warn("speech-to-text not configured — set STT_WHISPER_BIN+STT_WHISPER_MODEL (local) or STT_BASE_URL in agent/.env");
+  }
+}
+
 // ─────────────────────────────────── main ───────────────────────────────────
 
 async function main() {
@@ -575,6 +618,9 @@ async function main() {
   } else {
     ollamaInstallHint();
   }
+
+  try { await setupCallsFolder(); }
+  catch (e) { warn(`calls folder setup skipped: ${e.message}`); }
 
   try { await setupUfVariant(); }
   catch (e) { warn(`uf variant setup skipped: ${e.message}`); }

@@ -53,7 +53,13 @@ export async function startSelfbot() {
               await message.reply(`Joined voice channel **#${out.channel}**${out.guild ? ` in ${out.guild}` : ""}. Notes mode on — I'll keep a timeline and your marked-down notes for the recap.`).catch(() => {});
             } else if (cmdName === "leavevoice") {
               const out = await leaveVoiceChannel();
-              await message.reply(`Left the call. Recap saved:\n\n${out.recap.slice(0, 1500)}`).catch(() => {});
+              const bits = [
+                `Left the call. Saved to \`agent/calls\`:`,
+                out.pdf ? `• **${out.pdf}** — transcript (${out.spokenLines} spoken lines)` : `• transcript: ${out.text}`,
+                out.audio ? `• **${out.audio}** — full call recording` : `• no audio recording (ffmpeg missing or nothing captured)`,
+                out.speakers?.length ? `• speakers: ${out.speakers.join(", ")}` : null,
+              ].filter(Boolean);
+              await message.reply(bits.join("\n").slice(0, 1900)).catch(() => {});
             } else if (cmdName === "meetingnote") {
               const note = args.join(" ").trim();
               addMeetingNote(note);

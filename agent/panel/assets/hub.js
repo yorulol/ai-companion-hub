@@ -73,16 +73,29 @@ document.getElementById("vcJoin").addEventListener("click", async () => {
   if (!channel) return toast("Enter a voice channel ID or exact name");
   try {
     const out = await api("/api/owner/voice/join", { method: "POST", body: { channel } });
-    toast(`Joined #${out.channel}`);
+    const extra = out.recording ? (out.transcription ? " — recording + transcribing" : " — recording (no transcription configured)") : " — notes only";
+    toast(`Joined #${out.channel}${extra}`, 4000);
     refreshStatus();
   } catch (err) { toast(err.message, 4000); }
 });
 document.getElementById("vcLeave").addEventListener("click", async () => {
   try {
     const out = await api("/api/owner/voice/leave", { method: "POST" });
-    toast("Recap saved — check the chat or data/meetings/");
-    document.getElementById("vcStatus").textContent = out.recap.split("\n").slice(0, 6).join("\n");
+    toast("Call saved to agent/calls", 4000);
+    document.getElementById("vcStatus").textContent = [
+      out.pdf ? `PDF: ${out.pdf}` : `Transcript: ${out.text}`,
+      out.audio ? `Audio: ${out.audio}` : "Audio: none (ffmpeg missing or nothing captured)",
+      `${out.spokenLines} spoken lines${out.speakers?.length ? ` · ${out.speakers.join(", ")}` : ""}`,
+    ].join("\n");
     refreshStatus();
+  } catch (err) { toast(err.message, 4000); }
+});
+document.getElementById("vcCalls").addEventListener("click", async () => {
+  try {
+    const out = await api("/api/owner/voice/calls");
+    document.getElementById("vcStatus").textContent = out.files.length
+      ? `${out.dir}\n\n` + out.files.slice(0, 8).join("\n")
+      : "No calls saved yet.";
   } catch (err) { toast(err.message, 4000); }
 });
 document.getElementById("vcRecap").addEventListener("click", async () => {
