@@ -44,13 +44,39 @@ function wavHeader(dataBytes) {
   return b;
 }
 
-export function hasFfmpeg() {
-  return new Promise((resolve) => {
-    const p = spawn("ffmpeg", ["-version"], { stdio: "ignore" });
-    p.on("error", () => resolve(false));
-    p.on("close", (code) => resolve(code === 0));
-  });
+/**
+ * Resolves an ffmpeg binary: FFMPEG_PATH from .env first, then the bundled
+ * ffmpeg-static binary (installed automatically on Linux + Windows), then
+ * whatever is on PATH.
+ */
+let ffmpegPath = null;
+export async function resolveFfmpeg() {
+  if (ffmpegPath !== null) return ffmpegPath;
+  const candidates = [];
+  const fromEnv = (process.env.FFMPEG_PATH || "").trim();
+  if (fromEnv) candidates.push(fromEnv);
+  try {
+    const mod = await import("ffmpeg-static");
+    const p = mod.default ?? mod;
+    if (typeof p === "string" && p) candidates.push(p);
+  } catch {}
+  candidates.push("ffmpeg");
+  for (const c of candidates) {
+    const okBin = await new Promise((resolve) => {
+      const p = spawn(c, ["-version"], { stdio: "ignore" });
+      p.on("error", () => resolve(false));
+      p.on("close", (code) => resolve(code === 0));
+    });
+    if (okBin) { ffmpegPath = c; return ffmpegPath; }
+  }
+  ffmpegPath = false;
+  return ffmpegPath;
 }
+
+export async function hasFfmpeg() {
+  return Boolean(await resolveFfmpeg());
+}
+
 
 function run(cmd, args) {
   return new Promise((resolve, reject) => {
