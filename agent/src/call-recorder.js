@@ -44,13 +44,39 @@ function wavHeader(dataBytes) {
   return b;
 }
 
-export function hasFfmpeg() {
-  return new Promise((resolve) => {
-    const p = spawn("ffmpeg", ["-version"], { stdio: "ignore" });
-    p.on("error", () => resolve(false));
-    p.on("close", (code) => resolve(code === 0));
-  });
+/**
+ * Resolves an ffmpeg binary: FFMPEG_PATH from .env first, then the bundled
+ * ffmpeg-static binary (installed automatically on Linux + Windows), then
+ * whatever is on PATH.
+ */
+let ffmpegPath = null;
+export async function resolveFfmpeg() {
+  if (ffmpegPath !== null) return ffmpegPath;
+  const candidates = [];
+  const fromEnv = (process.env.FFMPEG_PATH || "").trim();
+  if (fromEnv) candidates.push(fromEnv);
+  try {
+    const mod = await import("ffmpeg-static");
+    const p = mod.default ?? mod;
+    if (typeof p === "string" && p) candidates.push(p);
+  } catch {}
+  candidates.push("ffmpeg");
+  for (const c of candidates) {
+    const okBin = await new Promise((resolve) => {
+      const p = spawn(c, ["-version"], { stdio: "ignore" });
+      p.on("error", () => resolve(false));
+      p.on("close", (code) => resolve(code === 0));
+    });
+    if (okBin) { ffmpegPath = c; return ffmpegPath; }
+  }
+  ffmpegPath = false;
+  return ffmpegPath;
 }
+
+export async function hasFfmpeg() {
+  return Boolean(await resolveFfmpeg());
+}
+
 
 function run(cmd, args) {
   return new Promise((resolve, reject) => {
@@ -147,7 +173,8 @@ export async function startCallRecorder(connection, client, { onError } = {}) {
  */
 export async function mixCallAudio(utterances, outPath) {
   if (!utterances.length) return null;
-  if (!(await hasFfmpeg())) return null;
+  const bin = await resolveFfmpeg();
+  if (!bin) return null;
 
   const inputs = [];
   const filters = [];
@@ -164,11 +191,11 @@ export async function mixCallAudio(utterances, outPath) {
     ...(outPath.endsWith(".mp3") ? ["-codec:a", "libmp3lame", "-b:a", "128k"] : []),
     outPath,
   ];
-  try { await run("ffmpeg", args); return outPath; }
+  try { await run(bin, args); return outPath; }
   catch {
     if (!outPath.endsWith(".mp3")) throw new Error("audio mixdown failed");
     const wav = outPath.replace(/\.mp3$/, ".wav");
-    await run("ffmpeg", args.slice(0, -3).concat(wav));
+    await run(bin, args.slice(0, -3).concat(wav));
     return wav;
   }
 }

@@ -518,7 +518,127 @@ async function setupOpenclaw(specs) {
   catch (e) { warn(`openclaw install failed: ${e.message} — retry with: npm run openclaw:setup`); }
 }
 
+// ──────────────────── dependencies / ffmpeg / speech-to-text ────────────────
+
+import { createRequire } from "node:module";
+const requireFrom = createRequire(path.join(ROOT, "package.json"));
+
+/** Every package the agent needs, verified and installed if anything is missing. */
+async function ensureDependencies() {
+  const pkg = JSON.parse(await fs.readFile(path.join(ROOT, "package.json"), "utf8"));
+  const required = Object.keys(pkg.dependencies || {});
+  const optional = Object.keys(pkg.optionalDependencies || {});
+
+  const missing = required.filter((name) => {
+    try { requireFrom.resolve(name); return false; } catch { return true; }
+  });
+
+  if (missing.length) {
+    if (process.env.npm_lifecycle_event === "postinstall") {
+      warn(`still resolving: ${missing.join(", ")} — npm is finishing the install`);
+    } else {
+      warn(`missing packages (${missing.join(", ")}) — installing…`);
+      try {
+        execFileSync("npm", ["install", "--no-audit", "--no-fund"], {
+          cwd: ROOT, stdio: "inherit", timeout: 20 * 60 * 1000,
+        });
+        ok("dependencies installed");
+      } catch {
+        warn("automatic install failed — run:  cd agent && npm install");
+      }
+    }
+  } else {
+    ok(`all ${required.length} dependencies present`);
+  }
+
+  const missingOpt = optional.filter((name) => {
+    try { requireFrom.resolve(name); return false; } catch { return true; }
+  });
+  if (missingOpt.length) info(`optional extras unavailable here: ${missingOpt.join(", ")} (fallbacks in use)`);
+}
+
+/** Package-manager install attempts for ffmpeg, per platform. */
+function ffmpegInstallCommands() {
+  if (process.platform === "win32") {
+    return [
+      ["winget", ["install", "--id", "Gyan.FFmpeg", "-e", "--silent",
+        "--accept-package-agreements", "--accept-source-agreements"]],
+      ["choco", ["install", "ffmpeg", "-y"]],
+      ["scoop", ["install", "ffmpeg"]],
+    ];
+  }
+  if (process.platform === "darwin") return [["brew", ["install", "ffmpeg"]]];
+  return [
+    ["sudo", ["-n", "apt-get", "install", "-y", "ffmpeg"]],
+    ["sudo", ["-n", "dnf", "install", "-y", "ffmpeg"]],
+    ["sudo", ["-n", "pacman", "-S", "--noconfirm", "ffmpeg"]],
+  ];
+}
+
+/**
+ * Guarantees an ffmpeg binary for call recording on Linux and Windows.
+ * Prefers the bundled ffmpeg-static binary (no admin rights) and only falls
+ * back to a system package manager.
+ */
+async function setupFfmpeg() {
+  let bin = "";
+  try {
+    const mod = requireFrom("ffmpeg-static");
+    const p = typeof mod === "string" ? mod : mod?.default;
+    if (p) { execFileSync(p, ["-version"], { stdio: "ignore" }); bin = p; }
+  } catch {}
+
+  if (!bin) {
+    try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); bin = "ffmpeg"; } catch {}
+  }
+
+  if (!bin) {
+    warn("ffmpeg missing — trying a system install…");
+    for (const [cmd, args] of ffmpegInstallCommands()) {
+      try {
+        execFileSync(cmd, args, { stdio: "ignore", timeout: 10 * 60 * 1000, windowsHide: true });
+        execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+        bin = "ffmpeg";
+        break;
+      } catch {}
+    }
+  }
+
+  if (bin) {
+    await patchEnv({ FFMPEG_PATH: bin === "ffmpeg" ? "" : bin });
+    ok(`ffmpeg ready${bin === "ffmpeg" ? " (system)" : " (bundled)"} — calls get a single mp3`);
+    return true;
+  }
+  warn("ffmpeg unavailable — calls still transcribe, but no mp3 mixdown");
+  warn(process.platform === "win32"
+    ? "  install it with:  winget install Gyan.FFmpeg"
+    : "  install it with:  sudo apt-get install ffmpeg");
+  return false;
+}
+
+/** Zero-config speech-to-text: local whisper unless the user configured one. */
+async function setupStt() {
+  const cfg = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
+  if (/^STT_(WHISPER_BIN|BASE_URL)=\s*\S/m.test(cfg)) {
+    ok("speech-to-text: using your configured whisper / STT server");
+    return;
+  }
+  let local = true;
+  try { requireFrom.resolve("@huggingface/transformers"); } catch { local = false; }
+
+  await patchEnv({
+    STT_ENABLED: "true",
+    STT_LOCAL_ENABLED: local ? "true" : "false",
+    STT_LOCAL_MODEL: "Xenova/whisper-base.en",
+  });
+
+  if (local) ok("speech-to-text: local whisper ready (model downloads on the first call)");
+  else warn("local whisper extra unavailable — set STT_WHISPER_BIN or STT_BASE_URL in agent/.env for transcripts");
+}
+
 // ──────────────────────── call recordings folder ────────────────────────
+
+
 
 /**
  * Creates agent/calls/ — where every finished voice call is saved as a PDF
@@ -539,27 +659,18 @@ async function setupCallsFolder() {
       "  ... .mp3                                                recording of the call",
       "",
       "Each spoken line is tagged with the speaker's Discord username and ID.",
-      "Transcription needs whisper.cpp or an OpenAI-compatible STT server —",
-      "see the STT_* settings in agent/.env. Audio mixdown needs ffmpeg.",
+      "Recording + transcription are set up automatically by npm install.",
       "",
     ].join("\n"),
     "utf8",
   );
   ok("agent/calls folder ready (PDF transcripts + call recordings)");
 
-  await patchEnv({ CALL_RECORDING_ENABLED: "true", STT_ENABLED: "true" });
-
-  let ffmpeg = false;
-  try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); ffmpeg = true; } catch {}
-  if (ffmpeg) ok("ffmpeg detected — call audio will be mixed into one mp3");
-  else warn("ffmpeg not found — install it or calls get a transcript only (no mp3)");
-
-  const cfg = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
-  const hasStt = /^STT_(WHISPER_BIN|BASE_URL)=\s*\S/m.test(cfg);
-  if (!hasStt) {
-    warn("speech-to-text not configured — set STT_WHISPER_BIN+STT_WHISPER_MODEL (local) or STT_BASE_URL in agent/.env");
-  }
+  await patchEnv({ CALL_RECORDING_ENABLED: "true" });
+  await setupFfmpeg();
+  await setupStt();
 }
+
 
 // ─────────────────────────────────── main ───────────────────────────────────
 
@@ -567,7 +678,9 @@ async function main() {
   banner();
 
   checkNode();
+  await ensureDependencies();
   verifyNativeModules();
+
 
   const created = await ensureEnv();
   ok(created ? ".env created from .env.example" : ".env found (existing values preserved)");
