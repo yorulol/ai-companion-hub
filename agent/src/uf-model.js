@@ -96,7 +96,14 @@ export async function ensureUfModel({ url, force = false, log = console.log } = 
     log(`[uf] ollama not reachable at ${base} — Modelfile written; variant will build on next setup with ollama running`);
     return { created: false, reason: "ollama-offline" };
   }
-  if (!force && (installed.includes(UF.model) || installed.includes(`${UF.model}:latest`))) {
+  // Rebuild automatically when the Modelfile changed (e.g. new speed tuning),
+  // so an existing qwen-yoru doesn't keep stale parameters.
+  const { createHash } = await import("node:crypto");
+  const hashFile = path.join(UF.dir, ".build-hash");
+  const hash = createHash("sha256").update(ufModelfileContents()).digest("hex");
+  const previous = await fs.readFile(hashFile, "utf8").catch(() => "");
+  const exists = installed.includes(UF.model) || installed.includes(`${UF.model}:latest`);
+  if (!force && exists && previous.trim() === hash) {
     return { created: false, reason: "exists" };
   }
   await pullIfMissing(base, installed, UF.baseModel);
