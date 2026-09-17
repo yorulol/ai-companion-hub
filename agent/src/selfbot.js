@@ -7,6 +7,7 @@ import { chat } from "./chat-loop.js";
 import { logActivity } from "./activity.js";
 import { attachPlugins, runOutgoing } from "./selfbot-plugins.js";
 import { findCommand } from "./commands.js";
+import { bindVoiceClient, joinVoiceChannel, leaveVoiceChannel, addMeetingNote, latestMeetingRecap } from "./voice.js";
 
 let client = null;
 let running = false;
@@ -27,10 +28,47 @@ export async function startSelfbot() {
   client.on("messageCreate", async (message) => {
     try {
       if (message.author.id === client.user.id) return;
+
+      // NEVER react to @everyone / @here mass pings — even if they mention me.
+      const massPing = message.mentions.everyone || /@(everyone|here)\b/.test(message.content);
+
       const isDm = !message.guild;
       const ownerPrefix = config.discord.ownerPrefix;
       if (message.content.startsWith(ownerPrefix)) {
         const [name, ...args] = message.content.slice(ownerPrefix.length).trim().split(/\s+/);
+        const cmdName = (name || "").toLowerCase();
+
+        // Owner voice-meeting commands (work even outside the command registry).
+        const VOICE_CMDS = new Set(["joinvoice", "leavevoice", "meetingnote", "meetingnotes"]);
+        if (VOICE_CMDS.has(cmdName)) {
+          if (!isOwnerId(message.author.id)) {
+            await message.reply("Those are my master's commands. Fuck off trying to use them.").catch(() => {});
+            return;
+          }
+          try {
+            if (cmdName === "joinvoice") {
+              const target = args.join(" ").trim();
+              if (!target) { await message.reply("Give me a voice channel ID or exact name.").catch(() => {}); return; }
+              const out = await joinVoiceChannel(target);
+              await message.reply(`Joined voice channel **#${out.channel}**${out.guild ? ` in ${out.guild}` : ""}. Notes mode on — I'll keep a timeline and your marked-down notes for the recap.`).catch(() => {});
+            } else if (cmdName === "leavevoice") {
+              const out = await leaveVoiceChannel();
+              await message.reply(`Left the call. Recap saved:\n\n${out.recap.slice(0, 1500)}`).catch(() => {});
+            } else if (cmdName === "meetingnote") {
+              const note = args.join(" ").trim();
+              addMeetingNote(note);
+              await message.reply("Noted.").catch(() => {});
+            } else {
+              const { recap } = await latestMeetingRecap();
+              await message.reply(recap ? recap.slice(0, 1800) : "No meeting recaps yet.").catch(() => {});
+            }
+            logActivity("selfbot", `owner ran ${ownerPrefix}${cmdName}`, { channel: message.channelId });
+          } catch (err) {
+            await message.reply(`Voice command failed: ${err.message}`).catch(() => {});
+          }
+          return;
+        }
+
         const command = findCommand(name);
         if (command?.permission === "owner") {
           const isOwner = isOwnerId(message.author.id);
@@ -44,6 +82,7 @@ export async function startSelfbot() {
         }
       }
       // DMs: always respond. Servers: only when @mentioned or replied-to.
+      if (massPing) return;
       const mentionedMe = message.mentions.has(client.user);
       const repliedToMe =
         message.reference && (await message.fetchReference().catch(() => null))?.author?.id === client.user.id;
@@ -95,6 +134,7 @@ export async function startSelfbot() {
 
   attachPlugins(client);
   await client.login(config.discord.userToken);
+  bindVoiceClient(() => client);
   running = true;
   logActivity("selfbot", "started");
   return { ok: true };
