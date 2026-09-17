@@ -155,42 +155,44 @@ async function detectSpecs() {
  * model spills to system RAM, tok/s collapses, so we stay deliberately
  * conservative here. Speed beats size for chat; the coder can be heavier.
  */
+// Same models per tier as before — only the latency-critical knobs (context
+// window and generation length) are trimmed so replies land in 1-10 seconds.
 const TIERS = [
   {
     vram: 22, label: "workstation",
     chat: "qwen2.5:14b-instruct-q4_K_M", code: "qwen2.5-coder:32b-instruct-q4_K_M",
-    ctx: 8192, predict: 768, batch: 1024,
+    ctx: 4096, predict: 420, batch: 1024,
   },
   {
     vram: 15, label: "high-end",
     chat: "qwen2.5:14b-instruct-q4_K_M", code: "qwen2.5-coder:14b-instruct-q4_K_M",
-    ctx: 8192, predict: 640, batch: 1024,
+    ctx: 4096, predict: 360, batch: 1024,
   },
   {
     vram: 11, label: "enthusiast",
     chat: "qwen2.5:7b-instruct-q4_K_M", code: "qwen2.5-coder:14b-instruct-q4_K_M",
-    ctx: 8192, predict: 512, batch: 768,
+    ctx: 3072, predict: 300, batch: 768,
   },
   {
     vram: 7.5, label: "mainstream",
     chat: "qwen2.5:7b-instruct-q4_K_M", code: "qwen2.5-coder:7b-instruct-q4_K_M",
-    ctx: 4096, predict: 384, batch: 512,
+    ctx: 2048, predict: 220, batch: 512,
   },
   {
     // RTX 1660 Ti / 2060 / 3050 class — 3B chat keeps replies snappy.
     vram: 5.5, label: "midrange",
     chat: "qwen2.5:3b-instruct-q4_K_M", reasoning: "qwen2.5:7b-instruct-q4_K_M", code: "qwen2.5-coder:7b-instruct-q4_K_M",
-    ctx: 2048, predict: 220, batch: 512,
+    ctx: 1536, predict: 140, batch: 512,
   },
   {
     vram: 3.5, label: "entry GPU",
     chat: "qwen2.5:3b-instruct-q4_K_M", reasoning: "qwen2.5:3b-instruct-q4_K_M", code: "qwen2.5-coder:3b-instruct-q4_K_M",
-    ctx: 2048, predict: 200, batch: 384,
+    ctx: 1536, predict: 128, batch: 384,
   },
   {
     vram: 0, label: "CPU-only / integrated",
     chat: "qwen2.5:1.5b-instruct-q4_K_M", reasoning: "qwen2.5:3b-instruct-q4_K_M", code: "qwen2.5-coder:1.5b-instruct-q4_K_M",
-    ctx: 1536, predict: 180, batch: 256,
+    ctx: 1024, predict: 96, batch: 256,
   },
 ];
 
