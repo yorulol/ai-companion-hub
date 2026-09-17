@@ -114,7 +114,8 @@ export async function ensureUfModel({ url, force = false, log = console.log } = 
     signal: AbortSignal.timeout(10 * 60 * 1000),
   });
   if (!res.ok) throw new Error(`create ${UF.model} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  return { created: true, model: UF.model };
+  await fs.writeFile(hashFile, hash, "utf8").catch(() => {});
+  return { created: true, model: UF.model, rebuilt: exists };
 }
 
 /** Chat model to use right now, honoring the UF toggle. */
