@@ -659,27 +659,18 @@ async function setupCallsFolder() {
       "  ... .mp3                                                recording of the call",
       "",
       "Each spoken line is tagged with the speaker's Discord username and ID.",
-      "Transcription needs whisper.cpp or an OpenAI-compatible STT server —",
-      "see the STT_* settings in agent/.env. Audio mixdown needs ffmpeg.",
+      "Recording + transcription are set up automatically by npm install.",
       "",
     ].join("\n"),
     "utf8",
   );
   ok("agent/calls folder ready (PDF transcripts + call recordings)");
 
-  await patchEnv({ CALL_RECORDING_ENABLED: "true", STT_ENABLED: "true" });
-
-  let ffmpeg = false;
-  try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); ffmpeg = true; } catch {}
-  if (ffmpeg) ok("ffmpeg detected — call audio will be mixed into one mp3");
-  else warn("ffmpeg not found — install it or calls get a transcript only (no mp3)");
-
-  const cfg = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
-  const hasStt = /^STT_(WHISPER_BIN|BASE_URL)=\s*\S/m.test(cfg);
-  if (!hasStt) {
-    warn("speech-to-text not configured — set STT_WHISPER_BIN+STT_WHISPER_MODEL (local) or STT_BASE_URL in agent/.env");
-  }
+  await patchEnv({ CALL_RECORDING_ENABLED: "true" });
+  await setupFfmpeg();
+  await setupStt();
 }
+
 
 // ─────────────────────────────────── main ───────────────────────────────────
 
