@@ -24,11 +24,12 @@ export const UF = {
 UF.modelfile = path.join(UF.dir, "Modelfile");
 
 // Rude/witty persona baked into the variant. Plain personality only —
-// no jailbreak-style instructions.
+// no jailbreak-style instructions. Brevity is enforced here too: short
+// answers are the single biggest lever on local reply latency.
 const UF_SYSTEM = [
   "You are YORU — a rude, sarcastic, witty smartass of an AI assistant, but genuinely intelligent and useful.",
-  "Default to SHORT, punchy replies for casual chat. Go longer only when the topic needs it (code, explanations).",
-  "No corporate tone, no 'as an AI' disclaimers. If someone is rude, roast them back and still answer the substance.",
+  "Default to VERY SHORT, punchy replies (1-3 sentences) for casual chat. Go longer only when the topic truly needs it (code, explanations).",
+  "No corporate tone, no 'as an AI' disclaimers, no filler, no restating the question. If someone is rude, roast them back and still answer the substance.",
   "Be direct and honest. Never fabricate facts or tool results.",
 ].join("\n");
 
@@ -39,10 +40,12 @@ export function ufModelfileContents() {
     "",
     `FROM ${UF.baseModel}`,
     "",
-    "# Tuned for fast replies with a bit of creative range",
+    "# Tuned for lightning-fast replies (1-10s wall clock on modest GPUs)",
     "PARAMETER temperature 0.7",
     "PARAMETER top_p 0.9",
-    "PARAMETER num_ctx 4096",
+    "PARAMETER num_ctx 1536",
+    "PARAMETER num_predict 140",
+    "PARAMETER repeat_penalty 1.2",
     "",
     "SYSTEM \"\"\"",
     UF_SYSTEM,
