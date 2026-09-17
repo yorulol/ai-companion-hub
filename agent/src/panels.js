@@ -108,6 +108,7 @@ function startPanel({ name, port, entryHtml }) {
           return res.end(JSON.stringify({
             port: config.panels.chatPort,
             chatPort: config.panels.chatPort,
+            ownerPort: config.panels.workspacePort, // legacy field name
             workspacePort: config.panels.workspacePort,
             name,
           }));

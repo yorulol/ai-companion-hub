@@ -294,6 +294,7 @@ body.embed::before, body.embed::after, body.embed #particles { display: none; }
 body.embed { overflow: hidden; }
 body.embed .shell { padding: 8px; gap: 8px; max-width: none; }
 body.embed header.bar { display: none; }
+body.embed #ownerLink, body.embed #ownerSignBtn { display: none !important; }
 body.embed .gate { display: none !important; }
 
 /* ---------- merged hub shell ---------- */
