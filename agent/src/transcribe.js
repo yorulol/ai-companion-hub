@@ -31,8 +31,18 @@ export function sttConfig() {
       lang: env("STT_LANGUAGE", "en"),
     };
   }
+  // Zero-config fallback: bundled local whisper that runs on CPU/GPU through
+  // @huggingface/transformers (installed automatically, model cached on first use).
+  if (env("STT_LOCAL_ENABLED", "true").toLowerCase() !== "false") {
+    return {
+      mode: "local",
+      model: env("STT_LOCAL_MODEL", "Xenova/whisper-base.en"),
+      lang: env("STT_LANGUAGE", "en"),
+    };
+  }
   return { mode: "off" };
 }
+
 
 export function sttAvailable() {
   return sttConfig().mode !== "off";
