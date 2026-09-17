@@ -61,6 +61,10 @@ export const config = {
       numGpu: integer(process.env.OLLAMA_NUM_GPU, 999, 0, 999),
       numThread: integer(process.env.OLLAMA_NUM_THREAD, 0, 0, 64),
       balancedGpuLayers: integer(process.env.OLLAMA_BALANCED_GPU_LAYERS, 24, 0, 999),
+      // Target wall-clock reply time. Generation length is auto-capped from the
+      // model's measured tokens/sec so replies land inside this budget.
+      latencyBudgetMs: integer(process.env.OLLAMA_LATENCY_BUDGET_MS, 9000, 1000, 120000),
+      minPredict: integer(process.env.OLLAMA_MIN_PREDICT, 64, 16, 2048),
       // Optional custom variant built from agent/UF/Modelfile (npm run setup).
       // When enabled, chat uses OLLAMA_UF_MODEL instead of OLLAMA_MODEL.
       uf: {
