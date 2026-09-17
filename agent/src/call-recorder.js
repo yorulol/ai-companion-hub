@@ -173,7 +173,8 @@ export async function startCallRecorder(connection, client, { onError } = {}) {
  */
 export async function mixCallAudio(utterances, outPath) {
   if (!utterances.length) return null;
-  if (!(await hasFfmpeg())) return null;
+  const bin = await resolveFfmpeg();
+  if (!bin) return null;
 
   const inputs = [];
   const filters = [];
@@ -190,13 +191,15 @@ export async function mixCallAudio(utterances, outPath) {
     ...(outPath.endsWith(".mp3") ? ["-codec:a", "libmp3lame", "-b:a", "128k"] : []),
     outPath,
   ];
-  try { await run("ffmpeg", args); return outPath; }
+  try { await run(bin, args); return outPath; }
   catch {
     if (!outPath.endsWith(".mp3")) throw new Error("audio mixdown failed");
     const wav = outPath.replace(/\.mp3$/, ".wav");
-    await run("ffmpeg", args.slice(0, -3).concat(wav));
+    await run(bin, args.slice(0, -3).concat(wav));
     return wav;
   }
+}
+
 }
 
 export async function cleanupRecorder(dir) {
