@@ -145,17 +145,59 @@ function renderMeetingMarkdown(session) {
 export async function leaveVoiceChannel() {
   if (!current) throw new Error("Not in a voice channel.");
   const client = getClient();
+  const recorder = current.recorder;
   const session = { ...current, endedAt: ts() };
   try { client?.off("voiceStateUpdate", current.onVoiceState); } catch {}
   try { current.connection?.disconnect?.(); } catch {}
   current = null;
 
+  // 1. Stop capture and collect every utterance (speaker + Discord ID attached).
+  let utterances = [];
+  try { ({ utterances = [] } = (await recorder?.stop?.()) || {}); } catch {}
+
+  await ensureCallsDir();
+  const base = callBaseName(session);
+  const audioTarget = path.join(CALLS_DIR, `${base}.mp3`);
+
+  // 2. Mix everyone onto one timeline -> single recording of the whole call.
+  let audioFile = null;
+  try { audioFile = await mixCallAudio(utterances, audioTarget); } catch {}
+  session.audioFile = audioFile ? path.basename(audioFile) : null;
+
+  // 3. Transcribe each utterance so every line keeps its speaker + ID.
+  let lines = [];
+  try { lines = await transcribeUtterances(utterances); } catch {}
+
+  // 4. Write the PDF + a plain-text transcript into agent/calls/.
+  const pdfPath = path.join(CALLS_DIR, `${base}.pdf`);
+  let pdfFile = null;
+  try { pdfFile = await writeCallPdf(session, lines, pdfPath); } catch {}
+  const txt = renderTranscriptText(session, lines);
+  await fs.writeFile(path.join(CALLS_DIR, `${base}.txt`), txt, "utf8").catch(() => {});
+
+  // 5. Keep the old markdown recap too, and clean up the temp audio chunks.
   await fs.mkdir(MEETINGS_DIR, { recursive: true });
-  const file = path.join(MEETINGS_DIR, `meeting-${Date.now()}.md`);
   const md = renderMeetingMarkdown(session);
-  await fs.writeFile(file, md, "utf8");
-  logActivity("selfbot", `left voice channel, recap saved (${session.events.length} events, ${session.notes.length} notes)`);
-  return { ok: true, recap: md, file: path.basename(file) };
+  await fs.writeFile(path.join(MEETINGS_DIR, `meeting-${Date.now()}.md`), md, "utf8").catch(() => {});
+  await cleanupRecorder(recorder?.dir);
+
+  logActivity("selfbot", `left call — saved ${pdfFile ? "PDF" : "transcript"}${audioFile ? " + audio" : ""} to agent/calls (${lines.length} spoken lines)`);
+  return {
+    ok: true,
+    recap: md,
+    transcript: txt,
+    folder: CALLS_DIR,
+    pdf: pdfFile ? path.basename(pdfFile) : null,
+    audio: session.audioFile,
+    text: `${base}.txt`,
+    spokenLines: lines.length,
+    speakers: [...new Set(lines.map((l) => `${l.username} (${l.userId})`))],
+  };
+}
+
+/** Newest call files saved in agent/calls. */
+export async function listCallFiles() {
+  return { dir: CALLS_DIR, files: await listCalls() };
 }
 
 export async function latestMeetingRecap() {
