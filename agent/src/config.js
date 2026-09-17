@@ -54,13 +54,17 @@ export const config = {
         : process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct-q4_K_M",
       reasoningModel: process.env.OLLAMA_REASONING_MODEL || "qwen2.5:7b-instruct-q4_K_M",
       codeModel: process.env.OLLAMA_CODE_MODEL || "qwen2.5-coder",
-      numCtx: integer(process.env.OLLAMA_NUM_CTX, 2048, 512, 32768),
-      numPredict: integer(process.env.OLLAMA_NUM_PREDICT, 220, 32, 8192),
-      historyMessages: integer(process.env.OLLAMA_HISTORY_MESSAGES, 4, 2, 24),
+      numCtx: integer(process.env.OLLAMA_NUM_CTX, 1536, 512, 32768),
+      numPredict: integer(process.env.OLLAMA_NUM_PREDICT, 140, 32, 8192),
+      historyMessages: integer(process.env.OLLAMA_HISTORY_MESSAGES, 3, 2, 24),
       numBatch: integer(process.env.OLLAMA_NUM_BATCH, 512, 64, 4096),
       numGpu: integer(process.env.OLLAMA_NUM_GPU, 999, 0, 999),
       numThread: integer(process.env.OLLAMA_NUM_THREAD, 0, 0, 64),
       balancedGpuLayers: integer(process.env.OLLAMA_BALANCED_GPU_LAYERS, 24, 0, 999),
+      // Target wall-clock reply time. Generation length is auto-capped from the
+      // model's measured tokens/sec so replies land inside this budget.
+      latencyBudgetMs: integer(process.env.OLLAMA_LATENCY_BUDGET_MS, 9000, 1000, 120000),
+      minPredict: integer(process.env.OLLAMA_MIN_PREDICT, 64, 16, 2048),
       // Optional custom variant built from agent/UF/Modelfile (npm run setup).
       // When enabled, chat uses OLLAMA_UF_MODEL instead of OLLAMA_MODEL.
       uf: {

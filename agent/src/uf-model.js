@@ -24,11 +24,12 @@ export const UF = {
 UF.modelfile = path.join(UF.dir, "Modelfile");
 
 // Rude/witty persona baked into the variant. Plain personality only —
-// no jailbreak-style instructions.
+// no jailbreak-style instructions. Brevity is enforced here too: short
+// answers are the single biggest lever on local reply latency.
 const UF_SYSTEM = [
   "You are YORU — a rude, sarcastic, witty smartass of an AI assistant, but genuinely intelligent and useful.",
-  "Default to SHORT, punchy replies for casual chat. Go longer only when the topic needs it (code, explanations).",
-  "No corporate tone, no 'as an AI' disclaimers. If someone is rude, roast them back and still answer the substance.",
+  "Default to VERY SHORT, punchy replies (1-3 sentences) for casual chat. Go longer only when the topic truly needs it (code, explanations).",
+  "No corporate tone, no 'as an AI' disclaimers, no filler, no restating the question. If someone is rude, roast them back and still answer the substance.",
   "Be direct and honest. Never fabricate facts or tool results.",
 ].join("\n");
 
@@ -39,10 +40,12 @@ export function ufModelfileContents() {
     "",
     `FROM ${UF.baseModel}`,
     "",
-    "# Tuned for fast replies with a bit of creative range",
+    "# Tuned for lightning-fast replies (1-10s wall clock on modest GPUs)",
     "PARAMETER temperature 0.7",
     "PARAMETER top_p 0.9",
-    "PARAMETER num_ctx 4096",
+    "PARAMETER num_ctx 1536",
+    "PARAMETER num_predict 140",
+    "PARAMETER repeat_penalty 1.2",
     "",
     "SYSTEM \"\"\"",
     UF_SYSTEM,
@@ -93,7 +96,14 @@ export async function ensureUfModel({ url, force = false, log = console.log } = 
     log(`[uf] ollama not reachable at ${base} — Modelfile written; variant will build on next setup with ollama running`);
     return { created: false, reason: "ollama-offline" };
   }
-  if (!force && (installed.includes(UF.model) || installed.includes(`${UF.model}:latest`))) {
+  // Rebuild automatically when the Modelfile changed (e.g. new speed tuning),
+  // so an existing qwen-yoru doesn't keep stale parameters.
+  const { createHash } = await import("node:crypto");
+  const hashFile = path.join(UF.dir, ".build-hash");
+  const hash = createHash("sha256").update(ufModelfileContents()).digest("hex");
+  const previous = await fs.readFile(hashFile, "utf8").catch(() => "");
+  const exists = installed.includes(UF.model) || installed.includes(`${UF.model}:latest`);
+  if (!force && exists && previous.trim() === hash) {
     return { created: false, reason: "exists" };
   }
   await pullIfMissing(base, installed, UF.baseModel);
@@ -104,7 +114,8 @@ export async function ensureUfModel({ url, force = false, log = console.log } = 
     signal: AbortSignal.timeout(10 * 60 * 1000),
   });
   if (!res.ok) throw new Error(`create ${UF.model} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  return { created: true, model: UF.model };
+  await fs.writeFile(hashFile, hash, "utf8").catch(() => {});
+  return { created: true, model: UF.model, rebuilt: exists };
 }
 
 /** Chat model to use right now, honoring the UF toggle. */
