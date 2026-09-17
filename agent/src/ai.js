@@ -241,12 +241,37 @@ async function pullOllamaModel(model) {
   return job;
 }
 
+/**
+ * Rolling tokens/sec measured per model, used to size generation so every
+ * reply lands inside the configured latency budget (default 1-9s).
+ */
+const OLLAMA_RATES = new Map(); // model -> tokens/sec (EMA)
+
+function recordOllamaRate(model, rate) {
+  if (!(rate > 0)) return;
+  const prev = OLLAMA_RATES.get(model);
+  OLLAMA_RATES.set(model, prev ? prev * 0.7 + rate * 0.3 : rate);
+}
+
+/** Token cap that fits the latency budget at the model's observed speed. */
+function budgetPredict(model, ceiling) {
+  const p = config.providers.ollama;
+  const budgetSec = Math.max(1, p.latencyBudgetMs / 1000);
+  // Reserve ~25% of the budget for prompt evaluation and network overhead.
+  const rate = OLLAMA_RATES.get(model) || OLLAMA_RATES.get(p.model) || 22;
+  const fit = Math.floor(rate * budgetSec * 0.75);
+  return Math.max(p.minPredict, Math.min(ceiling, fit));
+}
+
 function ollamaWorkload(messages, mode) {
   const p = config.providers.ollama;
   const latest = [...messages].reverse().find((message) => message.role === "user")?.content || "";
   const chars = messages.reduce((sum, message) => sum + String(message.content || "").length, 0);
-  const complex = mode === "coding" || COMPLEX_REQUEST_RE.test(latest) || latest.length > 700;
-  const large = chars > Math.max(5000, p.numCtx * 2.2) || latest.length > 1800;
+  // Heavier models are 3-5x slower. Only escalate when the request genuinely
+  // needs it, otherwise the fast model handles it and stays inside the budget.
+  const complex = mode === "coding" || (COMPLEX_REQUEST_RE.test(latest) && latest.length > 240) || latest.length > 1200;
+  const large = chars > Math.max(9000, p.numCtx * 4) || latest.length > 2600;
+  const fastModel = p.uf?.enabled ? p.uf.model : p.model;
   if (large) {
     return {
       name: "balanced",
@@ -254,21 +279,30 @@ function ollamaWorkload(messages, mode) {
       numGpu: p.balancedGpuLayers,
       numThread: p.numThread || Math.max(2, Math.min(12, os.cpus().length - 2)),
       numCtx: Math.max(p.numCtx, 3072),
-      numPredict: Math.max(p.numPredict, 320),
+      numPredict: budgetPredict(mode === "coding" ? p.codeModel : p.reasoningModel, Math.max(p.numPredict, 320)),
     };
   }
   if (complex) {
+    const model = mode === "coding" ? p.codeModel : p.reasoningModel;
     return {
       name: "gpu-reasoning",
-      model: mode === "coding" ? p.codeModel : p.reasoningModel,
+      model,
       numGpu: p.numGpu,
       numThread: p.numThread,
-      numCtx: Math.max(p.numCtx, 3072),
-      numPredict: Math.max(p.numPredict, 320),
+      numCtx: Math.max(p.numCtx, 2560),
+      numPredict: budgetPredict(model, Math.max(p.numPredict, 300)),
     };
   }
-  // Fast chat path: use the UF variant (qwen-yoru) when enabled, else the plain model.
-  return { name: "gpu-fast", model: p.uf?.enabled ? p.uf.model : p.model, numGpu: p.numGpu, numThread: p.numThread, numCtx: p.uf?.enabled ? Math.max(p.numCtx, 4096) : p.numCtx, numPredict: p.numPredict };
+  // Fast chat path: use the UF variant (qwen-yoru) when enabled, else the plain
+  // model. Context stays tight — prompt evaluation is the biggest latency cost.
+  return {
+    name: "gpu-fast",
+    model: fastModel,
+    numGpu: p.numGpu,
+    numThread: p.numThread,
+    numCtx: p.numCtx,
+    numPredict: budgetPredict(fastModel, p.numPredict),
+  };
 }
 
 async function ollamaChatRequest(url, model, messages, numKeep = 0, workload, overrides = {}) {
