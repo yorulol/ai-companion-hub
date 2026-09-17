@@ -21,6 +21,8 @@ import { runEmailForward, supportedOps as emailForwardOps } from "./email-forwar
 import { listActivity, logActivity } from "./activity.js";
 import { attachRoutes as verifyRoutes } from "./verify.js";
 import { getAutomod, setAutomod } from "./automod.js";
+import { startWorkspaceSession, getWorkspaceSession, stopWorkspaceSession, workspaceInfo, WORKSPACE_HOME } from "./workspace.js";
+import { joinVoiceChannel, leaveVoiceChannel, addMeetingNote, latestMeetingRecap, voiceStatus } from "./voice.js";
 
 const json = (res, code, body) => {
   res.writeHead(code, {
@@ -32,7 +34,13 @@ const json = (res, code, body) => {
   res.end(JSON.stringify(body));
 };
 const corsOrigin = () => (config.allowedOrigins.includes("*") ? "*" : config.allowedOrigins.join(","));
+// Local panels proxy /api/* through the panel server, so their requests always
+// arrive from loopback. Localhost panels are single-user owner surfaces — no
+// Discord-ID verification there. Only remote callers (bot/alt flows never hit
+// this) would need the header.
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 const requireOwner = (req) => {
+  if (LOOPBACK.has(req.socket.remoteAddress)) return;
   const id = req.headers["x-owner-id"];
   if (!config.ownerId) throw new Error("OWNER_DISCORD_ID not set in .env");
   if (!isOwnerId(id)) throw new Error("Not the owner.");
@@ -372,14 +380,29 @@ const ROUTES = {
   },
   "GET /api/owner/guilds/:id/welcome": async (req, id) => { requireOwner(req); return getWelcome(id); },
   "POST /api/owner/guilds/:id/welcome": async (req, id) => { requireOwner(req); return setWelcome(id, await readBody(req)); },
-  "GET /api/owner/guilds/:id/reaction-roles": async (req, id) => { requireOwner(req); return { items: listReactionRoles(id) }; },
-  "POST /api/owner/guilds/:id/reaction-roles": async (req, id) => {
+  // ---- WorkSpace (multi-agent: YORU on Ollama + ACE on OpenRouter/OpenClaw) ----
+  "GET /api/workspace/info": async () => workspaceInfo(),
+  "POST /api/workspace/run": async (req) => {
+    const b = await readBody(req);
+    return startWorkspaceSession({ task: b.task, rounds: b.rounds, aceProvider: b.aceProvider });
+  },
+  "GET /api/workspace/session/:id": async (req, id) => getWorkspaceSession(id),
+  "POST /api/workspace/stop/:id": async (req, id) => stopWorkspaceSession(id),
+  "POST /api/workspace/fs/list": async (req) => {
+    const { resolveWorkspacePath } = await import("./workspace.js");
+    return { items: [] };
+  },
+
+  // ---- Voice meetings via the alt account (owner only / loopback panels) ----
+  "GET /api/owner/voice": async (req) => { requireOwner(req); return voiceStatus(); },
+  "POST /api/owner/voice/join": async (req) => {
     requireOwner(req);
     const b = await readBody(req);
-    if (b.delete) deleteReactionRole(id, b.message_id, b.emoji);
-    else setReactionRole(id, b.message_id, b.emoji, b.role_id);
-    return { items: listReactionRoles(id) };
+    return await joinVoiceChannel(b.channel);
   },
+  "POST /api/owner/voice/leave": async (req) => { requireOwner(req); return await leaveVoiceChannel(); },
+  "POST /api/owner/voice/note": async (req) => { requireOwner(req); return addMeetingNote((await readBody(req)).text); },
+  "GET /api/owner/voice/recap": async (req) => { requireOwner(req); return await latestMeetingRecap(); },
 };
 
 function match(method, url) {
