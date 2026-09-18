@@ -168,6 +168,10 @@ async function writeEnv(updates) {
 /** Runtime toggle of a provider (also persists to .env when possible). */
 export async function setProviderEnabled(name, enabled) {
   if (!config.providers[name]) throw new Error(`Unknown provider: ${name}`);
+  // Keep Ollama on as long as the UF variant is on — UF runs through Ollama.
+  if (name === "ollama" && !enabled && config.providers.ollama.uf.enabled) {
+    enabled = true;
+  }
   config.providers[name].enabled = enabled;
   await writeEnv({ [`${name.toUpperCase()}_ENABLED`]: enabled });
 }
