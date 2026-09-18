@@ -98,8 +98,9 @@ async function rejoinCurrent(client) {
   if (!channel || typeof client.voice?.joinChannel !== "function") return;
   for (let attempt = 0; attempt < 5 && current && !current.leaving; attempt++) {
     try {
-      current.connection = await client.voice.joinChannel(channel, { selfMute: true, selfDeaf: false });
+      current.connection = await client.voice.joinChannel(channel, { selfMute: false, selfDeaf: false });
       current.events.push({ at: stamp(), text: "rejoined the call" });
+      await startRecorderFor(current.connection, client); // capture restarts on the new connection
       return;
     } catch {
       await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
