@@ -90,6 +90,7 @@ export function voiceStatus() {
 export async function joinVoiceChannel(channelIdOrName) {
   const client = getClient();
   if (!client) throw new Error("Alt account is not running. Start it first.");
+  if (!current && findLiveVoice()) adoptLiveSession();
   if (current) throw new Error("Already in a voice channel. Leave first.");
 
   // Resolve by ID first, then by case-insensitive channel name.
