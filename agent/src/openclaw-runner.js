@@ -404,13 +404,13 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
         const line = b.toString().trim();
         if (!line) return;
         lastLine = line.split("\n").pop().slice(0, 200);
-        log.info("openclaw", line.split("\n")[0].slice(0, 160));
+        emit("info", line);
       });
       child.stderr.on("data", (b) => {
         const line = b.toString().trim();
         if (!line) return;
         lastLine = line.split("\n").pop().slice(0, 200);
-        log.warn("openclaw", line.split("\n")[0].slice(0, 160));
+        emit("warn", line);
       });
       child.on("error", (e) => { lastLine = e.message; });
       child.on("exit", (code) => {
