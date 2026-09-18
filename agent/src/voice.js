@@ -250,6 +250,8 @@ export async function leaveVoiceChannel() {
   current.leaving = true;
   const client = getClient();
   const recorder = current.recorder;
+  const recorders = current.recorders?.length ? [...current.recorders] : (recorder ? [recorder] : []);
+  const sessionStart = recorders.length ? Math.min(...recorders.map((r) => r.startedAt || Date.now())) : Date.now();
   const session = { ...current, endedAt: ts() };
   try { client?.off("voiceStateUpdate", current.onVoiceState); } catch {}
   // Disconnect every way this selfbot build exposes, so we really leave.
