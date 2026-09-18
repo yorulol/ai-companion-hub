@@ -33,6 +33,7 @@ Available tools:
 - lockdown_status() — is the machine currently in lockdown?
 - lookup({query}) — search every file in the lookups folder for a value
 - list_lookups() — list files available for lookup
+- web_vuln_scan({url}) — non-destructive vulnerability scan on a target the owner has permission to test (SQLi/XSS probes, security headers, exposed paths, software fingerprint + NVD CVE lookup)
 
 Only ONE tool call per reply. After the tool runs you'll get its result as an observation, then continue the answer for the user.
 `.trim();
