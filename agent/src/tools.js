@@ -10,7 +10,7 @@
  */
 import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
-import { scanTarget } from "./vuln-scan.js";
+import { runFullScan, reverifyHost, regenerateReports, listVulns } from "./scan-run.js";
 import { config } from "./config.js";
 
 const OWNER_TOOL_SPEC = `
@@ -33,7 +33,10 @@ Available tools:
 - lockdown_status() — is the machine currently in lockdown?
 - lookup({query}) — search every file in the lookups folder for a value
 - list_lookups() — list files available for lookup
-- web_vuln_scan({url}) — non-destructive vulnerability scan on a target the owner has permission to test (SQLi/XSS probes, security headers, exposed paths, software fingerprint + NVD CVE lookup)
+- web_vuln_scan({url}) — deep non-destructive scan on a target the owner has permission to test (SQLi/XSS/LFI/SSTI/CMDi/redirect/CORS/headers/paths + NVD CVEs). Automatically verifies findings, saves per-vuln folders under agent/web/<host>/vulns/<type>/<id>/ and drafts bug-bounty reports.
+- web_vuln_verify({host}) — re-run verification on the latest scan for that host (refreshes proof.md + report.md).
+- web_vuln_report({host}) — regenerate bug-bounty reports from findings on disk.
+- web_vuln_list({host}) — list findings grouped by type with verified flag.
 
 Only ONE tool call per reply. After the tool runs you'll get its result as an observation, then continue the answer for the user.
 `.trim();
@@ -65,7 +68,32 @@ async function run(name, args = {}) {
     case "lookup": return await lookup(args.query);
     case "list_lookups": return { files: await listLookupFiles() };
     case "shell": return await pc.runShell(args.command);
-    case "web_vuln_scan": return await scanTarget(args.url);
+    case "web_vuln_scan": {
+      const { result, saved } = await runFullScan(args.url);
+      return {
+        target: result.target,
+        summary: result.summary,
+        verifiedCount: result.verifiedCount,
+        fingerprints: result.fingerprints,
+        cves: result.cves,
+        savedTo: saved.hostDir,
+        reportFile: saved.reportFile,
+        findings: (result.findings || []).map((f) => ({
+          id: f.id, type: f.type, severity: f.severity, title: f.title,
+          url: f.url, param: f.param, path: f.path,
+          verified: !!result.proofs?.[f.id]?.verified,
+        })),
+      };
+    }
+    case "web_vuln_verify": {
+      const r = await reverifyHost(args.host);
+      return { host: args.host, verifiedCount: r.result.verifiedCount, total: r.result.findings.length, reportFile: r.reportFile, savedTo: r.hostDir };
+    }
+    case "web_vuln_report": {
+      const r = await regenerateReports(args.host);
+      return { host: args.host, reportFile: r.reportFile, savedTo: r.hostDir };
+    }
+    case "web_vuln_list": return await listVulns(args.host);
     default: throw new Error(`Unknown tool: ${name}`);
   }
 }
