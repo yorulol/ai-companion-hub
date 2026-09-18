@@ -29,6 +29,9 @@ function explicitlyRequested(call, text) {
     list_lookups: /\b(?:list|show)\b.*\blookups?\b/,
     shell: /\b(?:run|execute)\b.*\b(?:shell|terminal|command)\b/,
     web_vuln_scan: /\b(?:vuln(?:erability)?|sqli|xss|cve|bug\s*bount|pentest|pen[- ]?test|scan)\b.*\b(?:https?:\/\/|\.com|\.net|\.org|\.io|site|url|domain|target)\b|\bscan\b\s+https?:\/\//i,
+    web_vuln_verify: /\b(?:verify|re[- ]?verify|confirm)\b.*\b(?:scan|vuln|finding|last)\b/i,
+    web_vuln_report: /\b(?:draft|generate|write|regen(?:erate)?)\b.*\breport/i,
+    web_vuln_list: /\b(?:what(?:'s| is)\s+(?:vulnerable|exploitable)|list|show)\b.*\b(?:vuln|finding|exploit)/i,
   };
   return patterns[call.tool]?.test(value) || false;
 }
