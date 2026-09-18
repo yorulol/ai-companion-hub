@@ -445,13 +445,23 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
   const { text: firstText, body } = await ollamaChatText(p.url, model, localMessages, numKeep, workload);
   let text = firstText;
   const latestUser = [...conversation].reverse().find((message) => message.role === "user")?.content || "";
-  const drifted = (SYSTEM_DATA_RE.test(text) && !SYSTEM_DATA_REQUEST_RE.test(latestUser)) || MODEL_DRIFT_RE.test(text);
+  const computerTask = COMPUTER_TASK_RE.test(latestUser) || SYSTEM_DATA_REQUEST_RE.test(latestUser);
+  const drifted = (SYSTEM_DATA_RE.test(text) && !computerTask) || MODEL_DRIFT_RE.test(text);
   if (drifted) {
     const retryMessages = [compactSystem[0], { role: "user", content: latestUser }];
     const { text: retryText } = await ollamaChatText(p.url, model, retryMessages, numKeep, workload);
     text = retryText;
-    if (!text || (SYSTEM_DATA_RE.test(text) && !SYSTEM_DATA_REQUEST_RE.test(latestUser)) || MODEL_DRIFT_RE.test(text)) throw new Error("Ollama produced an unrelated or unsafe response twice");
+    if (!text || (SYSTEM_DATA_RE.test(text) && !computerTask) || MODEL_DRIFT_RE.test(text)) {
+      // Never hard-fail the chat: salvage what we can and stay in character.
+      const cleaned = stripDriftLines(firstText) || stripDriftLines(retryText);
+      if (cleaned) text = cleaned;
+      else if (computerTask) text = "Yeah, I've got access to your machine. Tell me exactly what you want done and I'll handle it.";
+      else text = "Ask me that again — straight to the point this time.";
+    }
   }
+  if (!text) text = computerTask
+    ? "Yeah, I've got access to your machine. Tell me exactly what you want done and I'll handle it."
+    : "Ask me that again — straight to the point this time.";
 
   const seconds = Number(body.eval_duration || 0) / 1e9;
   const tokens = Number(body.eval_count || 0);
