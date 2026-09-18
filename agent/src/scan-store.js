@@ -1,14 +1,21 @@
 /**
- * Persist scan results to agent/web/<host>/.
+ * Persist scan results and per-finding artifacts under agent/web/<host>/.
  *
  * Layout:
  *   agent/web/<host>/
  *     latest.json                    full normalized result of the last scan
  *     scans/<timestamp>.json         full snapshot per scan
  *     summary.md                     human-readable current summary
- *     by-type/<type>.md              one file per vulnerability type,
- *                                    appended to across scans (deduped by finding id)
  *     cves.md                        CVE hits from software fingerprint
+ *     vulns/<type>/<finding-id>/
+ *       finding.md                   the finding itself (human summary)
+ *       proof.md                     verification steps + evidence
+ *       request.http                 raw HTTP request that triggered it
+ *       response.txt                 server response (trimmed)
+ *       payloads.txt                 payloads tried
+ *       report.md                    bug-bounty-ready writeup
+ *       status.json                  { verified, exploitable, severity, submitted:false }
+ *     reports/<host>-<date>.md       combined report for the whole site
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -18,9 +25,17 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 export const WEB_DIR = path.join(ROOT, "web");
 
-function safeHost(target) {
+export function safeHost(target) {
   try { return new URL(target).host.replace(/[^a-z0-9._-]/gi, "_"); }
   catch { return String(target).replace(/[^a-z0-9._-]/gi, "_").slice(0, 80) || "target"; }
+}
+
+export function safeId(id) {
+  return String(id || "unknown").replace(/[^a-z0-9._-]/gi, "_").slice(0, 80);
+}
+
+export function hostDirFor(target) {
+  return path.join(WEB_DIR, safeHost(target));
 }
 
 function ts() {
@@ -44,8 +59,9 @@ export async function ensureWebFolder() {
       "  latest.json          the most recent full scan result",
       "  scans/               timestamped snapshots of every scan",
       "  summary.md           readable summary of the latest scan",
-      "  by-type/             one markdown file per vulnerability type",
       "  cves.md              CVE hits from software fingerprints",
+      "  vulns/<type>/<id>/   per-finding folder with proof, request, response, report",
+      "  reports/             combined bug-bounty reports per scan",
       "",
       "Only scan targets you have explicit written permission to test.",
       "",
@@ -53,19 +69,35 @@ export async function ensureWebFolder() {
   }
 }
 
-function renderFinding(f) {
+function renderFindingMd(f) {
   const lines = [];
-  lines.push(`### [${f.severity.toUpperCase()}] ${f.title}`);
-  lines.push(`- id: \`${f.id}\`  confidence: ${f.confidence}`);
+  lines.push(`# [${f.severity.toUpperCase()}] ${f.title}`);
+  lines.push("");
+  lines.push(`- id: \`${f.id}\`  type: \`${f.type}\`  confidence: ${f.confidence}`);
   if (f.url) lines.push(`- url: ${f.url}`);
   if (f.param) lines.push(`- param: \`${f.param}\``);
   if (f.path) lines.push(`- path: \`${f.path}\``);
   if (f.payload) lines.push(`- payload: \`${String(f.payload).slice(0, 300)}\``);
-  if (f.description) lines.push(`\n${f.description}`);
-  if (f.evidence) lines.push(`\n> ${String(f.evidence).replace(/\n/g, " ").slice(0, 400)}`);
-  if (f.remediation) lines.push(`\n**Remediation:** ${f.remediation}`);
-  if (f.references?.length) lines.push(`\nReferences: ${f.references.map((r) => `<${r}>`).join(" · ")}`);
-  return lines.join("\n") + "\n";
+  lines.push("");
+  if (f.description) { lines.push(f.description); lines.push(""); }
+  if (f.evidence) { lines.push("## Evidence"); lines.push("```"); lines.push(String(f.evidence).slice(0, 1200)); lines.push("```"); lines.push(""); }
+  if (f.remediation) { lines.push("## Remediation"); lines.push(f.remediation); lines.push(""); }
+  if (f.references?.length) { lines.push("## References"); f.references.forEach((r) => lines.push(`- ${r}`)); }
+  return lines.join("\n");
+}
+
+function renderProofMd(f, proof) {
+  const lines = [];
+  lines.push(`# Verification proof — ${f.title}`);
+  lines.push("");
+  lines.push(`- Verified: **${proof.verified ? "YES" : "NO"}**`);
+  lines.push(`- Exploitable: **${proof.exploitable ? "YES" : "NO"}**`);
+  lines.push(`- Confidence: ${proof.confidence}`);
+  lines.push("");
+  lines.push(`## Evidence`);
+  lines.push("```"); lines.push(String(proof.evidence || "").slice(0, 2000)); lines.push("```");
+  if (proof.notes) { lines.push(""); lines.push(`## Notes`); lines.push(proof.notes); }
+  return lines.join("\n");
 }
 
 function renderSummary(result) {
@@ -78,6 +110,7 @@ function renderSummary(result) {
   lines.push(`- final url: ${result.baseline?.finalUrl}`);
   lines.push(`- baseline: HTTP ${result.baseline?.status} (${result.baseline?.timeMs} ms, ${result.baseline?.size} B)`);
   lines.push(`- crawl: ${result.crawl?.pages} pages · ${result.crawl?.forms} forms · ${result.crawl?.paramUrls} param URLs`);
+  if (typeof result.verifiedCount === "number") lines.push(`- verified: ${result.verifiedCount} / ${result.findings?.length || 0}`);
   lines.push("");
   lines.push(`## Findings by severity`);
   for (const sev of ["critical", "high", "medium", "low", "info"]) {
@@ -92,7 +125,11 @@ function renderSummary(result) {
   const sorted = [...(result.findings || [])].sort(sortBySev);
   lines.push(`## All findings (${sorted.length})`);
   lines.push("");
-  for (const f of sorted) lines.push(renderFinding(f));
+  for (const f of sorted) {
+    const verified = result.proofs?.[f.id]?.verified;
+    const mark = verified ? " ✅" : "";
+    lines.push(`- [${f.severity.toUpperCase()}]${mark} ${f.title}  \n  \`vulns/${f.type}/${f.id}/\``);
+  }
   return lines.join("\n");
 }
 
@@ -112,30 +149,38 @@ function renderCveDoc(result) {
   return lines.join("\n");
 }
 
-async function mergeByType(hostDir, findings) {
-  const dir = path.join(hostDir, "by-type");
+/**
+ * Persist per-finding artifacts under vulns/<type>/<id>/.
+ */
+export async function saveFindingArtifacts(hostDir, finding, proof, reportMd) {
+  const dir = path.join(hostDir, "vulns", safeId(finding.type), safeId(finding.id));
   await fs.mkdir(dir, { recursive: true });
-  const groups = new Map();
-  for (const f of findings) {
-    if (!groups.has(f.type)) groups.set(f.type, []);
-    groups.get(f.type).push(f);
-  }
-  for (const [type, list] of groups) {
-    const file = path.join(dir, `${type}.md`);
-    let existing = "";
-    try { existing = await fs.readFile(file, "utf8"); } catch {}
-    const knownIds = new Set([...existing.matchAll(/id:\s*`([^`]+)`/g)].map((m) => m[1]));
-    const fresh = list.filter((f) => !knownIds.has(f.id)).sort(sortBySev);
-    if (!fresh.length && existing) continue;
-    const header = existing ? "" : `# ${type}\n\n_Findings for every scan that produced this type. Deduped by finding id._\n\n`;
-    const block = `\n---\n_scan @ ${new Date().toISOString()}_\n\n` + fresh.map(renderFinding).join("\n");
-    await fs.writeFile(file, (existing || header) + block, "utf8");
-  }
+  await fs.writeFile(path.join(dir, "finding.md"), renderFindingMd(finding), "utf8");
+  await fs.writeFile(path.join(dir, "proof.md"), renderProofMd(finding, proof), "utf8");
+  if (proof.request) await fs.writeFile(path.join(dir, "request.http"), proof.request, "utf8");
+  if (proof.response) await fs.writeFile(path.join(dir, "response.txt"), proof.response, "utf8");
+  if (proof.payloadsTried?.length) await fs.writeFile(path.join(dir, "payloads.txt"), proof.payloadsTried.join("\n"), "utf8");
+  if (reportMd) await fs.writeFile(path.join(dir, "report.md"), reportMd, "utf8");
+  await fs.writeFile(path.join(dir, "status.json"), JSON.stringify({
+    id: finding.id, type: finding.type, severity: finding.severity,
+    verified: !!proof.verified, exploitable: !!proof.exploitable,
+    confidence: proof.confidence, submitted: false,
+    updatedAt: new Date().toISOString(),
+  }, null, 2), "utf8");
+  return dir;
+}
+
+export async function saveSiteReport(hostDir, host, target, entries, renderer) {
+  const dir = path.join(hostDir, "reports");
+  await fs.mkdir(dir, { recursive: true });
+  const stamp = ts();
+  const file = path.join(dir, `${host}-${stamp}.md`);
+  await fs.writeFile(file, renderer(host, target, entries), "utf8");
+  return file;
 }
 
 /**
- * Save a scan result into agent/web/<host>/. Returns the folder path
- * and the files that were written.
+ * Save a scan result into agent/web/<host>/. Returns paths.
  */
 export async function saveScan(result) {
   await ensureWebFolder();
@@ -148,6 +193,21 @@ export async function saveScan(result) {
   await fs.writeFile(path.join(hostDir, "latest.json"), JSON.stringify(result, null, 2), "utf8");
   await fs.writeFile(path.join(hostDir, "summary.md"), renderSummary(result), "utf8");
   await fs.writeFile(path.join(hostDir, "cves.md"), renderCveDoc(result), "utf8");
-  await mergeByType(hostDir, result.findings || []);
   return { hostDir, host, snapshot: snap };
+}
+
+/** Read the latest scan back from disk. */
+export async function loadLatest(host) {
+  const dir = path.join(WEB_DIR, safeHost(host));
+  const file = path.join(dir, "latest.json");
+  const raw = await fs.readFile(file, "utf8");
+  return { hostDir: dir, result: JSON.parse(raw) };
+}
+
+/** List host folders currently on disk. */
+export async function listHosts() {
+  try {
+    const entries = await fs.readdir(WEB_DIR, { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch { return []; }
 }
