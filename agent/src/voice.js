@@ -29,7 +29,52 @@ export function bindVoiceClient(getter) {
 const ts = () => new Date().toISOString();
 const stamp = () => new Date().toLocaleTimeString();
 
+/**
+ * Finds a voice connection/channel the account is actually sitting in, even
+ * when our in-memory session was lost (reconnect, restart, hot reload).
+ */
+function findLiveVoice() {
+  const client = getClient();
+  if (!client) return null;
+  let connection =
+    client.voice?.connection ||
+    (typeof client.voice?.connections?.first === "function" ? client.voice.connections.first() : null) ||
+    null;
+
+  let channel = connection?.channel || null;
+  if (!channel) {
+    // Fall back to our own voice state in any guild.
+    for (const [, guild] of client.guilds?.cache || []) {
+      const vs = guild.members?.me?.voice || guild.me?.voice || guild.voiceStates?.cache?.get(client.user?.id);
+      const ch = vs?.channel || (vs?.channelId ? guild.channels?.cache?.get(vs.channelId) : null);
+      if (ch) { channel = ch; break; }
+    }
+  }
+  if (!channel && !connection) return null;
+  return { connection, channel };
+}
+
+/** Rebuilds a minimal session from a live connection so leave/save still works. */
+function adoptLiveSession() {
+  const live = findLiveVoice();
+  if (!live) return null;
+  current = {
+    channelId: live.channel?.id || null,
+    channelName: live.channel?.name || "voice",
+    guildId: live.channel?.guild?.id || null,
+    guildName: live.channel?.guild?.name || null,
+    connection: live.connection,
+    startedAt: ts(),
+    events: [{ at: stamp(), text: "session recovered — recording state was lost, saving what's available" }],
+    notes: [],
+    recorder: null,
+    adopted: true,
+  };
+  return current;
+}
+
 export function voiceStatus() {
+  if (!current && findLiveVoice()) adoptLiveSession();
   return current
     ? {
         inChannel: true,
