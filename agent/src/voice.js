@@ -131,8 +131,10 @@ export async function joinVoiceChannel(channelIdOrName) {
     throw new Error("This selfbot build has no voice support (client.voice.joinChannel missing).");
   }
 
+  // Not self-muted / not deafened on purpose: Discord only streams other
+  // people's audio to a client that is itself sending packets.
   const connection = await client.voice.joinChannel(channel, {
-    selfMute: true,
+    selfMute: false,
     selfDeaf: false,
   });
 
