@@ -29,7 +29,52 @@ export function bindVoiceClient(getter) {
 const ts = () => new Date().toISOString();
 const stamp = () => new Date().toLocaleTimeString();
 
+/**
+ * Finds a voice connection/channel the account is actually sitting in, even
+ * when our in-memory session was lost (reconnect, restart, hot reload).
+ */
+function findLiveVoice() {
+  const client = getClient();
+  if (!client) return null;
+  let connection =
+    client.voice?.connection ||
+    (typeof client.voice?.connections?.first === "function" ? client.voice.connections.first() : null) ||
+    null;
+
+  let channel = connection?.channel || null;
+  if (!channel) {
+    // Fall back to our own voice state in any guild.
+    for (const [, guild] of client.guilds?.cache || []) {
+      const vs = guild.members?.me?.voice || guild.me?.voice || guild.voiceStates?.cache?.get(client.user?.id);
+      const ch = vs?.channel || (vs?.channelId ? guild.channels?.cache?.get(vs.channelId) : null);
+      if (ch) { channel = ch; break; }
+    }
+  }
+  if (!channel && !connection) return null;
+  return { connection, channel };
+}
+
+/** Rebuilds a minimal session from a live connection so leave/save still works. */
+function adoptLiveSession() {
+  const live = findLiveVoice();
+  if (!live) return null;
+  current = {
+    channelId: live.channel?.id || null,
+    channelName: live.channel?.name || "voice",
+    guildId: live.channel?.guild?.id || null,
+    guildName: live.channel?.guild?.name || null,
+    connection: live.connection,
+    startedAt: ts(),
+    events: [{ at: stamp(), text: "session recovered — recording state was lost, saving what's available" }],
+    notes: [],
+    recorder: null,
+    adopted: true,
+  };
+  return current;
+}
+
 export function voiceStatus() {
+  if (!current && findLiveVoice()) adoptLiveSession();
   return current
     ? {
         inChannel: true,
@@ -45,6 +90,7 @@ export function voiceStatus() {
 export async function joinVoiceChannel(channelIdOrName) {
   const client = getClient();
   if (!client) throw new Error("Alt account is not running. Start it first.");
+  if (!current && findLiveVoice()) adoptLiveSession();
   if (current) throw new Error("Already in a voice channel. Leave first.");
 
   // Resolve by ID first, then by case-insensitive channel name.
@@ -150,12 +196,20 @@ function renderMeetingMarkdown(session) {
 }
 
 export async function leaveVoiceChannel() {
+  if (!current) adoptLiveSession();
   if (!current) throw new Error("Not in a voice channel.");
   const client = getClient();
   const recorder = current.recorder;
   const session = { ...current, endedAt: ts() };
   try { client?.off("voiceStateUpdate", current.onVoiceState); } catch {}
+  // Disconnect every way this selfbot build exposes, so we really leave.
   try { current.connection?.disconnect?.(); } catch {}
+  try { current.connection?.destroy?.(); } catch {}
+  try {
+    const guild = current.guildId ? client?.guilds?.cache?.get(current.guildId) : null;
+    await (guild?.members?.me?.voice?.disconnect?.() ?? guild?.me?.voice?.disconnect?.());
+  } catch {}
+  try { client?.voice?.connections?.get?.(current.guildId)?.disconnect?.(); } catch {}
   current = null;
 
   // 1. Stop capture and collect every utterance (speaker + Discord ID attached).
