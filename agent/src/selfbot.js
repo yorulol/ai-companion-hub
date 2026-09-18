@@ -8,6 +8,7 @@ import { logActivity } from "./activity.js";
 import { attachPlugins, runOutgoing } from "./selfbot-plugins.js";
 import { findCommand } from "./commands.js";
 import { bindVoiceClient, joinVoiceChannel, leaveVoiceChannel, addMeetingNote, latestMeetingRecap } from "./voice.js";
+import { detectVoiceIntent, runVoiceIntent } from "./voice-intent.js";
 
 let client = null;
 let running = false;
@@ -109,6 +110,24 @@ export async function startSelfbot() {
       }
 
       const isOwner = isOwnerId(message.author.id);
+
+      // Plain-English voice control — no command needed, just ping and ask.
+      const voiceIntent = detectVoiceIntent(text);
+      if (voiceIntent) {
+        if (!isOwner) {
+          await message.reply("Those are my master's commands. Fuck off trying to use them.").catch(() => {});
+          return;
+        }
+        try {
+          const out = await runVoiceIntent(voiceIntent, message);
+          await message.reply(out).catch(() => {});
+          logActivity("selfbot", `voice intent: ${voiceIntent.action}`, { channel: message.channelId });
+        } catch (err) {
+          await message.reply(`Couldn't do that: ${err.message}`).catch(() => {});
+        }
+        return;
+      }
+
       await message.channel.sendTyping().catch(() => {});
       const { reply } = await chat({
         scope: `s:${isDm ? "dm" : message.channelId}:${message.author.id}`,
