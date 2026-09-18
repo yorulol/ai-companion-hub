@@ -144,7 +144,7 @@ function startPanel({ name, port, entryHtml }) {
     }
   });
 
-  server.listen(port, () => console.log(`[panel] ${name}: http://localhost:${port}`));
+  server.listen(port, () => log.ok("panel", `${name}: http://localhost:${port}`));
   return server;
 }
 
