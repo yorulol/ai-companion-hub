@@ -196,12 +196,20 @@ function renderMeetingMarkdown(session) {
 }
 
 export async function leaveVoiceChannel() {
+  if (!current) adoptLiveSession();
   if (!current) throw new Error("Not in a voice channel.");
   const client = getClient();
   const recorder = current.recorder;
   const session = { ...current, endedAt: ts() };
   try { client?.off("voiceStateUpdate", current.onVoiceState); } catch {}
+  // Disconnect every way this selfbot build exposes, so we really leave.
   try { current.connection?.disconnect?.(); } catch {}
+  try { current.connection?.destroy?.(); } catch {}
+  try {
+    const guild = current.guildId ? client?.guilds?.cache?.get(current.guildId) : null;
+    await (guild?.members?.me?.voice?.disconnect?.() ?? guild?.me?.voice?.disconnect?.());
+  } catch {}
+  try { client?.voice?.connections?.get?.(current.guildId)?.disconnect?.(); } catch {}
   current = null;
 
   // 1. Stop capture and collect every utterance (speaker + Discord ID attached).
