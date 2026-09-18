@@ -767,6 +767,9 @@ async function main() {
   try { await setupCallsFolder(); }
   catch (e) { warn(`calls folder setup skipped: ${e.message}`); }
 
+  try { await setupWebFolder(); }
+  catch (e) { warn(`web folder setup skipped: ${e.message}`); }
+
   try { await setupUfVariant(); }
   catch (e) { warn(`uf variant setup skipped: ${e.message}`); }
 
