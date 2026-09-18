@@ -47,9 +47,10 @@ export function ufModelfileContents() {
     "PARAMETER num_predict 140",
     "PARAMETER repeat_penalty 1.2",
     "",
-    "SYSTEM \"\"\"",
-    UF_SYSTEM,
-    "\"\"\"",
+    // Keep the triple quotes INLINE with the text — `SYSTEM """` on its own
+    // line breaks the Modelfile parser on some Ollama builds ("neither
+    // 'from' or 'files' was specified" from /api/create).
+    `SYSTEM """${UF_SYSTEM}"""`,
     "",
   ].join("\n");
 }
@@ -81,6 +82,34 @@ async function pullIfMissing(url, installed, name) {
 }
 
 /**
+ * Creates the variant from the Modelfile. Tries the HTTP API first (sending
+ * both `model` and the legacy `name` field), then falls back to the
+ * `ollama create` CLI with the on-disk Modelfile when the API rejects the
+ * payload — older daemons are picky about inline modelfile bodies.
+ */
+export async function createUfVariant(url) {
+  const base = String(url || "http://127.0.0.1:11434").replace(/\/$/, "");
+  const modelfile = ufModelfileContents();
+  try {
+    const res = await fetch(`${base}/api/create`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: UF.model, name: UF.model, modelfile, stream: false }),
+      signal: AbortSignal.timeout(10 * 60 * 1000),
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return;
+  } catch (apiErr) {
+    // CLI fallback
+    const { spawnSync } = await import("node:child_process");
+    const out = spawnSync("ollama", ["create", UF.model, "-f", UF.modelfile], { encoding: "utf8" });
+    if (out.error || out.status !== 0) {
+      throw new Error(`${apiErr.message} | cli fallback failed: ${(out.stderr || out.error?.message || "").slice(0, 200)}`);
+    }
+  }
+}
+
+/**
  * Build the UF variant from agent/UF/Modelfile via the Ollama API
  * (equivalent to `ollama create qwen-yoru -f agent/UF/Modelfile`).
  * Skips the build when the variant already exists — a fresh `npm run setup`
@@ -107,13 +136,7 @@ export async function ensureUfModel({ url, force = false, log = console.log } = 
     return { created: false, reason: "exists" };
   }
   await pullIfMissing(base, installed, UF.baseModel);
-  const res = await fetch(`${base}/api/create`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: UF.model, modelfile: ufModelfileContents(), stream: false }),
-    signal: AbortSignal.timeout(10 * 60 * 1000),
-  });
-  if (!res.ok) throw new Error(`create ${UF.model} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  await createUfVariant(base);
   await fs.writeFile(hashFile, hash, "utf8").catch(() => {});
   return { created: true, model: UF.model, rebuilt: exists };
 }

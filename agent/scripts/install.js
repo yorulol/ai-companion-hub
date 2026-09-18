@@ -332,13 +332,8 @@ async function setupUfVariant() {
   if (has(UF.model)) { ok(`${UF.model} variant already built`); return; }
   info(`building ${C.bold}${UF.model}${C.reset}${C.grey} from UF/Modelfile…`);
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/create`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: UF.model, modelfile: ufModelfileContents(), stream: false }),
-      signal: AbortSignal.timeout(10 * 60 * 1000),
-    });
-    if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const { createUfVariant } = await import("../src/uf-model.js");
+    await createUfVariant(OLLAMA_URL);
     ok(`${UF.model} built — set OLLAMA_UF_ENABLED=true to chat with it`);
   } catch (e) {
     warn(`variant build failed: ${e.message} — retry with: npm run setup`);
