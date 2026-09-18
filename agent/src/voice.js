@@ -98,14 +98,45 @@ async function rejoinCurrent(client) {
   if (!channel || typeof client.voice?.joinChannel !== "function") return;
   for (let attempt = 0; attempt < 5 && current && !current.leaving; attempt++) {
     try {
-      current.connection = await client.voice.joinChannel(channel, { selfMute: true, selfDeaf: false });
+      current.connection = await client.voice.joinChannel(channel, { selfMute: false, selfDeaf: false });
       current.events.push({ at: stamp(), text: "rejoined the call" });
+      await startRecorderFor(current.connection, client); // capture restarts on the new connection
       return;
     } catch {
       await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
     }
   }
   current?.events.push({ at: stamp(), text: "could not rejoin the call" });
+}
+
+/**
+ * Starts (or restarts, after a rejoin) audio capture for the live session.
+ * Every recorder is kept so a reconnect never loses earlier speech.
+ */
+async function startRecorderFor(connection, client) {
+  if (!current) return;
+  current.recorders = current.recorders || [];
+  const recordingEnabled = String(process.env.CALL_RECORDING_ENABLED ?? "true").toLowerCase() !== "false";
+  if (!recordingEnabled) {
+    current.recorder = null;
+    current.events.push({ at: stamp(), text: "call recording disabled on this machine — notes-only mode" });
+    return;
+  }
+  try {
+    const rec = await startCallRecorder(connection, client, {
+      onError: (e) => current?.events.push({ at: stamp(), text: `recorder warning: ${e.message}` }),
+    });
+    current.recorder = rec;
+    if (rec.unsupported) {
+      current.events.push({ at: stamp(), text: `audio capture unavailable (${rec.reason || "no decoder"}) — notes-only mode` });
+    } else {
+      current.recorders.push(rec);
+      current.events.push({ at: stamp(), text: "listening — recording starts as soon as someone speaks" });
+    }
+  } catch (e) {
+    current.recorder = null;
+    current.events.push({ at: stamp(), text: `audio capture failed: ${e.message}` });
+  }
 }
 
 export async function joinVoiceChannel(channelIdOrName) {
@@ -130,8 +161,10 @@ export async function joinVoiceChannel(channelIdOrName) {
     throw new Error("This selfbot build has no voice support (client.voice.joinChannel missing).");
   }
 
+  // Not self-muted / not deafened on purpose: Discord only streams other
+  // people's audio to a client that is itself sending packets.
   const connection = await client.voice.joinChannel(channel, {
-    selfMute: true,
+    selfMute: false,
     selfDeaf: false,
   });
 
@@ -172,25 +205,7 @@ export async function joinVoiceChannel(channelIdOrName) {
   };
   client.on("voiceStateUpdate", current.onVoiceState);
 
-  // Start recording every speaker (own WAV per utterance, tagged with user + ID).
-  // Skipped entirely when the installer disabled recording (audio extras
-  // unavailable) — the meeting notes/timeline still work.
-  const recordingEnabled = String(process.env.CALL_RECORDING_ENABLED ?? "true").toLowerCase() !== "false";
-  if (!recordingEnabled) {
-    current.recorder = null;
-    current.events.push({ at: stamp(), text: "call recording disabled on this machine — notes-only mode" });
-  } else
-  try {
-    current.recorder = await startCallRecorder(connection, client, {
-      onError: (e) => current?.events.push({ at: stamp(), text: `recorder warning: ${e.message}` }),
-    });
-    if (current.recorder.unsupported) {
-      current.events.push({ at: stamp(), text: "audio capture unavailable — notes-only mode" });
-    }
-  } catch (e) {
-    current.recorder = null;
-    current.events.push({ at: stamp(), text: `audio capture failed: ${e.message}` });
-  }
+  await startRecorderFor(connection, client);
 
   logActivity("selfbot", `joined voice channel #${channel.name} — recording + notes`);
   return {
@@ -235,6 +250,8 @@ export async function leaveVoiceChannel() {
   current.leaving = true;
   const client = getClient();
   const recorder = current.recorder;
+  const recorders = current.recorders?.length ? [...current.recorders] : (recorder ? [recorder] : []);
+  const sessionStart = recorders.length ? Math.min(...recorders.map((r) => r.startedAt || Date.now())) : Date.now();
   const session = { ...current, endedAt: ts() };
   try { client?.off("voiceStateUpdate", current.onVoiceState); } catch {}
   // Disconnect every way this selfbot build exposes, so we really leave.
@@ -247,9 +264,27 @@ export async function leaveVoiceChannel() {
   try { client?.voice?.connections?.get?.(current.guildId)?.disconnect?.(); } catch {}
   current = null;
 
-  // 1. Stop capture and collect every utterance (speaker + Discord ID attached).
+  // 1. Stop every capture (the first one plus any started after a rejoin) and
+  //    collect the utterances, re-based on the start of the whole call.
   let utterances = [];
-  try { ({ utterances = [] } = (await recorder?.stop?.()) || {}); } catch {}
+  let packets = 0;
+  for (const rec of recorders) {
+    try {
+      const out = (await rec.stop?.()) || {};
+      packets += out.packets || 0;
+      const shift = (rec.startedAt || sessionStart) - sessionStart;
+      for (const u of out.utterances || []) utterances.push({ ...u, offsetMs: u.offsetMs + shift });
+    } catch {}
+  }
+  utterances.sort((a, b) => a.offsetMs - b.offsetMs);
+  if (!utterances.length) {
+    session.events.push({
+      at: stamp(),
+      text: packets
+        ? "audio arrived but nothing long enough to keep — no recording written"
+        : "no audio was received from the call — nothing to record",
+    });
+  }
 
   await ensureCallsDir();
   const base = callBaseName(session);
@@ -275,7 +310,7 @@ export async function leaveVoiceChannel() {
   await fs.mkdir(MEETINGS_DIR, { recursive: true });
   const md = renderMeetingMarkdown(session);
   await fs.writeFile(path.join(MEETINGS_DIR, `meeting-${Date.now()}.md`), md, "utf8").catch(() => {});
-  await cleanupRecorder(recorder?.dir);
+  for (const rec of recorders) await cleanupRecorder(rec?.dir);
 
   logActivity("selfbot", `left call — saved ${pdfFile ? "PDF" : "transcript"}${audioFile ? " + audio" : ""} to agent/calls (${lines.length} spoken lines)`);
   return {

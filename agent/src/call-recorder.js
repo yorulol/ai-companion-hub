@@ -13,6 +13,7 @@ import { promises as fs } from "node:fs";
 import fsSync from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Readable, Transform } from "node:stream";
 import { spawn } from "node:child_process";
 
 const RATE = 48000;
@@ -24,6 +25,67 @@ async function loadPrism() {
   try { prism = (await import("prism-media")).default ?? (await import("prism-media")); }
   catch { prism = false; }
   return prism;
+}
+
+let opusScript = null;
+async function loadOpusScript() {
+  if (opusScript !== null) return opusScript;
+  try { const m = await import("opusscript"); opusScript = m.default ?? m; }
+  catch { opusScript = false; }
+  return opusScript;
+}
+
+/**
+ * Builds a decoder stream (opus packets in -> 48k stereo PCM out).
+ * Tries prism-media (native @discordjs/opus or opusscript under the hood),
+ * then falls back to driving opusscript directly.
+ */
+async function makeDecoder() {
+  const prismMod = await loadPrism();
+  if (prismMod?.opus?.Decoder) {
+    try { return new prismMod.opus.Decoder({ rate: RATE, channels: CHANNELS, frameSize: 960 }); }
+    catch {}
+  }
+  const OpusScript = await loadOpusScript();
+  if (!OpusScript) return null;
+  let dec;
+  try { dec = new OpusScript(RATE, CHANNELS, OpusScript.Application?.AUDIO ?? 2049); }
+  catch { return null; }
+  return new Transform({
+    transform(chunk, _enc, cb) {
+      try { this.push(Buffer.from(dec.decode(chunk))); } catch {}
+      cb();
+    },
+  });
+}
+
+/**
+ * Discord only streams other people's audio to a client that is itself
+ * sending packets. Without this the receiver stays silent forever, which is
+ * why calls came back with no utterances. We push a continuous stream of
+ * silent opus frames for the whole call.
+ */
+async function startSilenceKeepalive(connection) {
+  try {
+    const voice = await import("@discordjs/voice");
+    const SILENCE = Buffer.from([0xf8, 0xff, 0xfe]);
+    const stream = new Readable({ read() {} });
+    const timer = setInterval(() => stream.push(SILENCE), 20);
+    const resource = voice.createAudioResource(stream, { inputType: voice.StreamType.Opus });
+    const player = voice.createAudioPlayer({
+      behaviors: { noSubscriber: voice.NoSubscriberBehavior?.Play ?? "play" },
+    });
+    player.play(resource);
+    const sub = connection.subscribe?.(player);
+    return () => {
+      clearInterval(timer);
+      try { stream.push(null); } catch {}
+      try { player.stop(true); } catch {}
+      try { sub?.unsubscribe?.(); } catch {}
+    };
+  } catch {
+    return () => {};
+  }
 }
 
 function wavHeader(dataBytes) {
@@ -95,21 +157,28 @@ function run(cmd, args) {
 export async function startCallRecorder(connection, client, { onError } = {}) {
   const receiver = connection?.receiver;
   if (!receiver?.subscribe) {
-    return { unsupported: true, utterances: [], stop: async () => ({ utterances: [] }) };
+    return { unsupported: true, reason: "this voice connection has no receiver", utterances: [], stop: async () => ({ utterances: [] }) };
   }
-  const prismMod = await loadPrism();
-  if (!prismMod?.opus?.Decoder) {
-    return { unsupported: true, reason: "opus decoder unavailable", utterances: [], stop: async () => ({ utterances: [] }) };
+  const probe = await makeDecoder();
+  if (!probe) {
+    return { unsupported: true, reason: "opus decoder unavailable (install @discordjs/opus or opusscript)", utterances: [], stop: async () => ({ utterances: [] }) };
   }
+  try { probe.destroy?.(); } catch {}
 
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yoru-call-"));
   const startedAt = Date.now();
   const utterances = [];
   const active = new Set();
   let stopped = false;
+  let packets = 0;
 
-  const onStart = (userId) => {
-    if (stopped || active.has(userId)) return;
+  // Keep a silent outbound stream running — Discord won't send us anyone
+  // else's audio otherwise.
+  const stopSilence = await startSilenceKeepalive(connection);
+
+  const capture = async (userId) => {
+    if (stopped || !userId || active.has(userId)) return;
+    if (client?.user?.id && userId === client.user.id) return;
     active.add(userId);
     const offsetMs = Date.now() - startedAt;
     const user = client?.users?.cache?.get(userId);
@@ -117,20 +186,23 @@ export async function startCallRecorder(connection, client, { onError } = {}) {
 
     let opus;
     try {
-      opus = receiver.subscribe(userId, { end: { behavior: 1 /* AfterSilence */, duration: 900 } });
+      opus = receiver.subscribe(userId, { end: { behavior: 1 /* AfterSilence */, duration: 1000 } });
     } catch (e) { active.delete(userId); onError?.(e); return; }
 
-    const decoder = new prismMod.opus.Decoder({ rate: RATE, channels: CHANNELS, frameSize: 960 });
+    const decoder = await makeDecoder();
+    if (!decoder) { active.delete(userId); try { opus.destroy?.(); } catch {} return; }
+
     const out = fsSync.createWriteStream(file);
     out.write(wavHeader(0)); // placeholder, patched on close
     let bytes = 0;
 
+    opus.on("data", () => { packets++; });
     decoder.on("data", (chunk) => { bytes += chunk.length; out.write(chunk); });
     const finish = async () => {
       if (!active.delete(userId)) return;
       try {
         await new Promise((res) => out.end(res));
-        if (bytes < RATE * CHANNELS * 2 * 0.25) { await fs.rm(file, { force: true }); return; } // <0.25s = noise
+        if (bytes < RATE * CHANNELS * 2 * 0.12) { await fs.rm(file, { force: true }); return; } // <0.12s = noise
         const fd = await fs.open(file, "r+");
         await fd.write(wavHeader(bytes), 0, 44, 0);
         await fd.close();
@@ -145,24 +217,46 @@ export async function startCallRecorder(connection, client, { onError } = {}) {
       } catch (e) { onError?.(e); }
     };
     decoder.on("end", finish);
+    decoder.on("close", finish);
     decoder.on("error", (e) => { onError?.(e); finish(); });
+    opus.on("end", () => { try { decoder.end(); } catch {} });
     opus.on("error", (e) => { onError?.(e); finish(); });
     opus.pipe(decoder);
   };
 
+  const onStart = (userId) => { capture(userId).catch((e) => onError?.(e)); };
   receiver.speaking?.on?.("start", onStart);
+
+  // Safety net: some builds never emit speaking events. Keep a subscription
+  // open for everyone sitting in the channel; silent people just produce an
+  // empty stream that gets thrown away.
+  const sweep = setInterval(() => {
+    if (stopped) return;
+    try {
+      const channel = connection?.joinConfig?.channelId
+        ? client?.channels?.cache?.get(connection.joinConfig.channelId)
+        : null;
+      for (const [, member] of channel?.members || []) {
+        const id = member?.id || member?.user?.id;
+        if (id) capture(id).catch(() => {});
+      }
+    } catch {}
+  }, 2000);
 
   return {
     dir,
     startedAt,
     utterances,
+    get packets() { return packets; },
     async stop() {
       stopped = true;
+      clearInterval(sweep);
       try { receiver.speaking?.off?.("start", onStart); } catch {}
+      try { stopSilence?.(); } catch {}
       // give trailing utterances a moment to flush
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, 1500));
       utterances.sort((a, b) => a.offsetMs - b.offsetMs);
-      return { utterances, dir };
+      return { utterances, dir, packets };
     },
   };
 }
