@@ -35,6 +35,7 @@
   <div class="glass" style="flex:1;display:flex;flex-direction:column;min-height:0">
     <div class="tabs grouped-tabs" id="tabs">
       <button data-tab="discord" aria-pressed="true">Overview</button>
+      <button data-tab="killswitch" aria-pressed="false">Killswitch</button>
       <details class="tab-group">
         <summary>Discord</summary>
         <div class="tab-menu glass">
@@ -125,6 +126,11 @@
           <strong>Browser verification</strong>
           <p class="muted">Members run <code>!verify</code>, receive a private one-time browser link, and get the selected role after completion. Events are appended to <code>lookups/verify.txt</code>.</p>
         </div>
+      </section>
+
+      <!-- ============ Killswitch ============ -->
+      <section class="pane" data-pane="killswitch">
+        <h2 class="sec">Killswitch</h2>
         <div class="card">
           <strong>Killswitch</strong>
           <p class="muted">When engaged, YORU stops answering everywhere. The bot and alt account stay connected so you can tell it to disable its killswitch from Discord or the chat panel.</p>
