@@ -65,6 +65,7 @@ async function run(name, args = {}) {
     case "lookup": return await lookup(args.query);
     case "list_lookups": return { files: await listLookupFiles() };
     case "shell": return await pc.runShell(args.command);
+    case "web_vuln_scan": return await scanTarget(args.url);
     default: throw new Error(`Unknown tool: ${name}`);
   }
 }
