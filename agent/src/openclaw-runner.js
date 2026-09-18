@@ -337,6 +337,7 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   // will keep reporting an unhealthy registered PID forever. Yoru instead owns
   // one foreground `gateway run` process. Stop the stale service once, then run
   // a fresh process directly and wait for its actual HTTP API.
+  await stopForeignGateway(bin);
   await stopUnhealthyService(bin);
   await disableManagedService(bin);
 
