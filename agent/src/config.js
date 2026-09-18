@@ -139,6 +139,14 @@ export const config = {
   },
 };
 
+// The UF variant runs through Ollama. If someone enables UF but left
+// OLLAMA_ENABLED=false (easy to do — UF looks like its own provider in the
+// panel), chat would fall through with "no provider enabled". Treat UF-on as
+// implicitly turning the Ollama provider on.
+if (config.providers.ollama.uf.enabled) {
+  config.providers.ollama.enabled = true;
+}
+
 async function writeEnv(updates) {
   try {
     const { promises: fs } = await import("node:fs");
