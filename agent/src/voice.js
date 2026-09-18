@@ -87,6 +87,27 @@ export function voiceStatus() {
     : { inChannel: false };
 }
 
+/**
+ * Re-establishes the voice connection for the session we're already tracking.
+ * Used when Discord drops us (move/kick/reconnect) — the session, recorder and
+ * timeline stay alive so a later "leave" still saves everything.
+ */
+async function rejoinCurrent(client) {
+  if (!current || current.leaving) return;
+  const channel = client.channels?.cache?.get(current.channelId);
+  if (!channel || typeof client.voice?.joinChannel !== "function") return;
+  for (let attempt = 0; attempt < 5 && current && !current.leaving; attempt++) {
+    try {
+      current.connection = await client.voice.joinChannel(channel, { selfMute: true, selfDeaf: false });
+      current.events.push({ at: stamp(), text: "rejoined the call" });
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+  current?.events.push({ at: stamp(), text: "could not rejoin the call" });
+}
+
 export async function joinVoiceChannel(channelIdOrName) {
   const client = getClient();
   if (!client) throw new Error("Alt account is not running. Start it first.");
@@ -126,14 +147,27 @@ export async function joinVoiceChannel(channelIdOrName) {
   };
 
   // Track members joining/leaving the voice channel while the meeting runs.
+  // YORU never leaves on its own — not when the owner leaves, not when the
+  // channel empties. Only an explicit leave command ends the session.
   current.onVoiceState = (oldState, newState) => {
     if (!current) return;
     const id = current.channelId;
+    const selfId = client.user?.id;
+    const memberId = newState?.id || newState?.member?.id || oldState?.id || oldState?.member?.id;
     const tag = newState?.member?.user?.username || oldState?.member?.user?.username || "someone";
+
+    // We got yanked out (kicked, moved, gateway hiccup) — hop straight back in.
+    if (memberId && selfId && memberId === selfId && oldState?.channelId === id && newState?.channelId !== id) {
+      current.events.push({ at: stamp(), text: "dropped from the call — rejoining to keep recording" });
+      rejoinCurrent(client).catch(() => {});
+      return;
+    }
+    if (memberId === selfId) return;
+
     if (newState?.channelId === id && oldState?.channelId !== id) {
       current.events.push({ at: stamp(), text: `${tag} joined the call` });
     } else if (oldState?.channelId === id && newState?.channelId !== id) {
-      current.events.push({ at: stamp(), text: `${tag} left the call` });
+      current.events.push({ at: stamp(), text: `${tag} left the call — YORU stays and keeps recording` });
     }
   };
   client.on("voiceStateUpdate", current.onVoiceState);
@@ -198,6 +232,7 @@ function renderMeetingMarkdown(session) {
 export async function leaveVoiceChannel() {
   if (!current) adoptLiveSession();
   if (!current) throw new Error("Not in a voice channel.");
+  current.leaving = true;
   const client = getClient();
   const recorder = current.recorder;
   const session = { ...current, endedAt: ts() };
