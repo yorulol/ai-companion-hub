@@ -10,6 +10,7 @@
  */
 import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
+import { scanTarget } from "./vuln-scan.js";
 import { config } from "./config.js";
 
 const OWNER_TOOL_SPEC = `
