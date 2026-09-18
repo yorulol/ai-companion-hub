@@ -19,6 +19,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
+import { log } from "./boot-ui.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PANEL_DIR = path.join(__dirname, "..", "panel");
