@@ -232,6 +232,7 @@ function renderMeetingMarkdown(session) {
 export async function leaveVoiceChannel() {
   if (!current) adoptLiveSession();
   if (!current) throw new Error("Not in a voice channel.");
+  current.leaving = true;
   const client = getClient();
   const recorder = current.recorder;
   const session = { ...current, endedAt: ts() };
