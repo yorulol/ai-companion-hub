@@ -126,14 +126,27 @@ export async function joinVoiceChannel(channelIdOrName) {
   };
 
   // Track members joining/leaving the voice channel while the meeting runs.
+  // YORU never leaves on its own — not when the owner leaves, not when the
+  // channel empties. Only an explicit leave command ends the session.
   current.onVoiceState = (oldState, newState) => {
     if (!current) return;
     const id = current.channelId;
+    const selfId = client.user?.id;
+    const memberId = newState?.id || newState?.member?.id || oldState?.id || oldState?.member?.id;
     const tag = newState?.member?.user?.username || oldState?.member?.user?.username || "someone";
+
+    // We got yanked out (kicked, moved, gateway hiccup) — hop straight back in.
+    if (memberId && selfId && memberId === selfId && oldState?.channelId === id && newState?.channelId !== id) {
+      current.events.push({ at: stamp(), text: "dropped from the call — rejoining to keep recording" });
+      rejoinCurrent(client).catch(() => {});
+      return;
+    }
+    if (memberId === selfId) return;
+
     if (newState?.channelId === id && oldState?.channelId !== id) {
       current.events.push({ at: stamp(), text: `${tag} joined the call` });
     } else if (oldState?.channelId === id && newState?.channelId !== id) {
-      current.events.push({ at: stamp(), text: `${tag} left the call` });
+      current.events.push({ at: stamp(), text: `${tag} left the call — YORU stays and keeps recording` });
     }
   };
   client.on("voiceStateUpdate", current.onVoiceState);
