@@ -310,7 +310,7 @@ export async function leaveVoiceChannel() {
   await fs.mkdir(MEETINGS_DIR, { recursive: true });
   const md = renderMeetingMarkdown(session);
   await fs.writeFile(path.join(MEETINGS_DIR, `meeting-${Date.now()}.md`), md, "utf8").catch(() => {});
-  await cleanupRecorder(recorder?.dir);
+  for (const rec of recorders) await cleanupRecorder(rec?.dir);
 
   logActivity("selfbot", `left call — saved ${pdfFile ? "PDF" : "transcript"}${audioFile ? " + audio" : ""} to agent/calls (${lines.length} spoken lines)`);
   return {
