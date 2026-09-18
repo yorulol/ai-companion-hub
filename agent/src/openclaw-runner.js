@@ -236,6 +236,23 @@ function serviceFreeEnv() {
   return env;
 }
 
+/**
+ * A gateway started outside Yoru (systemd user service, or a leftover
+ * `openclaw gateway` from another terminal) owns the gateway-lifecycle lock and
+ * the port. Spawning another one can only fail, so ask the service manager to
+ * release it first.
+ */
+async function stopForeignGateway(bin) {
+  if (platform() === "linux") {
+    for (const args of [["--user", "stop", "openclaw-gateway.service"], ["--user", "disable", "openclaw-gateway.service"]]) {
+      try { execSync(`systemctl ${args.join(" ")}`, { stdio: "ignore", timeout: 15000 }); } catch {}
+    }
+  }
+  if (bin) {
+    await run(bin, ["gateway", "stop", "--force"], { timeout: 20000, windowsHide: true, env: serviceFreeEnv() }).catch(() => {});
+  }
+}
+
 async function disableManagedService(bin) {
   // Remove the stale managed registration so the foreground gateway is the only
   // one OpenClaw knows about. Both commands are no-ops when nothing is managed.
