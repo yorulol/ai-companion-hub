@@ -140,8 +140,8 @@ function surfaceRows() {
   const p = config.panels;
   return [
     ["agent api", `http://localhost:${config.port}`, C.cyan],
-    ["chat panel", p.enabled ? `http://localhost:${p.chatPort}` : "disabled", p.enabled ? C.green : C.grey],
-    ["owner panel", p.enabled ? `http://localhost:${p.ownerPort}` : "disabled", p.enabled ? C.green : C.grey],
+    ["YORU panel", p.enabled ? `http://localhost:${p.chatPort}` : "disabled", p.enabled ? C.green : C.grey],
+    ["YORU WorkSpace", p.enabled ? `http://localhost:${p.workspacePort}` : "disabled", p.enabled ? C.green : C.grey],
     ["discord bot", config.discord.botToken ? paint(C.green, "token detected") : paint(C.yellow, "no token"), C.reset],
     ["selfbot alt", config.discord.userToken ? paint(C.green, "token detected") : paint(C.grey, "not configured"), C.reset],
     ["owner id", config.ownerId || paint(C.red, "NOT SET — owner panel locked"), config.ownerId ? C.cyan : C.reset],

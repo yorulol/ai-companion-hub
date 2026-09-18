@@ -236,6 +236,23 @@ function serviceFreeEnv() {
   return env;
 }
 
+/**
+ * A gateway started outside Yoru (systemd user service, or a leftover
+ * `openclaw gateway` from another terminal) owns the gateway-lifecycle lock and
+ * the port. Spawning another one can only fail, so ask the service manager to
+ * release it first.
+ */
+async function stopForeignGateway(bin) {
+  if (platform() === "linux") {
+    for (const args of [["--user", "stop", "openclaw-gateway.service"], ["--user", "disable", "openclaw-gateway.service"]]) {
+      try { execSync(`systemctl ${args.join(" ")}`, { stdio: "ignore", timeout: 15000 }); } catch {}
+    }
+  }
+  if (bin) {
+    await run(bin, ["gateway", "stop", "--force"], { timeout: 20000, windowsHide: true, env: serviceFreeEnv() }).catch(() => {});
+  }
+}
+
 async function disableManagedService(bin) {
   // Remove the stale managed registration so the foreground gateway is the only
   // one OpenClaw knows about. Both commands are no-ops when nothing is managed.
@@ -320,6 +337,7 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
   // will keep reporting an unhealthy registered PID forever. Yoru instead owns
   // one foreground `gateway run` process. Stop the stale service once, then run
   // a fresh process directly and wait for its actual HTTP API.
+  await stopForeignGateway(bin);
   await stopUnhealthyService(bin);
   await disableManagedService(bin);
 
@@ -350,7 +368,23 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
     if (await verifyGatewayModel()) { lastFailure = ""; log.ok("openclaw", "gateway and model already running"); return true; }
   }
 
+  // Something we are not allowed to stop still owns the port. Starting a second
+  // gateway can only fail with "failed to acquire gateway state ownership", so
+  // stop here with one clear line instead of a wall of duplicate errors.
+  if (await portBusy(port)) {
+    lastFailure = `port ${port} is owned by another OpenClaw process; stop it with \`openclaw gateway stop\` (or \`systemctl --user stop openclaw-gateway.service\`) and restart Yoru`;
+    log.warn("openclaw", `${lastFailure}. OpenRouter/Ollama keep working.`);
+    return false;
+  }
+
   let lastLine = "";
+  const seenLines = new Set();
+  const emit = (level, raw) => {
+    const line = raw.split("\n")[0].slice(0, 160);
+    if (!line || seenLines.has(line)) return;
+    seenLines.add(line);
+    log[level]("openclaw", line);
+  };
   if (child && !child.killed && child.exitCode === null) {
     // Already spawned; just wait for readiness below.
   } else {
@@ -370,13 +404,13 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
         const line = b.toString().trim();
         if (!line) return;
         lastLine = line.split("\n").pop().slice(0, 200);
-        log.info("openclaw", line.split("\n")[0].slice(0, 160));
+        emit("info", line);
       });
       child.stderr.on("data", (b) => {
         const line = b.toString().trim();
         if (!line) return;
         lastLine = line.split("\n").pop().slice(0, 200);
-        log.warn("openclaw", line.split("\n")[0].slice(0, 160));
+        emit("warn", line);
       });
       child.on("error", (e) => { lastLine = e.message; });
       child.on("exit", (code) => {

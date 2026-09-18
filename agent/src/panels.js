@@ -19,6 +19,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
+import { log } from "./boot-ui.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PANEL_DIR = path.join(__dirname, "..", "panel");
@@ -144,7 +145,7 @@ function startPanel({ name, port, entryHtml }) {
     }
   });
 
-  server.listen(port, () => console.log(`[panel] ${name}: http://localhost:${port}`));
+  server.listen(port, () => log.ok("panel", `${name}: http://localhost:${port}`));
   return server;
 }
 

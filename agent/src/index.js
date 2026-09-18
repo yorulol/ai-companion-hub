@@ -17,10 +17,6 @@ startServer();
 log.ok("api", `listening on :${config.port}`);
 
 startPanels();
-if (config.panels.enabled) {
-  log.ok("panel", `chat  → http://localhost:${config.panels.chatPort}`);
-  log.ok("panel", `owner → http://localhost:${config.panels.ownerPort}`);
-}
 
 refreshModels(true)
   .then((models) => log.ok("ai", `${models?.free?.length ?? 0} free OpenRouter models cached`))
