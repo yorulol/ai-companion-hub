@@ -47,9 +47,10 @@ export function ufModelfileContents() {
     "PARAMETER num_predict 140",
     "PARAMETER repeat_penalty 1.2",
     "",
-    "SYSTEM \"\"\"",
-    UF_SYSTEM,
-    "\"\"\"",
+    // Keep the triple quotes INLINE with the text — `SYSTEM """` on its own
+    // line breaks the Modelfile parser on some Ollama builds ("neither
+    // 'from' or 'files' was specified" from /api/create).
+    `SYSTEM """${UF_SYSTEM}"""`,
     "",
   ].join("\n");
 }
