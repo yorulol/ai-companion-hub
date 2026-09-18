@@ -368,7 +368,23 @@ async function startOpenClawOnce({ force = false, autoInstall = false } = {}) {
     if (await verifyGatewayModel()) { lastFailure = ""; log.ok("openclaw", "gateway and model already running"); return true; }
   }
 
+  // Something we are not allowed to stop still owns the port. Starting a second
+  // gateway can only fail with "failed to acquire gateway state ownership", so
+  // stop here with one clear line instead of a wall of duplicate errors.
+  if (await portBusy(port)) {
+    lastFailure = `port ${port} is owned by another OpenClaw process; stop it with \`openclaw gateway stop\` (or \`systemctl --user stop openclaw-gateway.service\`) and restart Yoru`;
+    log.warn("openclaw", `${lastFailure}. OpenRouter/Ollama keep working.`);
+    return false;
+  }
+
   let lastLine = "";
+  const seenLines = new Set();
+  const emit = (level, raw) => {
+    const line = raw.split("\n")[0].slice(0, 160);
+    if (!line || seenLines.has(line)) return;
+    seenLines.add(line);
+    log[level]("openclaw", line);
+  };
   if (child && !child.killed && child.exitCode === null) {
     // Already spawned; just wait for readiness below.
   } else {
