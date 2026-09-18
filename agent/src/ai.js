@@ -212,7 +212,19 @@ const ollamaPulling = new Map(); // model -> Promise
 
 const SYSTEM_DATA_RE = /(?:\b(?:cpu|gpu|vram|ram|hostname|platform|architecture|processor|operating system)\s*[:=]|\b(?:total|free)\s+memory\s*[:=]|\b(?:nvidia|amd|intel)\s+(?:geforce|radeon|core)\b)/i;
 const SYSTEM_DATA_REQUEST_RE = /\b(?:system|computer|machine|hardware|device|pc)\s+(?:info|information|specs?|details?)\b|\b(?:what|which)\s+(?:cpu|gpu|processor)\b/i;
-const MODEL_DRIFT_RE = /\b(?:as an ai(?: language)? model|system_info\s*\(|lockdown_(?:engage|release)\s*\(|tool result for|available tools:|critical behavior rules|system prompt)\b/i;
+// User is asking YORU to do or discuss something on the machine — machine
+// data in the reply is on-topic, not drift.
+const COMPUTER_TASK_RE = /\b(?:computer|pc|machine|laptop|desktop|env(?:ironment)?\s*(?:file|vars?|variables)?|\.env|files?|folders?|director(?:y|ies)|shell|terminal|commands?|access|control|operate|task|process(?:es)?|program|app(?:lication)?s?|install|uninstall|download|screenshot|browse|window)\b/i;
+const MODEL_DRIFT_RE = /\b(?:as an ai(?: language)? model|system_info\s*\(|lockdown_(?:engage|release)\s*\(|tool result for|available tools:|critical behavior rules)\b/i;
+
+/** Strip internal-leak sentences from a reply; returns the cleaned text. */
+function stripDriftLines(text) {
+  return String(text || "")
+    .split(/\n+/)
+    .filter((line) => !MODEL_DRIFT_RE.test(line) && !/system prompt/i.test(line))
+    .join(" ")
+    .trim();
+}
 const COMPLEX_REQUEST_RE = /\b(?:analy[sz]e|debug|architecture|refactor|implement|compare|explain in detail|step[- ]by[- ]step|security|algorithm|write (?:a |the )?(?:code|function|class|program))\b/i;
 
 function cleanOllamaHistory(messages) {
@@ -221,7 +233,7 @@ function cleanOllamaHistory(messages) {
     if (message.role !== "assistant") return true;
     const content = String(message.content || "");
     if (MODEL_DRIFT_RE.test(content)) return false;
-    return !SYSTEM_DATA_RE.test(content) || SYSTEM_DATA_REQUEST_RE.test(latestUser);
+    return !SYSTEM_DATA_RE.test(content) || SYSTEM_DATA_REQUEST_RE.test(latestUser) || COMPUTER_TASK_RE.test(latestUser);
   });
 }
 
@@ -433,13 +445,23 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
   const { text: firstText, body } = await ollamaChatText(p.url, model, localMessages, numKeep, workload);
   let text = firstText;
   const latestUser = [...conversation].reverse().find((message) => message.role === "user")?.content || "";
-  const drifted = (SYSTEM_DATA_RE.test(text) && !SYSTEM_DATA_REQUEST_RE.test(latestUser)) || MODEL_DRIFT_RE.test(text);
+  const computerTask = COMPUTER_TASK_RE.test(latestUser) || SYSTEM_DATA_REQUEST_RE.test(latestUser);
+  const drifted = (SYSTEM_DATA_RE.test(text) && !computerTask) || MODEL_DRIFT_RE.test(text);
   if (drifted) {
     const retryMessages = [compactSystem[0], { role: "user", content: latestUser }];
     const { text: retryText } = await ollamaChatText(p.url, model, retryMessages, numKeep, workload);
     text = retryText;
-    if (!text || (SYSTEM_DATA_RE.test(text) && !SYSTEM_DATA_REQUEST_RE.test(latestUser)) || MODEL_DRIFT_RE.test(text)) throw new Error("Ollama produced an unrelated or unsafe response twice");
+    if (!text || (SYSTEM_DATA_RE.test(text) && !computerTask) || MODEL_DRIFT_RE.test(text)) {
+      // Never hard-fail the chat: salvage what we can and stay in character.
+      const cleaned = stripDriftLines(firstText) || stripDriftLines(retryText);
+      if (cleaned) text = cleaned;
+      else if (computerTask) text = "Yeah, I've got access to your machine. Tell me exactly what you want done and I'll handle it.";
+      else text = "Ask me that again — straight to the point this time.";
+    }
   }
+  if (!text) text = computerTask
+    ? "Yeah, I've got access to your machine. Tell me exactly what you want done and I'll handle it."
+    : "Ask me that again — straight to the point this time.";
 
   const seconds = Number(body.eval_duration || 0) / 1e9;
   const tokens = Number(body.eval_count || 0);
