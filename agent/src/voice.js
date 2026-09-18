@@ -87,6 +87,27 @@ export function voiceStatus() {
     : { inChannel: false };
 }
 
+/**
+ * Re-establishes the voice connection for the session we're already tracking.
+ * Used when Discord drops us (move/kick/reconnect) — the session, recorder and
+ * timeline stay alive so a later "leave" still saves everything.
+ */
+async function rejoinCurrent(client) {
+  if (!current || current.leaving) return;
+  const channel = client.channels?.cache?.get(current.channelId);
+  if (!channel || typeof client.voice?.joinChannel !== "function") return;
+  for (let attempt = 0; attempt < 5 && current && !current.leaving; attempt++) {
+    try {
+      current.connection = await client.voice.joinChannel(channel, { selfMute: true, selfDeaf: false });
+      current.events.push({ at: stamp(), text: "rejoined the call" });
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+  current?.events.push({ at: stamp(), text: "could not rejoin the call" });
+}
+
 export async function joinVoiceChannel(channelIdOrName) {
   const client = getClient();
   if (!client) throw new Error("Alt account is not running. Start it first.");
