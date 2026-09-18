@@ -109,6 +109,36 @@ async function rejoinCurrent(client) {
   current?.events.push({ at: stamp(), text: "could not rejoin the call" });
 }
 
+/**
+ * Starts (or restarts, after a rejoin) audio capture for the live session.
+ * Every recorder is kept so a reconnect never loses earlier speech.
+ */
+async function startRecorderFor(connection, client) {
+  if (!current) return;
+  current.recorders = current.recorders || [];
+  const recordingEnabled = String(process.env.CALL_RECORDING_ENABLED ?? "true").toLowerCase() !== "false";
+  if (!recordingEnabled) {
+    current.recorder = null;
+    current.events.push({ at: stamp(), text: "call recording disabled on this machine — notes-only mode" });
+    return;
+  }
+  try {
+    const rec = await startCallRecorder(connection, client, {
+      onError: (e) => current?.events.push({ at: stamp(), text: `recorder warning: ${e.message}` }),
+    });
+    current.recorder = rec;
+    if (rec.unsupported) {
+      current.events.push({ at: stamp(), text: `audio capture unavailable (${rec.reason || "no decoder"}) — notes-only mode` });
+    } else {
+      current.recorders.push(rec);
+      current.events.push({ at: stamp(), text: "listening — recording starts as soon as someone speaks" });
+    }
+  } catch (e) {
+    current.recorder = null;
+    current.events.push({ at: stamp(), text: `audio capture failed: ${e.message}` });
+  }
+}
+
 export async function joinVoiceChannel(channelIdOrName) {
   const client = getClient();
   if (!client) throw new Error("Alt account is not running. Start it first.");
