@@ -175,25 +175,7 @@ export async function joinVoiceChannel(channelIdOrName) {
   };
   client.on("voiceStateUpdate", current.onVoiceState);
 
-  // Start recording every speaker (own WAV per utterance, tagged with user + ID).
-  // Skipped entirely when the installer disabled recording (audio extras
-  // unavailable) — the meeting notes/timeline still work.
-  const recordingEnabled = String(process.env.CALL_RECORDING_ENABLED ?? "true").toLowerCase() !== "false";
-  if (!recordingEnabled) {
-    current.recorder = null;
-    current.events.push({ at: stamp(), text: "call recording disabled on this machine — notes-only mode" });
-  } else
-  try {
-    current.recorder = await startCallRecorder(connection, client, {
-      onError: (e) => current?.events.push({ at: stamp(), text: `recorder warning: ${e.message}` }),
-    });
-    if (current.recorder.unsupported) {
-      current.events.push({ at: stamp(), text: "audio capture unavailable — notes-only mode" });
-    }
-  } catch (e) {
-    current.recorder = null;
-    current.events.push({ at: stamp(), text: `audio capture failed: ${e.message}` });
-  }
+  await startRecorderFor(connection, client);
 
   logActivity("selfbot", `joined voice channel #${channel.name} — recording + notes`);
   return {
