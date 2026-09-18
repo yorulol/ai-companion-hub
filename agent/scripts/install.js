@@ -703,6 +703,38 @@ async function setupCallsFolder() {
   catch (e) { warn(`speech-to-text setup skipped: ${e.message} — recordings still saved`); }
 }
 
+/**
+ * Creates agent/web/ — where every website scan writes results:
+ *   agent/web/<host>/summary.md, latest.json, scans/<ts>.json,
+ *   by-type/<vuln>.md, cves.md.
+ */
+async function setupWebFolder() {
+  const dir = path.resolve(ROOT, "web");
+  await fs.mkdir(dir, { recursive: true });
+  const readme = path.join(dir, "README.txt");
+  try { await fs.access(readme); }
+  catch {
+    await fs.writeFile(readme, [
+      "YORU web vulnerability scans",
+      "",
+      "Every scan run from the terminal or chat lands here in a folder named",
+      "after the target host. Files written per host:",
+      "  latest.json          full normalized result of the latest scan",
+      "  scans/<ts>.json      timestamped snapshots of every scan run",
+      "  summary.md           readable summary of the latest scan",
+      "  by-type/<type>.md    one file per vulnerability type, deduped by id",
+      "  cves.md              CVE hits from software fingerprints",
+      "",
+      "Only scan targets you have explicit written permission to test.",
+      "",
+    ].join("\n"), "utf8");
+  }
+  ok("agent/web folder ready (per-host vulnerability reports)");
+}
+
+
+
+
 
 // ─────────────────────────────────── main ───────────────────────────────────
 
