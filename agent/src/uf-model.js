@@ -136,13 +136,7 @@ export async function ensureUfModel({ url, force = false, log = console.log } = 
     return { created: false, reason: "exists" };
   }
   await pullIfMissing(base, installed, UF.baseModel);
-  const res = await fetch(`${base}/api/create`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: UF.model, modelfile: ufModelfileContents(), stream: false }),
-    signal: AbortSignal.timeout(10 * 60 * 1000),
-  });
-  if (!res.ok) throw new Error(`create ${UF.model} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  await createUfVariant(base);
   await fs.writeFile(hashFile, hash, "utf8").catch(() => {});
   return { created: true, model: UF.model, rebuilt: exists };
 }
