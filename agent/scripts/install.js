@@ -554,7 +554,32 @@ async function ensureDependencies() {
   const missingOpt = optional.filter((name) => {
     try { requireFrom.resolve(name); return false; } catch { return true; }
   });
-  if (missingOpt.length) info(`optional extras unavailable here: ${missingOpt.join(", ")} (fallbacks in use)`);
+  if (missingOpt.length) {
+    info(`optional extras unavailable here: ${missingOpt.join(", ")} (fallbacks in use)`);
+    // Best-effort retry, one package at a time — a broken audio package must
+    // never take down the rest of the install.
+    for (const name of missingOpt) {
+      try {
+        execFileSync("npm", ["install", "--no-audit", "--no-fund", "--no-save", name], {
+          cwd: ROOT, stdio: "ignore", timeout: 10 * 60 * 1000,
+        });
+        requireFrom.resolve(name);
+        ok(`optional extra recovered: ${name}`);
+      } catch {
+        warn(`skipping optional extra: ${name} — the agent runs fine without it`);
+      }
+    }
+  }
+}
+
+/** Packages needed for call recording/transcription specifically. */
+const RECORDING_PACKAGES = ["@discordjs/voice", "prism-media"];
+
+/** True when the audio-capture extras actually loaded. */
+function recordingCapable() {
+  return RECORDING_PACKAGES.every((name) => {
+    try { requireFrom.resolve(name); return true; } catch { return false; }
+  });
 }
 
 /** Package-manager install attempts for ffmpeg, per platform. */
@@ -666,9 +691,21 @@ async function setupCallsFolder() {
   );
   ok("agent/calls folder ready (PDF transcripts + call recordings)");
 
+  // Recording is a bonus feature — if its audio extras couldn't install on
+  // this machine, disable it cleanly and keep going. Everything else
+  // (chat, providers, Discord bot/selfbot, owner panel) works regardless.
+  if (!recordingCapable()) {
+    await patchEnv({ CALL_RECORDING_ENABLED: "false" });
+    warn("call recording disabled — audio extras didn't install on this machine");
+    warn("  the agent works normally without it; re-run `npm install` later to retry");
+    return;
+  }
+
   await patchEnv({ CALL_RECORDING_ENABLED: "true" });
-  await setupFfmpeg();
-  await setupStt();
+  try { await setupFfmpeg(); }
+  catch (e) { warn(`ffmpeg setup skipped: ${e.message} — calls still record/transcribe`); }
+  try { await setupStt(); }
+  catch (e) { warn(`speech-to-text setup skipped: ${e.message} — recordings still saved`); }
 }
 
 
