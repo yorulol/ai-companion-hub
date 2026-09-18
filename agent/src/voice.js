@@ -264,9 +264,27 @@ export async function leaveVoiceChannel() {
   try { client?.voice?.connections?.get?.(current.guildId)?.disconnect?.(); } catch {}
   current = null;
 
-  // 1. Stop capture and collect every utterance (speaker + Discord ID attached).
+  // 1. Stop every capture (the first one plus any started after a rejoin) and
+  //    collect the utterances, re-based on the start of the whole call.
   let utterances = [];
-  try { ({ utterances = [] } = (await recorder?.stop?.()) || {}); } catch {}
+  let packets = 0;
+  for (const rec of recorders) {
+    try {
+      const out = (await rec.stop?.()) || {};
+      packets += out.packets || 0;
+      const shift = (rec.startedAt || sessionStart) - sessionStart;
+      for (const u of out.utterances || []) utterances.push({ ...u, offsetMs: u.offsetMs + shift });
+    } catch {}
+  }
+  utterances.sort((a, b) => a.offsetMs - b.offsetMs);
+  if (!utterances.length) {
+    session.events.push({
+      at: stamp(),
+      text: packets
+        ? "audio arrived but nothing long enough to keep — no recording written"
+        : "no audio was received from the call — nothing to record",
+    });
+  }
 
   await ensureCallsDir();
   const base = callBaseName(session);
