@@ -233,7 +233,7 @@ function cleanOllamaHistory(messages) {
     if (message.role !== "assistant") return true;
     const content = String(message.content || "");
     if (MODEL_DRIFT_RE.test(content)) return false;
-    return !SYSTEM_DATA_RE.test(content) || SYSTEM_DATA_REQUEST_RE.test(latestUser);
+    return !SYSTEM_DATA_RE.test(content) || SYSTEM_DATA_REQUEST_RE.test(latestUser) || COMPUTER_TASK_RE.test(latestUser);
   });
 }
 
