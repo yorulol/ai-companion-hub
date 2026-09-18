@@ -13,6 +13,7 @@ import { promises as fs } from "node:fs";
 import fsSync from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Readable, Transform } from "node:stream";
 import { spawn } from "node:child_process";
 
 const RATE = 48000;
@@ -24,6 +25,67 @@ async function loadPrism() {
   try { prism = (await import("prism-media")).default ?? (await import("prism-media")); }
   catch { prism = false; }
   return prism;
+}
+
+let opusScript = null;
+async function loadOpusScript() {
+  if (opusScript !== null) return opusScript;
+  try { const m = await import("opusscript"); opusScript = m.default ?? m; }
+  catch { opusScript = false; }
+  return opusScript;
+}
+
+/**
+ * Builds a decoder stream (opus packets in -> 48k stereo PCM out).
+ * Tries prism-media (native @discordjs/opus or opusscript under the hood),
+ * then falls back to driving opusscript directly.
+ */
+async function makeDecoder() {
+  const prismMod = await loadPrism();
+  if (prismMod?.opus?.Decoder) {
+    try { return new prismMod.opus.Decoder({ rate: RATE, channels: CHANNELS, frameSize: 960 }); }
+    catch {}
+  }
+  const OpusScript = await loadOpusScript();
+  if (!OpusScript) return null;
+  let dec;
+  try { dec = new OpusScript(RATE, CHANNELS, OpusScript.Application?.AUDIO ?? 2049); }
+  catch { return null; }
+  return new Transform({
+    transform(chunk, _enc, cb) {
+      try { this.push(Buffer.from(dec.decode(chunk))); } catch {}
+      cb();
+    },
+  });
+}
+
+/**
+ * Discord only streams other people's audio to a client that is itself
+ * sending packets. Without this the receiver stays silent forever, which is
+ * why calls came back with no utterances. We push a continuous stream of
+ * silent opus frames for the whole call.
+ */
+async function startSilenceKeepalive(connection) {
+  try {
+    const voice = await import("@discordjs/voice");
+    const SILENCE = Buffer.from([0xf8, 0xff, 0xfe]);
+    const stream = new Readable({ read() {} });
+    const timer = setInterval(() => stream.push(SILENCE), 20);
+    const resource = voice.createAudioResource(stream, { inputType: voice.StreamType.Opus });
+    const player = voice.createAudioPlayer({
+      behaviors: { noSubscriber: voice.NoSubscriberBehavior?.Play ?? "play" },
+    });
+    player.play(resource);
+    const sub = connection.subscribe?.(player);
+    return () => {
+      clearInterval(timer);
+      try { stream.push(null); } catch {}
+      try { player.stop(true); } catch {}
+      try { sub?.unsubscribe?.(); } catch {}
+    };
+  } catch {
+    return () => {};
+  }
 }
 
 function wavHeader(dataBytes) {
