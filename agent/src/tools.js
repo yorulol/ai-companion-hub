@@ -10,6 +10,7 @@
  */
 import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
+import { scanTarget } from "./vuln-scan.js";
 import { config } from "./config.js";
 
 const OWNER_TOOL_SPEC = `
@@ -32,6 +33,7 @@ Available tools:
 - lockdown_status() — is the machine currently in lockdown?
 - lookup({query}) — search every file in the lookups folder for a value
 - list_lookups() — list files available for lookup
+- web_vuln_scan({url}) — non-destructive vulnerability scan on a target the owner has permission to test (SQLi/XSS probes, security headers, exposed paths, software fingerprint + NVD CVE lookup)
 
 Only ONE tool call per reply. After the tool runs you'll get its result as an observation, then continue the answer for the user.
 `.trim();
@@ -63,6 +65,7 @@ async function run(name, args = {}) {
     case "lookup": return await lookup(args.query);
     case "list_lookups": return { files: await listLookupFiles() };
     case "shell": return await pc.runShell(args.command);
+    case "web_vuln_scan": return await scanTarget(args.url);
     default: throw new Error(`Unknown tool: ${name}`);
   }
 }

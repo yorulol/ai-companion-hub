@@ -28,6 +28,7 @@ function explicitlyRequested(call, text) {
     lookup: /\b(?:lookup|look up|search|find)\b/,
     list_lookups: /\b(?:list|show)\b.*\blookups?\b/,
     shell: /\b(?:run|execute)\b.*\b(?:shell|terminal|command)\b/,
+    web_vuln_scan: /\b(?:vuln(?:erability)?|sqli|xss|cve|bug\s*bount|pentest|pen[- ]?test|scan)\b.*\b(?:https?:\/\/|\.com|\.net|\.org|\.io|site|url|domain|target)\b|\bscan\b\s+https?:\/\//i,
   };
   return patterns[call.tool]?.test(value) || false;
 }

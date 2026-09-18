@@ -8,6 +8,7 @@ import { startOpenClaw } from "./openclaw-runner.js";
 import { autotuneOpenClaw } from "./openclaw-autotune.js";
 import { startOllama } from "./ollama-runner.js";
 import { bootUI, log } from "./boot-ui.js";
+import { startTerminalRepl } from "./terminal-repl.js";
 
 await bootUI();
 
@@ -55,3 +56,7 @@ process.on("SIGINT", () => {
   console.log("\n\x1b[38;5;141m◆\x1b[0m \x1b[38;5;219mYORU shutting down. Bye.\x1b[0m\n");
   process.exit(0);
 });
+
+// Terminal REPL — talk to YORU directly in the same terminal after `npm start`.
+// Only activates when stdin is a TTY, so background services aren't affected.
+startTerminalRepl();
