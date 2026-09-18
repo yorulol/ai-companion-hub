@@ -8,6 +8,7 @@ import { logActivity } from "./activity.js";
 import { attachPlugins, runOutgoing } from "./selfbot-plugins.js";
 import { findCommand } from "./commands.js";
 import { bindVoiceClient, joinVoiceChannel, leaveVoiceChannel, addMeetingNote, latestMeetingRecap } from "./voice.js";
+import { detectVoiceIntent, runVoiceIntent } from "./voice-intent.js";
 
 let client = null;
 let running = false;
