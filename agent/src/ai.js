@@ -212,7 +212,19 @@ const ollamaPulling = new Map(); // model -> Promise
 
 const SYSTEM_DATA_RE = /(?:\b(?:cpu|gpu|vram|ram|hostname|platform|architecture|processor|operating system)\s*[:=]|\b(?:total|free)\s+memory\s*[:=]|\b(?:nvidia|amd|intel)\s+(?:geforce|radeon|core)\b)/i;
 const SYSTEM_DATA_REQUEST_RE = /\b(?:system|computer|machine|hardware|device|pc)\s+(?:info|information|specs?|details?)\b|\b(?:what|which)\s+(?:cpu|gpu|processor)\b/i;
-const MODEL_DRIFT_RE = /\b(?:as an ai(?: language)? model|system_info\s*\(|lockdown_(?:engage|release)\s*\(|tool result for|available tools:|critical behavior rules|system prompt)\b/i;
+// User is asking YORU to do or discuss something on the machine — machine
+// data in the reply is on-topic, not drift.
+const COMPUTER_TASK_RE = /\b(?:computer|pc|machine|laptop|desktop|env(?:ironment)?\s*(?:file|vars?|variables)?|\.env|files?|folders?|director(?:y|ies)|shell|terminal|commands?|access|control|operate|task|process(?:es)?|program|app(?:lication)?s?|install|uninstall|download|screenshot|browse|window)\b/i;
+const MODEL_DRIFT_RE = /\b(?:as an ai(?: language)? model|system_info\s*\(|lockdown_(?:engage|release)\s*\(|tool result for|available tools:|critical behavior rules)\b/i;
+
+/** Strip internal-leak sentences from a reply; returns the cleaned text. */
+function stripDriftLines(text) {
+  return String(text || "")
+    .split(/\n+/)
+    .filter((line) => !MODEL_DRIFT_RE.test(line) && !/system prompt/i.test(line))
+    .join(" ")
+    .trim();
+}
 const COMPLEX_REQUEST_RE = /\b(?:analy[sz]e|debug|architecture|refactor|implement|compare|explain in detail|step[- ]by[- ]step|security|algorithm|write (?:a |the )?(?:code|function|class|program))\b/i;
 
 function cleanOllamaHistory(messages) {
