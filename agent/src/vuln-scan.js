@@ -1019,6 +1019,9 @@ export async function scanTarget(target, opts = {}) {
     paramFindings.push(...f);
   }
 
+  onNote("probing URL path segments (SQLi/XSS on /route/:id)");
+  const pathSegFindings = await probePathSegments(u.toString(), pages, onNote).catch(() => []);
+
   // Forms without CSRF tokens
   const csrfFindings = forms
     .filter((f) => f.method === "post" && !f.hasCsrf)
