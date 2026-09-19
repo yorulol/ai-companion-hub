@@ -319,14 +319,6 @@ export function startTerminalRepl() {
   let pinnedProvider = null;
   let awaitingScanUrl = false;
 
-  banner();
-  const providers = detectProviders();
-  if (providers.length) {
-    console.log(p(C.green, "  providers enabled: ") + providers.map((n) => p(C.cyan, n)).join(p(C.grey, " · ")));
-  } else {
-    console.log(p(C.yellow, "  no AI providers enabled — add keys / enable in .env"));
-  }
-  console.log("");
   rl.prompt();
 
   rl.on("line", async (raw) => {
