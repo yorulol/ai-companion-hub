@@ -217,13 +217,17 @@ async function runScan(rawUrl, pinnedProvider) {
   const url = rawUrl.trim();
   if (!url) { console.log(p(C.red, "  need a URL to scan.")); return; }
   printScanHeader(url);
+  const spin = spinner("initializing deep scan");
+  const notes = [];
   try {
     const { result, saved } = await runFullScan(url, {
-      onNote: (n) => console.log(p(C.grey, `    · ${n}`)),
+      onNote: (n) => { notes.push(n); spin.update(n); },
     });
+    spin.stop(p(C.greenSoft, `  ✓ scan finished · ${notes.length} probe phases`));
     printScan(result, saved);
     await analyzeScanWithAI(result, pinnedProvider);
   } catch (err) {
+    spin.stop();
     console.log(p(C.red, `  scan failed: ${err.message}`));
   }
 }
