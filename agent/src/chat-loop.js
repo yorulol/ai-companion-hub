@@ -36,6 +36,15 @@ function explicitlyRequested(call, text) {
   return patterns[call.tool]?.test(value) || false;
 }
 
+function toolInstructionsFor(text, isOwner) {
+  const value = String(text || "");
+  const publicLookup = /\b(?:lookup|look up|search|find)\b/i.test(value);
+  const ownerAction = /\b(?:system|computer|machine|hardware|pc)\s+(?:info|specs?|details?)\b|\b(?:list|read|write|create|save|move|rename|remove|delete|open)\b.*\b(?:file|folder|directory)\b|\b(?:malware|virus)\s+scan\b|\b(?:lockdown|killswitch|jumpstart)\b|\b(?:run|execute)\b.*\b(?:shell|terminal|command)\b|\b(?:vuln(?:erability)?|sqli|xss|cve|bug\s*bount|pentest|pen[- ]?test|scan)\b.*\b(?:https?:\/\/|\.com|\.net|\.org|\.io|site|url|domain|target)\b/i.test(value);
+  if (isOwner && (publicLookup || ownerAction)) return toolSpecFor(true);
+  if (publicLookup) return toolSpecFor(false);
+  return "No tool is needed for this message. Have a normal conversation and never output tool syntax.";
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.scope       memory scope key
@@ -98,7 +107,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   ].join("\n");
 
   const messages = [
-    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolSpecFor(isOwner)}` },
+    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolInstructionsFor(userText, isOwner)}` },
     ...history,
   ];
 

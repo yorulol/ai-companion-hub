@@ -332,8 +332,9 @@ function ollamaWorkload(messages, mode) {
   return {
     name: "gpu-fast",
     model: fastModel,
-    // Casual chat wants personality — higher temperature, tighter sampling.
-    temp: 0.75,
+    // Keep casual chat expressive without letting a small local model wander
+    // into sentence fragments or unrelated internal-tool narration.
+    temp: 0.55,
     numGpu: p.numGpu,
     numThread: p.numThread,
     numCtx: p.numCtx,
