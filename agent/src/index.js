@@ -13,14 +13,18 @@ import { startTerminalRepl } from "./terminal-repl.js";
 await bootUI();
 
 // A slow starter should never stall the terminal or scare the user. If a
-// service takes past its cap, we stop waiting, keep it going in the
-// background, and only print a dim note when it eventually finishes.
+// service takes past its cap, we stop waiting and keep it going in the
+// background. Once the terminal is up, late starters stay completely silent
+// so nothing clobbers the chat prompt.
+let terminalUp = false;
 const waitWithCap = (promise, ms, tag) =>
   Promise.race([
     promise,
     new Promise((r) => setTimeout(() => {
-      log.dim?.(tag, "still waking up in the background…");
-      promise.then(() => log.dim?.(tag, "ready")).catch(() => {});
+      if (!terminalUp) {
+        log.dim?.(tag, "still waking up in the background…");
+        promise.then(() => { if (!terminalUp) log.dim?.(tag, "ready"); }).catch(() => {});
+      }
       r(null);
     }, ms)),
   ]);
@@ -34,7 +38,7 @@ if (!config.ownerId) log.warn("owner", "OWNER_DISCORD_ID not set — the owner p
 startServer();
 log.ok("api", `listening on :${config.port}`);
 
-boot.push(...startPanels());
+boot.push(waitWithCap(Promise.allSettled(startPanels()), 10000, "panel"));
 
 boot.push(waitWithCap(
   refreshModels(true).then((models) => log.ok("ai", `${models?.free?.length ?? 0} free OpenRouter models cached`)),
@@ -43,14 +47,20 @@ boot.push(waitWithCap(
 
 // OpenClaw's configured backend is Ollama. Provision the exact model first so
 // the gateway cannot report healthy and then fail its first chat with a 500.
-boot.push(waitWithCap(
-  startOllama()
-    .catch((e) => log.warn("ollama", e.message))
-    .then(() => autotuneOpenClaw())
-    .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
-    .then(() => startOpenClaw({ autoInstall: true }).catch((e) => log.warn("openclaw", e.message))),
-  60000, "openclaw"
-));
+// Ollama itself starts whenever it's enabled as a provider; the OpenClaw
+// gateway (autotune + start) only runs when OpenClaw is explicitly enabled.
+const ollamaBoot = startOllama().catch((e) => log.warn("ollama", e.message));
+if (config.providers.openclaw.enabled) {
+  boot.push(waitWithCap(
+    ollamaBoot
+      .then(() => autotuneOpenClaw())
+      .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
+      .then(() => startOpenClaw({ autoInstall: true }).catch((e) => log.warn("openclaw", e.message))),
+    60000, "openclaw"
+  ));
+} else {
+  boot.push(waitWithCap(ollamaBoot, 20000, "ollama"));
+}
 
 const { isDead } = await import("./killswitch.js");
 if (isDead()) {
@@ -85,5 +95,6 @@ process.on("SIGINT", () => {
 });
 
 // Terminal REPL — talk to YORU directly in the same terminal after `npm start`.
-// Only activates when stdin is a TTY, so background services aren't affected.
+// From here on, late-starting services stay silent so the prompt stays clean.
+terminalUp = true;
 startTerminalRepl();
