@@ -299,7 +299,7 @@ export function startTerminalRepl() {
   if (!process.stdin.isTTY) return;
   const rl = readline.createInterface({
     input: process.stdin, output: process.stdout,
-    prompt: p(C.purple + C.bold, "you ") + p(C.grey, "› "),
+    prompt: gradient("you") + p(C.grey, " ❯ "),
     terminal: true,
   });
 
