@@ -167,6 +167,7 @@ export const log = {
   ok:   (t, msg) => console.log(`${paint(C.green, "✓")} ${tag(t, C.greenSoft)} ${paint(C.white, msg)}`),
   warn: (t, msg) => console.log(`${paint(C.yellow, "▲")} ${tag(t, C.yellow)} ${paint(C.white, msg)}`),
   err:  (t, msg) => console.log(`${paint(C.red, "✗")} ${tag(t, C.red)} ${paint(C.white, msg)}`),
+  dim:  (t, msg) => console.log(`${paint(C.g5, "·")} ${tag(t, C.g5)} ${paint(C.g4, msg)}`),
   step: (t, msg) => console.log(`${paint(C.cyanDim, "›")} ${tag(t, C.cyan)} ${paint(C.grey, msg)}`),
 };
 

@@ -12,11 +12,15 @@ import { startTerminalRepl } from "./terminal-repl.js";
 
 await bootUI();
 
+// A slow starter should never stall the terminal or scare the user. If a
+// service takes past its cap, we stop waiting, keep it going in the
+// background, and only print a dim note when it eventually finishes.
 const waitWithCap = (promise, ms, tag) =>
   Promise.race([
     promise,
     new Promise((r) => setTimeout(() => {
-      log.warn(tag, `took longer than ${Math.round(ms / 1000)}s — starting the terminal anyway`);
+      log.dim?.(tag, "still waking up in the background…");
+      promise.then(() => log.dim?.(tag, "ready")).catch(() => {});
       r(null);
     }, ms)),
   ]);
