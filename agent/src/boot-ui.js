@@ -1,6 +1,6 @@
 /**
  * Aesthetic boot UI for `npm start`.
- * Gradient banner, glossy boxes, animated robot, colored status log.
+ * Gradient banner, glossy boxes, colored status log.
  * No dependencies.
  */
 import { config } from "./config.js";
@@ -32,18 +32,6 @@ function gradient(text, colors = GRAD) {
   return chars.map((ch, i) => paint(colors[Math.min(colors.length - 1, Math.floor(i / step))], ch)).join("");
 }
 
-/* ---------- animated robot frames ---------- */
-const ROBOT_FRAMES = [
-  ["         .-\"\"\"\"\"-.         ", "        /  ^   ^  \\        ", "       |   o   o   |       ",
-   "       |     >     |       ", "        \\  \\_-_/  /        ", "         '-.___.-'         ",
-   "        __|___|__          ", "       [==|===|==]         ", "        '-.....-'          "],
-  ["         .-\"\"\"\"\"-.         ", "        /  -   -  \\        ", "       |   O   O   |       ",
-   "       |     >     |       ", "        \\  \\___/  /        ", "         '-.___.-'         ",
-   "        __|___|__          ", "       [==|===|==]         ", "        '-.....-'          "],
-  ["         .-\"\"\"\"\"-.         ", "        /  ^   ^  \\        ", "       |   o   o   |       ",
-   "       |     ~     |       ", "        \\  \\_-_/  /        ", "         '-.___.-'         ",
-   "         __|___|__         ", "        [==|===|==]        ", "         '-.....-'         "],
-];
 
 const LOGO = [
   "  ▓██   ██▓ ▒█████   ██▀███   █    ██  ",
@@ -65,16 +53,6 @@ function centered(text) {
   return " ".repeat(left) + text + " ".repeat(right);
 }
 
-async function animateRobot(cycles = 2, delay = 200) {
-  const width = ROBOT_FRAMES[0][0].length;
-  process.stdout.write("\n");
-  for (let i = 0; i < cycles * ROBOT_FRAMES.length; i++) {
-    const frame = ROBOT_FRAMES[i % ROBOT_FRAMES.length];
-    if (i > 0) process.stdout.write(`\x1b[${frame.length}A`);
-    for (const row of frame) process.stdout.write(paint(C.purpleBright, pad(row, width)) + "\n");
-    await new Promise((r) => setTimeout(r, delay));
-  }
-}
 
 function banner() {
   console.log();
@@ -145,7 +123,6 @@ function systemRows() {
 export async function bootUI() {
   console.clear?.();
   banner();
-  await animateRobot(2, 190);
   console.log(hr("─", C.g3));
   console.log(centered(paint(C.bold + C.pink, "▸ YORU is waking up ▸")));
   console.log(hr("─", C.g3));
