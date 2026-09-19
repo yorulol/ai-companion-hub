@@ -288,6 +288,7 @@ function ollamaWorkload(messages, mode) {
     return {
       name: "balanced",
       model: mode === "coding" ? p.codeModel : p.reasoningModel,
+      temp: mode === "coding" ? 0.2 : 0.45,
       numGpu: p.balancedGpuLayers,
       numThread: p.numThread || Math.max(2, Math.min(12, os.cpus().length - 2)),
       numCtx: Math.max(p.numCtx, 3072),
@@ -299,6 +300,7 @@ function ollamaWorkload(messages, mode) {
     return {
       name: "gpu-reasoning",
       model,
+      temp: mode === "coding" ? 0.2 : 0.45,
       numGpu: p.numGpu,
       numThread: p.numThread,
       numCtx: Math.max(p.numCtx, 2560),
@@ -310,6 +312,8 @@ function ollamaWorkload(messages, mode) {
   return {
     name: "gpu-fast",
     model: fastModel,
+    // Casual chat wants personality — higher temperature, tighter sampling.
+    temp: 0.75,
     numGpu: p.numGpu,
     numThread: p.numThread,
     numCtx: p.numCtx,
@@ -342,9 +346,9 @@ async function ollamaChatRequest(url, model, messages, numKeep = 0, workload, ov
         low_vram: false,
         mirostat: 0,
         repeat_last_n: 128,
-        repeat_penalty: 1.2,
-        temperature: 0.35,
-        top_p: 0.85,
+        repeat_penalty: 1.1,
+        temperature: workload.temp ?? 0.7,
+        top_p: 0.9,
         top_k: 40,
         stop: ["\nUser:", "\nSystem:"],
         ...overrides,
