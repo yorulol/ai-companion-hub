@@ -21,6 +21,7 @@ export async function startSelfbot() {
   });
   client = new mod.Client({ checkUpdate: false });
 
+  const readyPromise = new Promise((res) => client.once("ready", res));
   client.on("ready", () => {
     console.log(`[selfbot] ready as ${client.user.tag}`);
     logActivity("selfbot", `ready as ${client.user.tag} in ${client.guilds.cache.size} servers`);
