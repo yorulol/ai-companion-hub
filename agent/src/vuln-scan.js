@@ -752,19 +752,38 @@ async function probeOneParam(baseUrlStr, key, baseline, onNote, opts = {}) {
   return findings;
 }
 
-async function probeParamsOnUrl(url, baseline, onNote) {
-  const variants = buildProbeVariants(url);
+async function probeParamsOnUrl(url, baseline, onNote, opts = {}) {
+  const variants = buildProbeVariants(url, { allowGuess: !!opts.allowGuess });
   const all = [];
+  const tasks = [];
   for (const v of variants) {
     for (const key of v.keys) {
+      tasks.push({ v, key });
+    }
+  }
+  if (!tasks.length) return all;
+  const label = new URL(url).pathname || "/";
+  onNote?.(`probing ${tasks.length} param${tasks.length === 1 ? "" : "s"} on ${label}`);
+  // Parallel with a small concurrency cap so long-timeout requests don't stall the run.
+  const CONCURRENCY = 4;
+  const HARD_BUDGET_MS = 90_000;
+  const started = Date.now();
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      if (Date.now() - started > HARD_BUDGET_MS) return;
+      const { v, key } = tasks[idx++];
       try {
+        onNote?.(`  → ?${key}`);
         const f = await probeOneParam(v.url, key, baseline, onNote, { guessed: v.guessed });
         all.push(...f);
       } catch {}
     }
   }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   return all;
 }
+
 
 /**
  * Test likely-id path segments (numeric or hex) as if they were parameters:
