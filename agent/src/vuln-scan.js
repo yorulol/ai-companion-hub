@@ -1059,7 +1059,7 @@ export async function scanTarget(target, opts = {}) {
 
   const allFindings = [
     ...headerFindings, ...secretFindings, ...takeoverFindings,
-    ...pathFindings, ...methodFindings, ...paramFindings, ...csrfFindings,
+    ...pathFindings, ...methodFindings, ...paramFindings, ...pathSegFindings, ...csrfFindings,
     ...graphqlF, ...hostF, ...cacheF, ...protoF, ...extraMethodF, ...formF,
     ...smugglingF, ...jwtF, ...domF, ...wsF, ...subF,
   ];
