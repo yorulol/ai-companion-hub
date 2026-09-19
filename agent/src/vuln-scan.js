@@ -484,34 +484,33 @@ function scanBodyForSecrets(url, body) {
 // ─────────────────── param probes (SQLi/XSS/etc) ───────────────────
 
 const COMMON_PARAM_NAMES = [
-  "id", "ID", "uid", "userid", "user_id", "user", "username", "name",
-  "q", "query", "search", "s", "keyword", "term",
-  "page", "p", "pg", "offset", "limit", "start",
-  "cat", "category", "categoryid", "type", "kind",
-  "item", "itemid", "product", "productid", "pid", "sku",
-  "order", "orderby", "sort", "sortby",
-  "file", "filename", "path", "dir", "folder", "doc", "document",
-  "include", "template", "view", "layout", "theme",
-  "action", "cmd", "exec", "do", "func", "method",
-  "lang", "language", "locale",
-  "ref", "redirect", "url", "next", "return", "returnurl", "callback", "continue",
-  "email", "token", "code", "hash", "key",
+  "id", "uid", "user_id", "user", "username",
+  "q", "query", "search", "s",
+  "page", "p", "cat", "category",
+  "item", "productid", "pid",
+  "file", "path", "include", "template", "view",
+  "action", "cmd", "lang",
+  "redirect", "url", "next", "return", "callback",
 ];
 
 /**
  * If URL has no params, synthesize guessed-param variants so we still
  * exercise SQLi/XSS on endpoints that only reveal params via JS/routing.
+ * Guessed variants are only produced when explicitly requested (base URL only)
+ * to avoid combinatorial blow-up across every crawled page.
  */
-function buildProbeVariants(url) {
+function buildProbeVariants(url, { allowGuess = false } = {}) {
   const u = new URL(url);
   const existing = [...u.searchParams.keys()];
   if (existing.length) return [{ url: u.toString(), keys: existing, guessed: false }];
+  if (!allowGuess) return [];
   return COMMON_PARAM_NAMES.map((name) => {
     const g = new URL(u.toString());
     g.searchParams.set(name, "1");
     return { url: g.toString(), keys: [name], guessed: true };
   });
 }
+
 
 function withParam(urlStr, key, value) {
   const u = new URL(urlStr);
