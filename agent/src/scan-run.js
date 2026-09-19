@@ -21,7 +21,7 @@ import {
  * exploit-payloads.txt (raw list) inside the finding's folder.
  */
 async function writeArtifacts(hostDir, finding, proof) {
-  const pack = generatePayloadsFor(finding, proof);
+  const pack = await generatePayloadsFor(finding, proof);
   const baseReport = renderFindingReport(finding, proof);
   const md = pack ? `${baseReport}\n\n${pack.markdown}\n` : baseReport;
   const dir = await saveFindingArtifacts(hostDir, finding, proof, md);
