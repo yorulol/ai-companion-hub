@@ -60,7 +60,7 @@ export const config = {
       codeModel: process.env.OLLAMA_CODE_MODEL || "qwen2.5-coder",
       numCtx: integer(process.env.OLLAMA_NUM_CTX, 1536, 512, 32768),
       numPredict: integer(process.env.OLLAMA_NUM_PREDICT, 140, 32, 8192),
-      historyMessages: integer(process.env.OLLAMA_HISTORY_MESSAGES, 3, 2, 24),
+      historyMessages: integer(process.env.OLLAMA_HISTORY_MESSAGES, 8, 2, 24),
       numBatch: integer(process.env.OLLAMA_NUM_BATCH, 512, 64, 4096),
       numGpu: integer(process.env.OLLAMA_NUM_GPU, 999, 0, 999),
       numThread: integer(process.env.OLLAMA_NUM_THREAD, 0, 0, 64),

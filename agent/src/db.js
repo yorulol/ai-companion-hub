@@ -196,8 +196,11 @@ export function rememberMessage(scope, role, content) {
   ).run(scope, scope);
 }
 
+const CORRUPT_ASSISTANT_MEMORY_RE = /```\s*(?:tool|function)|<tool_call>|\{\s*"(?:tool|name)"\s*:|<#YOUR_[A-Z_]+|\bsystem_info\b|^\s*i(?:'|’)m your\s*$/i;
+
 export const recallMessages = (scope) =>
   db.prepare("SELECT role, content FROM memory WHERE scope = ? ORDER BY id ASC").all(scope)
+    .filter(({ role, content }) => role !== "assistant" || !CORRUPT_ASSISTANT_MEMORY_RE.test(String(content || "")))
     .map(({ role, content }) => ({ role, content }));
 
 // warnings

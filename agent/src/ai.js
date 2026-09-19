@@ -215,7 +215,7 @@ const SYSTEM_DATA_REQUEST_RE = /\b(?:system|computer|machine|hardware|device|pc)
 // User is asking YORU to do or discuss something on the machine — machine
 // data in the reply is on-topic, not drift.
 const COMPUTER_TASK_RE = /\b(?:computer|pc|machine|laptop|desktop|env(?:ironment)?\s*(?:file|vars?|variables)?|\.env|files?|folders?|director(?:y|ies)|shell|terminal|commands?|access|control|operate|task|process(?:es)?|program|app(?:lication)?s?|install|uninstall|download|screenshot|browse|window)\b/i;
-const MODEL_DRIFT_RE = /\b(?:as an ai(?: language)? model|system_info\s*\(|lockdown_(?:engage|release)\s*\(|tool result for|available tools:|critical behavior rules)\b/i;
+const MODEL_DRIFT_RE = /(?:```\s*(?:tool|function)|<tool_call>|\{\s*"(?:tool|name)"\s*:|\b(?:as an ai(?: language)? model|system_info\s*(?:\(|\b)|lockdown_(?:engage|release)\s*\(|tool result for|available tools:|critical behavior rules)\b)/i;
 
 /** Strip internal-leak sentences from a reply; returns the cleaned text. */
 function stripDriftLines(text) {
@@ -241,11 +241,13 @@ function cleanOllamaHistory(messages) {
 
 // Small local models love to hallucinate tool invocations and narrate their
 // own "actions". Scrub that junk so the reply reads like a person talking.
-const FAKE_TOOL_BLOCK_RE = /```(?:tool|json|function)[\s\S]*?```/gi;
-const FAKE_TOOL_LINE_RE = /^\s*(?:\{[\s\S]*"(?:tool|name|args|arguments)"[\s\S]*\}|(?:checking|running|executing|calling|invoking|using)\s+[a-z_]{3,}(?:\s*\(|\s+tool|\s*$))\s*$/i;
+const FAKE_TOOL_BLOCK_RE = /```(?:tool|json|function)\b[\s\S]*?(?:```|$)/gi;
+const FAKE_TOOL_LINE_RE = /^\s*(?:\{[\s\S]*"(?:tool|name|args|arguments)"[\s\S]*|(?:checking|running|executing|calling|invoking|using|looking at)\s+(?:the\s+)?[a-z_]{3,}(?:\s+output)?(?:\s*\(|\s+tool|\s*$))\s*$/i;
 function stripFakeToolNoise(text) {
   let out = String(text || "")
     .replace(FAKE_TOOL_BLOCK_RE, " ")
+    .replace(/<tool_call>[\s\S]*?(?:<\/tool_call>|$)/gi, " ")
+    .replace(/^\s*\{\s*"(?:tool|name)"\s*:[\s\S]*$/gim, " ")
     .split("\n")
     .filter((l) => !FAKE_TOOL_LINE_RE.test(l.trim()))
     .join("\n")
@@ -330,8 +332,9 @@ function ollamaWorkload(messages, mode) {
   return {
     name: "gpu-fast",
     model: fastModel,
-    // Casual chat wants personality — higher temperature, tighter sampling.
-    temp: 0.75,
+    // Keep casual chat expressive without letting a small local model wander
+    // into sentence fragments or unrelated internal-tool narration.
+    temp: 0.55,
     numGpu: p.numGpu,
     numThread: p.numThread,
     numCtx: p.numCtx,

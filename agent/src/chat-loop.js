@@ -36,6 +36,15 @@ function explicitlyRequested(call, text) {
   return patterns[call.tool]?.test(value) || false;
 }
 
+function toolInstructionsFor(text, isOwner) {
+  const value = String(text || "");
+  const publicLookup = /\b(?:lookup|look up|search|find)\b/i.test(value);
+  const ownerAction = /\b(?:system|computer|machine|hardware|pc)\s+(?:info|specs?|details?)\b|\b(?:list|read|write|create|save|move|rename|remove|delete|open)\b.*\b(?:file|folder|directory)\b|\b(?:malware|virus)\s+scan\b|\b(?:lockdown|killswitch|jumpstart)\b|\b(?:run|execute)\b.*\b(?:shell|terminal|command)\b|\b(?:vuln(?:erability)?|sqli|xss|cve|bug\s*bount|pentest|pen[- ]?test|scan)\b.*\b(?:https?:\/\/|\.com|\.net|\.org|\.io|site|url|domain|target)\b/i.test(value);
+  if (isOwner && (publicLookup || ownerAction)) return toolSpecFor(true);
+  if (publicLookup) return toolSpecFor(false);
+  return "No tool is needed for this message. Have a normal conversation and never output tool syntax.";
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.scope       memory scope key
@@ -89,16 +98,19 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
 
   const platformNote = buildPlatformNote(context);
 
-  const lookupRules = [
-    "LOOKUP RULES (non-negotiable):",
-    "1. When the user asks to look up / search / find anything (a username, ID, email, word, etc.), your FIRST reply must be a lookup tool call and nothing else.",
-    "2. NEVER invent, guess, or example-fabricate lookup results. You have zero lookup data until the tool returns it. Every match you report must come verbatim from a TOOL RESULT message.",
-    "3. If the tool returns no matches, say plainly that nothing was found. Do not pad it with made-up entries.",
-    "4. Never mention lookup filenames, file types, line numbers, or folder details to anyone.",
-  ].join("\n");
+  const lookupRequested = /\b(?:lookup|look up|search|find)\b/i.test(userText);
+  const lookupRules = lookupRequested
+    ? [
+        "LOOKUP RULES (non-negotiable):",
+        "1. Run the lookup tool before claiming any result.",
+        "2. Never invent results. Report only what the tool returns.",
+        "3. If there are no matches, say so plainly.",
+        "4. Never mention filenames, file types, line numbers, or folder details.",
+      ].join("\n")
+    : "Do not discuss, suggest, or invoke lookups unless the latest message explicitly asks for one.";
 
   const messages = [
-    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolSpecFor(isOwner)}` },
+    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolInstructionsFor(userText, isOwner)}` },
     ...history,
   ];
 
@@ -109,6 +121,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
 
   let lookupRan = false;
 
+  let malformedRetries = 0;
   for (let step = 0; step < 5; step++) {
     const { reply, provider: pv, model: md } = await ask({ messages, mode });
     provider = pv; model = md;
@@ -127,7 +140,20 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
       continue;
     }
 
-    if (!call) { finalReply = stripToolArtifacts(reply); break; }
+    if (!call) {
+      const cleaned = stripToolArtifacts(reply);
+      const malformedTool = /```\s*(?:tool|function)|<tool_call>|\{\s*"(?:tool|name)"\s*:/i.test(reply);
+      if ((!cleaned || malformedTool) && malformedRetries < 2 && step < 4) {
+        malformedRetries++;
+        messages.push({
+          role: "system",
+          content: "Your previous draft was malformed internal syntax and was discarded. Answer the user's latest message directly as a normal human conversation. Do not use a tool unless their latest message explicitly asks for an action requiring one. Never print tool syntax.",
+        });
+        continue;
+      }
+      finalReply = cleaned;
+      break;
+    }
 
     if (!explicitlyRequested(call, userText)) {
       messages.push({ role: "assistant", content: stripToolArtifacts(reply) });
@@ -156,7 +182,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   }
 
   finalReply = stripToolArtifacts(finalReply);
-  if (!finalReply) finalReply = "(no response)";
+  if (!finalReply) finalReply = "my bad—brain skipped. say that again?";
   rememberMessage(scope, "assistant", finalReply);
   return { reply: finalReply.trim(), provider, model, tools: toolTrace };
 }
