@@ -4,13 +4,33 @@
  * This is the single entry point the REPL and tool calls use so a user just
  * says "scan example.com" and gets everything on disk ready to submit.
  */
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { scanTarget } from "./vuln-scan.js";
 import { verifyAll, verifyFinding } from "./vuln-verify.js";
 import { renderFindingReport, renderSiteReport } from "./vuln-report.js";
+import { generatePayloadsFor } from "./payload-gen.js";
 import {
   saveScan, saveFindingArtifacts, saveSiteReport,
   loadLatest, hostDirFor, safeHost,
 } from "./scan-store.js";
+
+/**
+ * Render the finding's report + any bonus payload pack, then persist all
+ * artifacts. Payload pack goes to exploit-payloads.md (markdown) and
+ * exploit-payloads.txt (raw list) inside the finding's folder.
+ */
+async function writeArtifacts(hostDir, finding, proof) {
+  const pack = generatePayloadsFor(finding, proof);
+  const baseReport = renderFindingReport(finding, proof);
+  const md = pack ? `${baseReport}\n\n${pack.markdown}\n` : baseReport;
+  const dir = await saveFindingArtifacts(hostDir, finding, proof, md);
+  if (pack) {
+    await fs.writeFile(path.join(dir, "exploit-payloads.md"), pack.markdown, "utf8");
+    await fs.writeFile(path.join(dir, "exploit-payloads.txt"), pack.plain, "utf8");
+  }
+  return dir;
+}
 
 /**
  * @param {string} target
@@ -44,11 +64,8 @@ export async function runFullScan(target, opts = {}) {
   const saved = await saveScan(result);
 
   if (doReport) {
-    onNote("writing per-finding artifacts");
-    for (const e of entries) {
-      const md = renderFindingReport(e.finding, e.proof);
-      await saveFindingArtifacts(saved.hostDir, e.finding, e.proof, md);
-    }
+    onNote("writing per-finding artifacts + payload packs");
+    for (const e of entries) await writeArtifacts(saved.hostDir, e.finding, e.proof);
     onNote("drafting combined site report");
     const reportFile = await saveSiteReport(saved.hostDir, saved.host, result.target, entries, renderSiteReport);
     saved.reportFile = reportFile;
@@ -74,10 +91,7 @@ export async function reverifyHost(host, opts = {}) {
   result.proofs = proofs;
   result.verifiedCount = verified.filter((e) => e.proof.verified).length;
   await saveScan(result);
-  for (const e of verified) {
-    const md = renderFindingReport(e.finding, e.proof);
-    await saveFindingArtifacts(hostDir, e.finding, e.proof, md);
-  }
+  for (const e of verified) await writeArtifacts(hostDir, e.finding, e.proof);
   const reportFile = await saveSiteReport(hostDir, safeHost(host), result.target, verified, renderSiteReport);
   return { hostDir, result, entries: verified, reportFile };
 }
@@ -90,10 +104,7 @@ export async function regenerateReports(host) {
   const entries = (result.findings || []).map((f) => ({
     finding: f, proof: result.proofs?.[f.id] || { verified: false, exploitable: false, confidence: "low", evidence: "", request: "", response: "", payloadsTried: [], notes: "" },
   }));
-  for (const e of entries) {
-    const md = renderFindingReport(e.finding, e.proof);
-    await saveFindingArtifacts(hostDir, e.finding, e.proof, md);
-  }
+  for (const e of entries) await writeArtifacts(hostDir, e.finding, e.proof);
   const reportFile = await saveSiteReport(hostDir, safeHost(host), result.target, entries, renderSiteReport);
   return { hostDir, reportFile, entries };
 }
