@@ -868,9 +868,33 @@ export async function scanTarget(target, opts = {}) {
   onNote("checking NVD for known CVEs");
   const cves = await cveLookup(fingerprints, onNote);
 
+  onNote("deep probes: graphql · host-header · cache · proto-pollution · smuggling · webdav");
+  const [
+    graphqlF, hostF, cacheF, protoF, extraMethodF, formF,
+  ] = await Promise.all([
+    probeGraphQL(u.origin, onNote).catch(() => []),
+    probeHostHeader(baseline.url).catch(() => []),
+    probeCachePoisoning(baseline.url).catch(() => []),
+    probeProtoPollution([...paramUrls][0] || baseline.url).catch(() => []),
+    probeExtraMethods(baseline.url).catch(() => []),
+    probeFormBodies(forms, onNote).catch(() => []),
+  ]);
+  const smugglingF = smugglingIndicators(baseline.url, baseline.headers);
+  const jwtF = [];
+  for (const p of pages) jwtF.push(...scanJwts(p.url, p.body));
+  jwtF.push(...scanJwts(baseline.url, String(baseline.headers["set-cookie"] || "")));
+  const domF = [];
+  for (const p of pages) if (/\.js(?:\?|$)/i.test(p.url) || /<script/i.test(p.body)) domF.push(...scanDomSinks(p.url, p.body));
+  const wsF = detectWebsocket(baseline.url, baseline.headers, baseline.body);
+
+  onNote("enumerating subdomains via CT logs");
+  const subF = await subdomainEnum(u.hostname, onNote).catch(() => []);
+
   const allFindings = [
     ...headerFindings, ...secretFindings, ...takeoverFindings,
     ...pathFindings, ...methodFindings, ...paramFindings, ...csrfFindings,
+    ...graphqlF, ...hostF, ...cacheF, ...protoF, ...extraMethodF, ...formF,
+    ...smugglingF, ...jwtF, ...domF, ...wsF, ...subF,
   ];
 
   // Normalize + dedupe
