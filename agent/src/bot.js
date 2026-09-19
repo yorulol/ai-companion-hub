@@ -223,6 +223,9 @@ export async function startBot() {
 
   await client.login(config.discord.botToken);
   running = true;
+  // Wait for Discord's ready event so "ready as ..." prints during boot, not after.
+  await Promise.race([readyPromise, new Promise((r) => setTimeout(r, 15000))]);
+
   logActivity("bot", "started");
   return { ok: true };
 }
