@@ -10,6 +10,8 @@ import { startOllama } from "./ollama-runner.js";
 import { bootUI, log } from "./boot-ui.js";
 import { startTerminalRepl } from "./terminal-repl.js";
 
+await bootUI();
+
 const waitWithCap = (promise, ms, tag) =>
   Promise.race([
     promise,
