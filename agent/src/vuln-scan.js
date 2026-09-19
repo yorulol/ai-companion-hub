@@ -484,34 +484,33 @@ function scanBodyForSecrets(url, body) {
 // ─────────────────── param probes (SQLi/XSS/etc) ───────────────────
 
 const COMMON_PARAM_NAMES = [
-  "id", "ID", "uid", "userid", "user_id", "user", "username", "name",
-  "q", "query", "search", "s", "keyword", "term",
-  "page", "p", "pg", "offset", "limit", "start",
-  "cat", "category", "categoryid", "type", "kind",
-  "item", "itemid", "product", "productid", "pid", "sku",
-  "order", "orderby", "sort", "sortby",
-  "file", "filename", "path", "dir", "folder", "doc", "document",
-  "include", "template", "view", "layout", "theme",
-  "action", "cmd", "exec", "do", "func", "method",
-  "lang", "language", "locale",
-  "ref", "redirect", "url", "next", "return", "returnurl", "callback", "continue",
-  "email", "token", "code", "hash", "key",
+  "id", "uid", "user_id", "user", "username",
+  "q", "query", "search", "s",
+  "page", "p", "cat", "category",
+  "item", "productid", "pid",
+  "file", "path", "include", "template", "view",
+  "action", "cmd", "lang",
+  "redirect", "url", "next", "return", "callback",
 ];
 
 /**
  * If URL has no params, synthesize guessed-param variants so we still
  * exercise SQLi/XSS on endpoints that only reveal params via JS/routing.
+ * Guessed variants are only produced when explicitly requested (base URL only)
+ * to avoid combinatorial blow-up across every crawled page.
  */
-function buildProbeVariants(url) {
+function buildProbeVariants(url, { allowGuess = false } = {}) {
   const u = new URL(url);
   const existing = [...u.searchParams.keys()];
   if (existing.length) return [{ url: u.toString(), keys: existing, guessed: false }];
+  if (!allowGuess) return [];
   return COMMON_PARAM_NAMES.map((name) => {
     const g = new URL(u.toString());
     g.searchParams.set(name, "1");
     return { url: g.toString(), keys: [name], guessed: true };
   });
 }
+
 
 function withParam(urlStr, key, value) {
   const u = new URL(urlStr);
@@ -753,19 +752,38 @@ async function probeOneParam(baseUrlStr, key, baseline, onNote, opts = {}) {
   return findings;
 }
 
-async function probeParamsOnUrl(url, baseline, onNote) {
-  const variants = buildProbeVariants(url);
+async function probeParamsOnUrl(url, baseline, onNote, opts = {}) {
+  const variants = buildProbeVariants(url, { allowGuess: !!opts.allowGuess });
   const all = [];
+  const tasks = [];
   for (const v of variants) {
     for (const key of v.keys) {
+      tasks.push({ v, key });
+    }
+  }
+  if (!tasks.length) return all;
+  const label = new URL(url).pathname || "/";
+  onNote?.(`probing ${tasks.length} param${tasks.length === 1 ? "" : "s"} on ${label}`);
+  // Parallel with a small concurrency cap so long-timeout requests don't stall the run.
+  const CONCURRENCY = 4;
+  const HARD_BUDGET_MS = 90_000;
+  const started = Date.now();
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      if (Date.now() - started > HARD_BUDGET_MS) return;
+      const { v, key } = tasks[idx++];
       try {
+        onNote?.(`  → ?${key}`);
         const f = await probeOneParam(v.url, key, baseline, onNote, { guessed: v.guessed });
         all.push(...f);
       } catch {}
     }
   }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   return all;
 }
+
 
 /**
  * Test likely-id path segments (numeric or hex) as if they were parameters:
@@ -1014,10 +1032,15 @@ export async function scanTarget(target, opts = {}) {
 
   onNote("probing query parameters (SQLi/XSS/LFI/SSTI/CMDi/CRLF/redirect)");
   const paramFindings = [];
-  for (const purl of paramUrls) {
-    const f = await probeParamsOnUrl(purl, baseline, onNote);
+  const paramUrlList = [...paramUrls];
+  for (let i = 0; i < paramUrlList.length; i++) {
+    const purl = paramUrlList[i];
+    onNote(`param URL ${i + 1}/${paramUrlList.length}: ${new URL(purl).pathname || "/"}`);
+    const allowGuess = i === 0; // only guess on the base URL to avoid explosion
+    const f = await probeParamsOnUrl(purl, baseline, onNote, { allowGuess });
     paramFindings.push(...f);
   }
+
 
   onNote("probing URL path segments (SQLi/XSS on /route/:id)");
   const pathSegFindings = await probePathSegments(u.toString(), pages, onNote).catch(() => []);
