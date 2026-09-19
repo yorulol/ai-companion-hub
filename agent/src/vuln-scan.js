@@ -38,13 +38,19 @@
 
 import { URL } from "node:url";
 import { randomBytes, createHash } from "node:crypto";
+import {
+  EXTRA_PATHS, EXTRA_SECRETS,
+  probeGraphQL, scanJwts, probeHostHeader, probeCachePoisoning,
+  smugglingIndicators, probeProtoPollution, scanDomSinks,
+  subdomainEnum, detectWebsocket, probeFormBodies, probeExtraMethods,
+} from "./vuln-scan-extra.js";
 
-const UA = "YORU-DeepScan/2.0 (+bug-bounty; contact: owner)";
+const UA = "YORU-DeepScan/2.1 (+bug-bounty; contact: owner)";
 const TIMEOUT_MS = 15_000;
 const MAX_BODY_BYTES = 800_000;
-const MAX_CRAWL_PAGES = 25;
-const MAX_PARAM_PROBES = 60;
-const CONCURRENCY = 6;
+const MAX_CRAWL_PAGES = 60;
+const MAX_PARAM_PROBES = 120;
+const CONCURRENCY = 8;
 
 const MARKER = () => "yoru" + randomBytes(4).toString("hex");
 
