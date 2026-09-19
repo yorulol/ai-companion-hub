@@ -231,6 +231,7 @@ const COMMON_PATHS = [
   "/.aws/credentials", "/aws.json", "/gcp.json",
   "/composer.json", "/composer.lock", "/package.json", "/yarn.lock",
   "/webpack.config.js", "/vite.config.js",
+  ...EXTRA_PATHS,
 ];
 
 const SECRET_PATTERNS = [
