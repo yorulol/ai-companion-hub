@@ -296,7 +296,20 @@ function help() {
 }
 
 export function startTerminalRepl() {
-  if (!process.stdin.isTTY) return;
+  // The banner and provider line always print — only the interactive prompt
+  // needs a TTY. (Some launchers pipe stdin, which used to hide everything.)
+  banner();
+  const providers = detectProviders();
+  if (providers.length) {
+    console.log(p(C.green, "  providers enabled: ") + providers.map((n) => p(C.cyan, n)).join(p(C.grey, " · ")));
+  } else {
+    console.log(p(C.yellow, "  no AI providers enabled — add keys / enable in .env"));
+  }
+  console.log("");
+  if (!process.stdin.isTTY) {
+    console.log(p(C.grey, "  (non-interactive terminal — chat prompt unavailable)"));
+    return;
+  }
   const rl = readline.createInterface({
     input: process.stdin, output: process.stdout,
     prompt: gradient("you") + p(C.grey, " ❯ "),
@@ -306,14 +319,6 @@ export function startTerminalRepl() {
   let pinnedProvider = null;
   let awaitingScanUrl = false;
 
-  banner();
-  const providers = detectProviders();
-  if (providers.length) {
-    console.log(p(C.green, "  providers enabled: ") + providers.map((n) => p(C.cyan, n)).join(p(C.grey, " · ")));
-  } else {
-    console.log(p(C.yellow, "  no AI providers enabled — add keys / enable in .env"));
-  }
-  console.log("");
   rl.prompt();
 
   rl.on("line", async (raw) => {

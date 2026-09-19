@@ -232,9 +232,27 @@ function cleanOllamaHistory(messages) {
   return messages.filter((message) => {
     if (message.role !== "assistant") return true;
     const content = String(message.content || "");
+    // Past fake tool dumps teach the model to keep faking them — drop them.
+    if (FAKE_TOOL_BLOCK_RE.test(content)) return false;
     if (MODEL_DRIFT_RE.test(content)) return false;
     return !SYSTEM_DATA_RE.test(content) || SYSTEM_DATA_REQUEST_RE.test(latestUser) || COMPUTER_TASK_RE.test(latestUser);
   });
+}
+
+// Small local models love to hallucinate tool invocations and narrate their
+// own "actions". Scrub that junk so the reply reads like a person talking.
+const FAKE_TOOL_BLOCK_RE = /```(?:tool|json|function)[\s\S]*?```/gi;
+const FAKE_TOOL_LINE_RE = /^\s*(?:\{[\s\S]*"(?:tool|name|args|arguments)"[\s\S]*\}|(?:checking|running|executing|calling|invoking|using)\s+[a-z_]{3,}(?:\s*\(|\s+tool|\s*$))\s*$/i;
+function stripFakeToolNoise(text) {
+  let out = String(text || "")
+    .replace(FAKE_TOOL_BLOCK_RE, " ")
+    .split("\n")
+    .filter((l) => !FAKE_TOOL_LINE_RE.test(l.trim()))
+    .join("\n")
+    .replace(/\b(?:system_info|lockdown_engage|lockdown_release|tool_call|function_call)\b\s*\([^)]*\)/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return out;
 }
 
 async function pullOllamaModel(model) {
@@ -288,6 +306,7 @@ function ollamaWorkload(messages, mode) {
     return {
       name: "balanced",
       model: mode === "coding" ? p.codeModel : p.reasoningModel,
+      temp: mode === "coding" ? 0.2 : 0.45,
       numGpu: p.balancedGpuLayers,
       numThread: p.numThread || Math.max(2, Math.min(12, os.cpus().length - 2)),
       numCtx: Math.max(p.numCtx, 3072),
@@ -299,6 +318,7 @@ function ollamaWorkload(messages, mode) {
     return {
       name: "gpu-reasoning",
       model,
+      temp: mode === "coding" ? 0.2 : 0.45,
       numGpu: p.numGpu,
       numThread: p.numThread,
       numCtx: Math.max(p.numCtx, 2560),
@@ -310,6 +330,8 @@ function ollamaWorkload(messages, mode) {
   return {
     name: "gpu-fast",
     model: fastModel,
+    // Casual chat wants personality — higher temperature, tighter sampling.
+    temp: 0.75,
     numGpu: p.numGpu,
     numThread: p.numThread,
     numCtx: p.numCtx,
@@ -342,9 +364,9 @@ async function ollamaChatRequest(url, model, messages, numKeep = 0, workload, ov
         low_vram: false,
         mirostat: 0,
         repeat_last_n: 128,
-        repeat_penalty: 1.2,
-        temperature: 0.35,
-        top_p: 0.85,
+        repeat_penalty: 1.1,
+        temperature: workload.temp ?? 0.7,
+        top_p: 0.9,
         top_k: 40,
         stop: ["\nUser:", "\nSystem:"],
         ...overrides,
@@ -468,6 +490,7 @@ CRITICAL BEHAVIOR RULES (override any built-in politeness training):
   if (!text) text = computerTask
     ? "Yeah, I've got access to your machine. Tell me exactly what you want done and I'll handle it."
     : "Ask me that again — straight to the point this time.";
+  text = stripFakeToolNoise(text) || "…lost my train of thought. Say that again?";
 
   const seconds = Number(body.eval_duration || 0) / 1e9;
   const tokens = Number(body.eval_count || 0);
