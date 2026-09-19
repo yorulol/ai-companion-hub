@@ -1,6 +1,6 @@
 /**
  * Aesthetic boot UI for `npm start`.
- * Gradient banner, glossy boxes, animated robot, colored status log.
+ * Gradient banner, glossy boxes, colored status log.
  * No dependencies.
  */
 import { config } from "./config.js";
@@ -123,7 +123,6 @@ function systemRows() {
 export async function bootUI() {
   console.clear?.();
   banner();
-  await animateRobot(2, 190);
   console.log(hr("─", C.g3));
   console.log(centered(paint(C.bold + C.pink, "▸ YORU is waking up ▸")));
   console.log(hr("─", C.g3));
