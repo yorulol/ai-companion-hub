@@ -73,7 +73,7 @@ export const config = {
       // When enabled, chat uses OLLAMA_UF_MODEL instead of OLLAMA_MODEL.
       uf: {
         enabled: bool(process.env.OLLAMA_UF_ENABLED, false),
-        baseModel: process.env.OLLAMA_UF_BASE_MODEL || "qwen2.5:1.5b",
+        baseModel: process.env.OLLAMA_UF_BASE_MODEL || "qwen2.5:3b-instruct-q4_K_M",
         model: process.env.OLLAMA_UF_MODEL || "qwen-yoru",
         modelfile: process.env.OLLAMA_UF_MODELFILE || "agent/UF/Modelfile",
       },

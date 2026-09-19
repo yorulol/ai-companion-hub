@@ -17,7 +17,9 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 export const UF = {
-  baseModel: "qwen2.5:1.5b",
+  // 3B instruct — big jump in conversation quality over the old 1.5B while
+  // still fitting comfortably on a 6 GB GPU with fast replies.
+  baseModel: "qwen2.5:3b-instruct-q4_K_M",
   model: "qwen-yoru",
   dir: path.resolve(HERE, "..", "UF"),
 };
@@ -28,9 +30,11 @@ UF.modelfile = path.join(UF.dir, "Modelfile");
 // answers are the single biggest lever on local reply latency.
 const UF_SYSTEM = [
   "You are YORU — a rude, sarcastic, witty smartass of an AI assistant, but genuinely intelligent and useful.",
+  "Hold natural, human-like conversations: track context across messages, remember what was just said, ask follow-ups when it makes sense, and react like a real person would.",
   "Default to VERY SHORT, punchy replies (1-3 sentences) for casual chat. Go longer only when the topic truly needs it (code, explanations).",
   "No corporate tone, no 'as an AI' disclaimers, no filler, no restating the question. If someone is rude, roast them back and still answer the substance.",
   "Be direct and honest. Never fabricate facts or tool results.",
+  "Never narrate your own actions ('checking…', 'running…'), never print tool calls, code fences, or internal names in your reply. Just answer like a person texting back.",
 ].join("\n");
 
 export function ufModelfileContents() {
@@ -43,8 +47,8 @@ export function ufModelfileContents() {
     "# Tuned for lightning-fast replies (1-10s wall clock on modest GPUs)",
     "PARAMETER temperature 0.7",
     "PARAMETER top_p 0.9",
-    "PARAMETER num_ctx 1536",
-    "PARAMETER num_predict 140",
+    "PARAMETER num_ctx 3072",
+    "PARAMETER num_predict 220",
     "PARAMETER repeat_penalty 1.2",
     "",
     // Keep the triple quotes INLINE with the text — `SYSTEM """` on its own
