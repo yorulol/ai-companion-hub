@@ -24,26 +24,39 @@ import { WEB_DIR } from "./scan-store.js";
 import { ask } from "./ai.js";
 import { getSettings } from "./db.js";
 import { config } from "./config.js";
+import { spinner } from "./boot-ui.js";
 
 const SCOPE = "terminal:local";
 
 const C = {
   reset: "\x1b[0m", dim: "\x1b[2m", bold: "\x1b[1m",
-  pink: "\x1b[38;5;219m", purple: "\x1b[38;5;141m", magenta: "\x1b[38;5;177m",
-  cyan: "\x1b[38;5;123m", blue: "\x1b[38;5;111m",
-  green: "\x1b[38;5;120m", yellow: "\x1b[38;5;222m",
-  red: "\x1b[38;5;204m", orange: "\x1b[38;5;215m",
-  grey: "\x1b[38;5;244m", white: "\x1b[38;5;255m",
+  pink: "\x1b[38;5;219m", pinkSoft: "\x1b[38;5;225m",
+  purple: "\x1b[38;5;141m", magenta: "\x1b[38;5;177m",
+  cyan: "\x1b[38;5;123m", cyanDim: "\x1b[38;5;74m", blue: "\x1b[38;5;111m",
+  green: "\x1b[38;5;120m", greenSoft: "\x1b[38;5;157m",
+  yellow: "\x1b[38;5;222m", red: "\x1b[38;5;204m", orange: "\x1b[38;5;215m",
+  grey: "\x1b[38;5;244m", greyDim: "\x1b[38;5;238m", white: "\x1b[38;5;255m",
 };
+const GRAD = ["\x1b[38;5;54m","\x1b[38;5;91m","\x1b[38;5;98m","\x1b[38;5;141m","\x1b[38;5;177m","\x1b[38;5;213m","\x1b[38;5;219m"];
 const p = (c, s) => `${c}${s}${C.reset}`;
-const line = (ch = "─", n = 62, col = C.purple) => p(col, ch.repeat(n));
+const line = (ch = "─", n = 64, col = C.purple) => p(col, ch.repeat(n));
+function gradient(text) {
+  const chars = [...text]; const step = chars.length / GRAD.length;
+  return chars.map((ch, i) => p(GRAD[Math.min(GRAD.length - 1, Math.floor(i / step))], ch)).join("");
+}
 
 function banner() {
+  const W = 64;
+  const title = gradient("Y · O · R · U   T E R M I N A L");
+  const sub = "type freely — or /help · say “scan a site” or drop a URL";
   console.log("");
-  console.log(line("─"));
-  console.log(`${p(C.magenta + C.bold, "  Y O R U ")}${p(C.grey, "·")} ${p(C.pink, "terminal — type freely, or /help for commands")}`);
-  console.log(`${p(C.grey, "  scans auto-verify + draft bug-bounty reports · say “scan a site” or drop a URL")}`);
-  console.log(line("─"));
+  console.log(p(GRAD[2], "╭" + "─".repeat(W) + "╮"));
+  const titleLen = title.replace(/\x1b\[[0-9;]*m/g, "").length;
+  const pad = " ".repeat(Math.max(0, Math.floor((W - titleLen) / 2)));
+  console.log(p(GRAD[2], "│") + pad + title + " ".repeat(W - titleLen - pad.length) + p(GRAD[2], "│"));
+  const subPad = " ".repeat(Math.max(0, Math.floor((W - sub.length) / 2)));
+  console.log(p(GRAD[2], "│") + p(C.grey + C.dim, subPad + sub + " ".repeat(W - sub.length - subPad.length)) + p(GRAD[2], "│"));
+  console.log(p(GRAD[2], "╰" + "─".repeat(W) + "╯"));
   console.log("");
 }
 
