@@ -145,12 +145,19 @@ function startPanel({ name, port, entryHtml }) {
     }
   });
 
-  server.listen(port, () => log.ok("panel", `${name}: http://localhost:${port}`));
-  return server;
+  // Resolve once the panel is actually listening, so startup logs stay ordered.
+  const listening = new Promise((resolve, reject) => {
+    server.once("listen", () => { log.ok("panel", `${name}: http://localhost:${port}`); resolve(server); });
+    server.once("error", reject);
+  });
+  server.listen(port);
+  return listening;
 }
 
 export function startPanels() {
-  if (!config.panels.enabled) return;
-  startPanel({ name: "YORU panel", port: config.panels.chatPort, entryHtml: "hub.html" });
-  startPanel({ name: "YORU WorkSpace", port: config.panels.workspacePort, entryHtml: "workspace.html" });
+  if (!config.panels.enabled) return [];
+  return [
+    startPanel({ name: "YORU panel", port: config.panels.chatPort, entryHtml: "hub.html" }),
+    startPanel({ name: "YORU WorkSpace", port: config.panels.workspacePort, entryHtml: "workspace.html" }),
+  ];
 }

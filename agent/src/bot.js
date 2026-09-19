@@ -33,6 +33,7 @@ export async function startBot() {
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
 
+  const readyPromise = new Promise((res) => client.once(Events.ClientReady, res));
   client.on(Events.ClientReady, () => {
     console.log(`[bot] ready as ${client.user.tag}`);
     logActivity("bot", `ready as ${client.user.tag} in ${client.guilds.cache.size} servers`);
@@ -222,6 +223,9 @@ export async function startBot() {
 
   await client.login(config.discord.botToken);
   running = true;
+  // Wait for Discord's ready event so "ready as ..." prints during boot, not after.
+  await Promise.race([readyPromise, new Promise((r) => setTimeout(r, 15000))]);
+
   logActivity("bot", "started");
   return { ok: true };
 }

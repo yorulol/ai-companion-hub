@@ -12,24 +12,41 @@ import { startTerminalRepl } from "./terminal-repl.js";
 
 await bootUI();
 
+const waitWithCap = (promise, ms, tag) =>
+  Promise.race([
+    promise,
+    new Promise((r) => setTimeout(() => {
+      log.warn(tag, `took longer than ${Math.round(ms / 1000)}s — starting the terminal anyway`);
+      r(null);
+    }, ms)),
+  ]);
+
+// Everything that prints startup lines collects into `boot`, so the terminal
+// REPL only loads in after the whole stack has finished waking up.
+const boot = [];
+
 if (!config.ownerId) log.warn("owner", "OWNER_DISCORD_ID not set — the owner panel will refuse to unlock.");
 
 startServer();
 log.ok("api", `listening on :${config.port}`);
 
-startPanels();
+boot.push(...startPanels());
 
-refreshModels(true)
-  .then((models) => log.ok("ai", `${models?.free?.length ?? 0} free OpenRouter models cached`))
-  .catch((e) => log.warn("ai", `model scan failed: ${e.message}`));
+boot.push(waitWithCap(
+  refreshModels(true).then((models) => log.ok("ai", `${models?.free?.length ?? 0} free OpenRouter models cached`)),
+  20000, "ai"
+));
 
 // OpenClaw's configured backend is Ollama. Provision the exact model first so
 // the gateway cannot report healthy and then fail its first chat with a 500.
-startOllama()
-  .catch((e) => log.warn("ollama", e.message))
-  .then(() => autotuneOpenClaw())
-  .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
-  .then(() => startOpenClaw({ autoInstall: true }).catch((e) => log.warn("openclaw", e.message)));
+boot.push(waitWithCap(
+  startOllama()
+    .catch((e) => log.warn("ollama", e.message))
+    .then(() => autotuneOpenClaw())
+    .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
+    .then(() => startOpenClaw({ autoInstall: true }).catch((e) => log.warn("openclaw", e.message))),
+  60000, "openclaw"
+));
 
 const { isDead } = await import("./killswitch.js");
 if (isDead()) {
@@ -39,18 +56,24 @@ if (isDead()) {
 // The bot and selfbot always connect. The killswitch gate lives in chat-loop,
 // so a dead agent can still hear "disable your killswitch" from Discord.
 if (config.discord.botAutostart && config.discord.botToken) {
-  startBot()
-    .then(() => log.ok("bot", "discord bot online"))
-    .catch((err) => log.err("bot", `failed to start: ${err.message}`));
+  boot.push(waitWithCap(
+    startBot().then(() => log.ok("bot", "discord bot online")),
+    25000, "bot"
+  ));
 } else {
   log.info("bot", "autostart off or no token — skipping");
 }
 
 if (config.discord.selfbotAutostart && config.discord.userToken) {
-  startSelfbot()
-    .then(() => log.ok("selfbot", "alt account responder online"))
-    .catch((err) => log.err("selfbot", `failed to start: ${err.message}`));
+  boot.push(waitWithCap(
+    startSelfbot().then(() => log.ok("selfbot", "alt account responder online")),
+    25000, "selfbot"
+  ));
 }
+
+// Let every startup line land first, then bring the terminal up last.
+await Promise.allSettled(boot);
+await new Promise((r) => setTimeout(r, 500));
 
 process.on("SIGINT", () => {
   console.log("\n\x1b[38;5;141m◆\x1b[0m \x1b[38;5;219mYORU shutting down. Bye.\x1b[0m\n");

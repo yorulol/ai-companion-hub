@@ -21,6 +21,7 @@ export async function startSelfbot() {
   });
   client = new mod.Client({ checkUpdate: false });
 
+  const readyPromise = new Promise((res) => client.once("ready", res));
   client.on("ready", () => {
     console.log(`[selfbot] ready as ${client.user.tag}`);
     logActivity("selfbot", `ready as ${client.user.tag} in ${client.guilds.cache.size} servers`);
@@ -161,6 +162,8 @@ export async function startSelfbot() {
   await client.login(config.discord.userToken);
   bindVoiceClient(() => client);
   running = true;
+  // Wait for Discord's ready event so "ready as ..." prints during boot, not after.
+  await Promise.race([readyPromise, new Promise((r) => setTimeout(r, 15000))]);
   logActivity("selfbot", "started");
   return { ok: true };
 }
