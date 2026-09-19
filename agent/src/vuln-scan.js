@@ -483,193 +483,357 @@ function scanBodyForSecrets(url, body) {
 
 // ─────────────────── param probes (SQLi/XSS/etc) ───────────────────
 
-function paramSet(url) {
+const COMMON_PARAM_NAMES = [
+  "id", "ID", "uid", "userid", "user_id", "user", "username", "name",
+  "q", "query", "search", "s", "keyword", "term",
+  "page", "p", "pg", "offset", "limit", "start",
+  "cat", "category", "categoryid", "type", "kind",
+  "item", "itemid", "product", "productid", "pid", "sku",
+  "order", "orderby", "sort", "sortby",
+  "file", "filename", "path", "dir", "folder", "doc", "document",
+  "include", "template", "view", "layout", "theme",
+  "action", "cmd", "exec", "do", "func", "method",
+  "lang", "language", "locale",
+  "ref", "redirect", "url", "next", "return", "returnurl", "callback", "continue",
+  "email", "token", "code", "hash", "key",
+];
+
+/**
+ * If URL has no params, synthesize guessed-param variants so we still
+ * exercise SQLi/XSS on endpoints that only reveal params via JS/routing.
+ */
+function buildProbeVariants(url) {
   const u = new URL(url);
-  return { url: u, keys: [...u.searchParams.keys()] };
+  const existing = [...u.searchParams.keys()];
+  if (existing.length) return [{ url: u.toString(), keys: existing, guessed: false }];
+  return COMMON_PARAM_NAMES.map((name) => {
+    const g = new URL(u.toString());
+    g.searchParams.set(name, "1");
+    return { url: g.toString(), keys: [name], guessed: true };
+  });
+}
+
+function withParam(urlStr, key, value) {
+  const u = new URL(urlStr);
+  u.searchParams.set(key, value);
+  return u.toString();
+}
+
+/**
+ * Test one parameter across every vuln class. Payloads are APPENDED to the
+ * original value so the surrounding SQL/HTML/template context stays intact
+ * — the single most important correctness fix for real-world targets.
+ */
+async function probeOneParam(baseUrlStr, key, baseline, onNote, opts = {}) {
+  const findings = [];
+  const orig = new URL(baseUrlStr).searchParams.get(key) ?? "1";
+  const guessed = !!opts.guessed;
+
+  const benignUrl = withParam(baseUrlStr, key, orig || "1");
+  const benign = await fetchWithTiming(benignUrl);
+  if (!benign.ok) return findings;
+  const benignLen = benign.body.length;
+  const benignStatus = benign.status;
+
+  // ── SQLi: error / status-flip / length-diff, appended to original ──
+  const quote = await fetchWithTiming(withParam(baseUrlStr, key, `${orig}'`));
+  const dbl = await fetchWithTiming(withParam(baseUrlStr, key, `${orig}''`));
+  let sqliHit = null;
+  if (quote.ok) {
+    const err = SQLI_ERRORS.find((rx) => rx.test(quote.body));
+    if (err) {
+      sqliHit = mkFinding({
+        type: "sqli-error", severity: "high", confidence: "high",
+        title: `SQL error reflected on ?${key}`, url: quote.url,
+        param: key, payload: `${orig}'`,
+        description: "Appending a single quote to the parameter triggered a database error — classic SQL injection.",
+        evidence: (quote.body.match(err) || [""])[0].slice(0, 240),
+        remediation: "Use parameterized queries.",
+        references: ["https://owasp.org/www-community/attacks/SQL_Injection"],
+      });
+    } else if (
+      dbl.ok && quote.status >= 500 && benignStatus < 500 && dbl.status < 500
+    ) {
+      sqliHit = mkFinding({
+        type: "sqli-status", severity: "high", confidence: "medium",
+        title: `Server error on quote injection ?${key}`, url: quote.url,
+        param: key, payload: `${orig}'`,
+        description: `Appending "'" flips status ${benignStatus}→${quote.status}, escaped "''" returns ${dbl.status}. Strong SQLi indicator.`,
+        remediation: "Parameterize the query.",
+      });
+    } else if (
+      dbl.ok &&
+      Math.abs(quote.body.length - benignLen) > Math.max(150, benignLen * 0.15) &&
+      Math.abs(dbl.body.length - benignLen) < Math.max(80, benignLen * 0.05)
+    ) {
+      sqliHit = mkFinding({
+        type: "sqli-diff", severity: "high", confidence: "medium",
+        title: `Response differential on quote injection ?${key}`, url: quote.url,
+        param: key, payload: `${orig}'`,
+        description: `Body length benign=${benignLen}, "'"=${quote.body.length}, "''"=${dbl.body.length}. Injection breaks the query, escaping restores it.`,
+        remediation: "Parameterize the query.",
+      });
+    }
+  }
+  if (sqliHit) { findings.push(sqliHit); onNote?.(`sqli on ?${key} (${sqliHit.type})`); }
+
+  // ── SQLi: boolean-based (appended) ──
+  {
+    const uT = withParam(baseUrlStr, key, `${orig}' AND '1'='1`);
+    const uF = withParam(baseUrlStr, key, `${orig}' AND '1'='2`);
+    const [rT, rF] = await Promise.all([fetchWithTiming(uT), fetchWithTiming(uF)]);
+    if (rT.ok && rF.ok) {
+      const dt = Math.abs(rT.body.length - rF.body.length);
+      const trueClose = Math.abs(rT.body.length - benignLen) < Math.max(80, benignLen * 0.05);
+      const falseFar = Math.abs(rF.body.length - benignLen) > Math.max(150, benignLen * 0.15);
+      if (dt > Math.max(150, benignLen * 0.15) && (trueClose || falseFar)) {
+        findings.push(mkFinding({
+          type: "sqli-boolean", severity: "high", confidence: "medium",
+          url: uT, param: key, payload: `${orig}' AND '1'='1 vs '2`,
+          title: `Boolean-based SQLi indicator on ?${key}`,
+          description: `TRUE matches benign (${rT.body.length}~${benignLen}); FALSE differs (${rF.body.length}). Blind SQLi likely.`,
+          remediation: "Parameterize the query.",
+        }));
+        onNote?.(`blind sqli on ?${key}`);
+      }
+    }
+    if (/^\d+$/.test(orig)) {
+      const nT = withParam(baseUrlStr, key, `${orig} AND 1=1`);
+      const nF = withParam(baseUrlStr, key, `${orig} AND 1=2`);
+      const [rnT, rnF] = await Promise.all([fetchWithTiming(nT), fetchWithTiming(nF)]);
+      if (rnT.ok && rnF.ok && Math.abs(rnT.body.length - rnF.body.length) > Math.max(150, benignLen * 0.15)) {
+        findings.push(mkFinding({
+          type: "sqli-boolean", severity: "high", confidence: "medium",
+          url: nT, param: key, payload: `${orig} AND 1=1 vs 1=2`,
+          title: `Numeric boolean SQLi indicator on ?${key}`,
+          description: `Numeric TRUE/FALSE payloads differ (${rnT.body.length} vs ${rnF.body.length}).`,
+          remediation: "Parameterize the query.",
+        }));
+        onNote?.(`numeric blind sqli on ?${key}`);
+      }
+    }
+  }
+
+  // ── XSS reflected (append + full replace) ──
+  {
+    const m = MARKER();
+    for (const { p, ctx } of XSS_PAYLOADS(m)) {
+      let done = false;
+      for (const v of [`${orig}${p}`, p]) {
+        const t = withParam(baseUrlStr, key, v);
+        const r = await fetchWithTiming(t);
+        if (!r.ok) continue;
+        if (r.body.includes(p)) {
+          findings.push(mkFinding({
+            type: "xss-reflected", severity: "high", confidence: "high",
+            url: t, param: key, payload: v,
+            title: `Reflected XSS on ?${key} (${ctx} context)`,
+            description: "Payload returned verbatim in response body — no encoding.",
+            evidence: `context=${ctx}`,
+            remediation: "Contextually encode output. Add a strict CSP without 'unsafe-inline'.",
+            references: ["https://owasp.org/www-community/attacks/xss/"],
+          }));
+          onNote?.(`reflected XSS on ?${key}`);
+          done = true; break;
+        } else if (r.body.includes(m) && !benign.body.includes(m)) {
+          findings.push(mkFinding({
+            type: "xss-partial", severity: "medium", confidence: "medium",
+            url: t, param: key, payload: v,
+            title: `Partial reflection on ?${key}`,
+            description: "Marker reflected but payload partially encoded — worth manual review.",
+          }));
+        }
+      }
+      if (done) break;
+    }
+  }
+
+  // Skip expensive server-side probes on GUESSED params
+  if (guessed) return findings;
+
+  // ── Open redirect ──
+  for (const rd of OPEN_REDIRECT_PAYLOADS) {
+    const t = withParam(baseUrlStr, key, rd);
+    const r = await fetch(t, { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers: { "user-agent": UA } }).catch(() => null);
+    if (r && [301, 302, 303, 307, 308].includes(r.status)) {
+      const loc = r.headers.get("location") || "";
+      if (/evil\.example\.com/i.test(loc)) {
+        findings.push(mkFinding({
+          type: "open-redirect", severity: "medium", confidence: "high",
+          url: t, param: key, payload: rd,
+          title: `Open redirect on ?${key}`,
+          description: `Server issued ${r.status} to attacker Location: ${loc}`,
+          remediation: "Restrict redirect targets to an allow-list.",
+        }));
+        onNote?.(`open redirect on ?${key}`); break;
+      }
+    }
+  }
+
+  // ── LFI ──
+  for (const p of LFI_PAYLOADS.slice(0, 6)) {
+    const t = withParam(baseUrlStr, key, p);
+    const r = await fetchWithTiming(t);
+    if (r.ok && LFI_MARKERS.some((rx) => rx.test(r.body))) {
+      findings.push(mkFinding({
+        type: "lfi", severity: "critical", confidence: "high",
+        url: t, param: key, payload: p,
+        title: `Local file inclusion on ?${key}`,
+        description: "System file contents leaked through parameter.",
+        evidence: r.body.match(/root:x:0:0:[^\n]{0,80}/i)?.[0] || "system file contents observed",
+        remediation: "Validate against a strict allow-list of filenames.",
+      }));
+      onNote?.(`LFI on ?${key}`); break;
+    }
+  }
+
+  // ── SSTI ──
+  for (const { p, m } of SSTI_PAYLOADS.slice(0, 4)) {
+    const t = withParam(baseUrlStr, key, p);
+    const r = await fetchWithTiming(t);
+    if (r.ok && r.body.includes(m) && !benign.body.includes(m)) {
+      findings.push(mkFinding({
+        type: "ssti", severity: "critical", confidence: "medium",
+        url: t, param: key, payload: p,
+        title: `Server-side template injection on ?${key}`,
+        description: `Expression ${p} evaluated to ${m} in the response.`,
+        remediation: "Do not render user input through a template engine.",
+      }));
+      onNote?.(`SSTI on ?${key}`); break;
+    }
+  }
+
+  // ── Command injection (time-based) ──
+  {
+    const { p, sec } = CMDI_PAYLOADS[0];
+    const t = withParam(baseUrlStr, key, `${orig}${p}`);
+    const r = await fetchWithTiming(t);
+    if (r.ok && r.timeMs >= sec * 1000 * 0.9) {
+      findings.push(mkFinding({
+        type: "cmdi-time", severity: "critical", confidence: "medium",
+        url: t, param: key, payload: p,
+        title: `Time-based command injection indicator on ?${key}`,
+        description: `Response took ${r.timeMs}ms with sleep payload.`,
+        remediation: "Never pass user input to shell execution.",
+      }));
+    }
+  }
+
+  // ── CRLF ──
+  {
+    const t = withParam(baseUrlStr, key, CRLF_PAYLOADS[0]);
+    const r = await fetch(t, { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers: { "user-agent": UA } }).catch(() => null);
+    if (r && (r.headers.get("x-yoru-injected") || /yoru=1/.test(r.headers.get("set-cookie") || ""))) {
+      findings.push(mkFinding({
+        type: "crlf", severity: "high", confidence: "high",
+        url: t, param: key, payload: CRLF_PAYLOADS[0],
+        title: `CRLF / header injection on ?${key}`,
+        description: "Newlines in the parameter created new response headers.",
+        remediation: "Strip CR/LF from any user input used in headers or redirects.",
+      }));
+    }
+  }
+
+  // ── SQLi time-based ──
+  {
+    const { p, engine } = SQLI_TIME_PAYLOADS[0];
+    const t = withParam(baseUrlStr, key, `${orig}${p}`);
+    const r = await fetchWithTiming(t);
+    if (r.ok && r.timeMs >= 4500) {
+      findings.push(mkFinding({
+        type: "sqli-time", severity: "critical", confidence: "medium",
+        url: t, param: key, payload: p,
+        title: `Time-based SQLi indicator on ?${key} (${engine})`,
+        description: `Response took ${r.timeMs}ms with a sleep payload.`,
+        remediation: "Parameterize the query.",
+      }));
+    }
+  }
+
+  return findings;
 }
 
 async function probeParamsOnUrl(url, baseline, onNote) {
-  const { url: u, keys } = paramSet(url);
-  if (!keys.length) return [];
+  const variants = buildProbeVariants(url);
+  const all = [];
+  for (const v of variants) {
+    for (const key of v.keys) {
+      try {
+        const f = await probeOneParam(v.url, key, baseline, onNote, { guessed: v.guessed });
+        all.push(...f);
+      } catch {}
+    }
+  }
+  return all;
+}
+
+/**
+ * Test likely-id path segments (numeric or hex) as if they were parameters:
+ *   /product/123 → /product/123'  /product/123''
+ */
+async function probePathSegments(startUrl, pages, onNote) {
   const findings = [];
-  let budget = MAX_PARAM_PROBES;
-  for (const key of keys) {
-    if (budget <= 0) break;
-    // SQLi: error patterns
-    for (const payload of SQLI_PAYLOADS) {
-      if (budget-- <= 0) break;
-      const t = new URL(u.toString()); t.searchParams.set(key, payload);
-      const r = await fetchWithTiming(t.toString());
-      if (!r.ok) continue;
-      const hit = SQLI_ERRORS.find((rx) => rx.test(r.body));
-      if (hit) {
-        findings.push(mkFinding({
-          type: "sqli-error", severity: "high", confidence: "high",
-          title: `SQL error reflected on ?${key}`, url: t.toString(), param: key, payload,
-          description: "The application echoed a database error when the parameter contained a quote — classic SQL injection indicator.",
-          evidence: (r.body.match(hit) || [""])[0].slice(0, 200),
-          remediation: "Use parameterized queries / prepared statements. Never build SQL with string concatenation.",
-          references: ["https://owasp.org/www-community/attacks/SQL_Injection"],
-        }));
-        onNote?.(`sqli error on ?${key}`); break;
-      }
-    }
-    // SQLi: boolean-based (compare response lengths)
-    if (budget > 0) {
-      for (const { t, f } of SQLI_BOOL_PAIRS) {
-        if (budget-- <= 0) break;
-        const uT = new URL(u.toString()); uT.searchParams.set(key, f + payloadSep(uT.searchParams.get(key), ""));
-      }
-      // simpler: send AND '1'='1 vs AND '1'='2 appended
-      const orig = u.searchParams.get(key) || "1";
-      const uT = new URL(u.toString()); uT.searchParams.set(key, `${orig}' AND '1'='1`);
-      const uF = new URL(u.toString()); uF.searchParams.set(key, `${orig}' AND '1'='2`);
-      const [rT, rF] = await Promise.all([fetchWithTiming(uT.toString()), fetchWithTiming(uF.toString())]);
-      if (rT.ok && rF.ok && rT.status === 200 && rF.status === 200) {
-        const dt = Math.abs(rT.body.length - rF.body.length);
-        const base = baseline?.body?.length || rT.body.length;
-        if (dt > Math.max(100, base * 0.1)) {
-          findings.push(mkFinding({
-            type: "sqli-boolean", severity: "high", confidence: "medium",
-            url: uT.toString(), param: key, payload: `' AND '1'='1 vs '2`,
-            title: `Boolean SQLi indicator on ?${key}`,
-            description: `Response length changed significantly (${rT.body.length} vs ${rF.body.length}) between TRUE/FALSE payloads — likely blind SQLi.`,
-            remediation: "Parameterize the query. Add server-side validation.",
-          }));
-          onNote?.(`blind sqli on ?${key}`);
+  const targets = new Set();
+  for (const p of [startUrl, ...pages.map((x) => x.url)]) {
+    try {
+      const u = new URL(p);
+      const segs = u.pathname.split("/").filter(Boolean);
+      for (let i = 0; i < segs.length; i++) {
+        if (/^\d+$|^[a-f0-9]{6,}$/i.test(segs[i])) {
+          targets.add(JSON.stringify({ origin: u.origin, segs, idx: i }));
         }
       }
+    } catch {}
+  }
+  for (const raw of [...targets].slice(0, 8)) {
+    const { origin, segs, idx } = JSON.parse(raw);
+    const orig = segs[idx];
+    const build = (val) => `${origin}/${[...segs.slice(0, idx), val, ...segs.slice(idx + 1)].join("/")}`;
+    const benign = await fetchWithTiming(build(orig));
+    if (!benign.ok) continue;
+    const quote = await fetchWithTiming(build(`${orig}'`));
+    const dbl = await fetchWithTiming(build(`${orig}''`));
+    if (!quote.ok) continue;
+    const err = SQLI_ERRORS.find((rx) => rx.test(quote.body));
+    if (err) {
+      findings.push(mkFinding({
+        type: "sqli-error", severity: "high", confidence: "high",
+        title: `SQL error reflected on path segment /${orig}`,
+        url: build(`${orig}'`), param: `path[${idx}]`, payload: `${orig}'`,
+        description: "Appending a single quote to a URL path segment triggered a database error.",
+        evidence: (quote.body.match(err) || [""])[0].slice(0, 240),
+        remediation: "Parameterize the query and validate path segments.",
+      }));
+      onNote?.(`sqli on path segment /${orig}`);
+      continue;
     }
-    // XSS reflected
-    const marker = MARKER();
-    for (const { p, ctx } of XSS_PAYLOADS(marker)) {
-      if (budget-- <= 0) break;
-      const t = new URL(u.toString()); t.searchParams.set(key, p);
-      const r = await fetchWithTiming(t.toString());
-      if (!r.ok) continue;
-      if (r.body.includes(p)) {
-        findings.push(mkFinding({
-          type: "xss-reflected", severity: "high", confidence: "high",
-          url: t.toString(), param: key, payload: p,
-          title: `Reflected XSS on ?${key} (${ctx} context)`,
-          description: "Payload was returned verbatim in the response body — no encoding applied.",
-          evidence: `context=${ctx}`,
-          remediation: "Contextually encode output (HTML/attr/JS). Use a strict CSP without 'unsafe-inline'.",
-          references: ["https://owasp.org/www-community/attacks/xss/"],
-        }));
-        onNote?.(`reflected XSS on ?${key}`); break;
-      } else if (r.body.includes(marker)) {
-        findings.push(mkFinding({
-          type: "xss-partial", severity: "medium", confidence: "medium",
-          url: t.toString(), param: key, payload: p,
-          title: `Partial reflection on ?${key}`,
-          description: "Marker string reflected but payload was partially encoded — worth manual review.",
-        }));
-      }
+    if (dbl.ok && quote.status >= 500 && benign.status < 500 && dbl.status < 500) {
+      findings.push(mkFinding({
+        type: "sqli-status", severity: "high", confidence: "medium",
+        title: `Server error on quote injection in path /${orig}`,
+        url: build(`${orig}'`), param: `path[${idx}]`, payload: `${orig}'`,
+        description: `Path with "'" returns ${quote.status}; escaped "''" returns ${dbl.status}.`,
+        remediation: "Parameterize the query.",
+      }));
+      onNote?.(`sqli path-status on /${orig}`);
     }
-    // Open redirect
-    for (const rd of OPEN_REDIRECT_PAYLOADS) {
-      if (budget-- <= 0) break;
-      const t = new URL(u.toString()); t.searchParams.set(key, rd);
-      const r = await fetch(t.toString(), { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers: { "user-agent": UA } }).catch(() => null);
-      if (r && [301, 302, 303, 307, 308].includes(r.status)) {
-        const loc = r.headers.get("location") || "";
-        if (/evil\.example\.com/i.test(loc)) {
-          findings.push(mkFinding({
-            type: "open-redirect", severity: "medium", confidence: "high",
-            url: t.toString(), param: key, payload: rd,
-            title: `Open redirect on ?${key}`,
-            description: `Server issued ${r.status} to attacker-controlled Location: ${loc}`,
-            remediation: "Restrict redirect targets to an allow-list of paths/hosts.",
-          }));
-          onNote?.(`open redirect on ?${key}`); break;
-        }
-      }
-    }
-    // LFI
-    for (const p of LFI_PAYLOADS.slice(0, 4)) {
-      if (budget-- <= 0) break;
-      const t = new URL(u.toString()); t.searchParams.set(key, p);
-      const r = await fetchWithTiming(t.toString());
-      if (!r.ok) continue;
-      if (LFI_MARKERS.some((rx) => rx.test(r.body))) {
-        findings.push(mkFinding({
-          type: "lfi", severity: "critical", confidence: "high",
-          url: t.toString(), param: key, payload: p,
-          title: `Local file inclusion on ?${key}`,
-          description: "System file contents leaked through parameter — path traversal / LFI confirmed.",
-          evidence: r.body.match(/root:x:0:0:[^\n]{0,80}/i)?.[0] || "system file contents observed",
-          remediation: "Validate against a strict allow-list of filenames. Never pass user input to file APIs.",
-        }));
-        onNote?.(`LFI on ?${key}`); break;
-      }
-    }
-    // SSTI
-    for (const { p, m } of SSTI_PAYLOADS.slice(0, 3)) {
-      if (budget-- <= 0) break;
-      const t = new URL(u.toString()); t.searchParams.set(key, p);
-      const r = await fetchWithTiming(t.toString());
-      if (r.ok && r.body.includes(m) && !baseline?.body?.includes(m)) {
-        findings.push(mkFinding({
-          type: "ssti", severity: "critical", confidence: "medium",
-          url: t.toString(), param: key, payload: p,
-          title: `Server-side template injection on ?${key}`,
-          description: `Expression ${p} evaluated to ${m} in the response.`,
-          remediation: "Never render user input through a template engine. Use logic-less templates or strict sandboxing.",
-        }));
-        onNote?.(`SSTI on ?${key}`); break;
-      }
-    }
-    // Command injection (time-based, single sample to stay safe)
-    if (budget-- > 0) {
-      const { p, sec } = CMDI_PAYLOADS[0];
-      const t = new URL(u.toString()); t.searchParams.set(key, (u.searchParams.get(key) || "1") + p);
-      const r = await fetchWithTiming(t.toString());
-      if (r.ok && r.timeMs >= sec * 1000 * 0.9) {
-        findings.push(mkFinding({
-          type: "cmdi-time", severity: "critical", confidence: "medium",
-          url: t.toString(), param: key, payload: p,
-          title: `Time-based command injection indicator on ?${key}`,
-          description: `Response took ${r.timeMs}ms with a sleep payload — likely OS command injection.`,
-          remediation: "Never pass user input to shell execution. Use safe process APIs with argument arrays.",
-        }));
-        onNote?.(`time-based cmdi on ?${key}`);
-      }
-    }
-    // CRLF injection
-    if (budget-- > 0) {
-      const t = new URL(u.toString()); t.searchParams.set(key, CRLF_PAYLOADS[0]);
-      const r = await fetch(t.toString(), { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers: { "user-agent": UA } }).catch(() => null);
-      if (r && (r.headers.get("x-yoru-injected") || /yoru=1/.test(r.headers.get("set-cookie") || ""))) {
-        findings.push(mkFinding({
-          type: "crlf", severity: "high", confidence: "high",
-          url: t.toString(), param: key, payload: CRLF_PAYLOADS[0],
-          title: `CRLF / header injection on ?${key}`,
-          description: "Newlines in the parameter created new response headers.",
-          remediation: "Strip CR/LF from any user input used in headers or redirects.",
-        }));
-      }
-    }
-    // SQLi time-based (single engine sample per param — expensive)
-    if (budget-- > 0) {
-      const { p, engine } = SQLI_TIME_PAYLOADS[0];
-      const t = new URL(u.toString()); t.searchParams.set(key, (u.searchParams.get(key) || "1") + p);
-      const r = await fetchWithTiming(t.toString());
-      if (r.ok && r.timeMs >= 4500) {
-        findings.push(mkFinding({
-          type: "sqli-time", severity: "critical", confidence: "medium",
-          url: t.toString(), param: key, payload: p,
-          title: `Time-based SQLi indicator on ?${key} (${engine})`,
-          description: `Response took ${r.timeMs}ms with a sleep payload — likely blind SQL injection.`,
-          remediation: "Parameterize the query.",
-        }));
-      }
+    const m = MARKER();
+    const xssPayload = `<svg/onload=alert(1)>${m}`;
+    const rx = await fetchWithTiming(build(encodeURIComponent(xssPayload)));
+    if (rx.ok && rx.body.includes(xssPayload)) {
+      findings.push(mkFinding({
+        type: "xss-reflected", severity: "high", confidence: "high",
+        title: `Reflected XSS via path segment /${orig}`,
+        url: build(encodeURIComponent(xssPayload)), param: `path[${idx}]`, payload: xssPayload,
+        description: "Path segment reflected verbatim in HTML response.",
+        remediation: "HTML-encode path segments in output.",
+      }));
+      onNote?.(`XSS on path segment /${orig}`);
     }
   }
   return findings;
 }
 
-function payloadSep() { return ""; }
 
 // ────────────────────────── path probing ──────────────────────────
 
@@ -855,6 +1019,9 @@ export async function scanTarget(target, opts = {}) {
     paramFindings.push(...f);
   }
 
+  onNote("probing URL path segments (SQLi/XSS on /route/:id)");
+  const pathSegFindings = await probePathSegments(u.toString(), pages, onNote).catch(() => []);
+
   // Forms without CSRF tokens
   const csrfFindings = forms
     .filter((f) => f.method === "post" && !f.hasCsrf)
@@ -892,7 +1059,7 @@ export async function scanTarget(target, opts = {}) {
 
   const allFindings = [
     ...headerFindings, ...secretFindings, ...takeoverFindings,
-    ...pathFindings, ...methodFindings, ...paramFindings, ...csrfFindings,
+    ...pathFindings, ...methodFindings, ...paramFindings, ...pathSegFindings, ...csrfFindings,
     ...graphqlF, ...hostF, ...cacheF, ...protoF, ...extraMethodF, ...formF,
     ...smugglingF, ...jwtF, ...domF, ...wsF, ...subF,
   ];
