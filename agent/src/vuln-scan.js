@@ -248,6 +248,7 @@ const SECRET_PATTERNS = [
   { name: "Mongo URI", r: /mongodb(?:\+srv)?:\/\/[^\s"']+/g, sev: "high" },
   { name: "Postgres URI", r: /postgres(?:ql)?:\/\/[^\s"']+/g, sev: "high" },
   { name: "Redis URI", r: /redis:\/\/[^\s"']+/g, sev: "medium" },
+  ...EXTRA_SECRETS,
 ];
 
 // ────────────────────────── discovery ──────────────────────────
