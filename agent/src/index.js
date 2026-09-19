@@ -38,7 +38,7 @@ if (!config.ownerId) log.warn("owner", "OWNER_DISCORD_ID not set — the owner p
 startServer();
 log.ok("api", `listening on :${config.port}`);
 
-boot.push(...startPanels());
+boot.push(waitWithCap(Promise.allSettled(startPanels()), 10000, "panel"));
 
 boot.push(waitWithCap(
   refreshModels(true).then((models) => log.ok("ai", `${models?.free?.length ?? 0} free OpenRouter models cached`)),
