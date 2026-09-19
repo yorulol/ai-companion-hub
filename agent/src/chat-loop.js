@@ -109,6 +109,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
 
   let lookupRan = false;
 
+  let malformedRetries = 0;
   for (let step = 0; step < 5; step++) {
     const { reply, provider: pv, model: md } = await ask({ messages, mode });
     provider = pv; model = md;
@@ -127,7 +128,20 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
       continue;
     }
 
-    if (!call) { finalReply = stripToolArtifacts(reply); break; }
+    if (!call) {
+      const cleaned = stripToolArtifacts(reply);
+      const malformedTool = /```\s*(?:tool|function)|<tool_call>|\{\s*"(?:tool|name)"\s*:/i.test(reply);
+      if ((!cleaned || malformedTool) && malformedRetries < 2 && step < 4) {
+        malformedRetries++;
+        messages.push({
+          role: "system",
+          content: "Your previous draft was malformed internal syntax and was discarded. Answer the user's latest message directly as a normal human conversation. Do not use a tool unless their latest message explicitly asks for an action requiring one. Never print tool syntax.",
+        });
+        continue;
+      }
+      finalReply = cleaned;
+      break;
+    }
 
     if (!explicitlyRequested(call, userText)) {
       messages.push({ role: "assistant", content: stripToolArtifacts(reply) });
@@ -156,7 +170,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   }
 
   finalReply = stripToolArtifacts(finalReply);
-  if (!finalReply) finalReply = "(no response)";
+  if (!finalReply) finalReply = "my bad—brain skipped. say that again?";
   rememberMessage(scope, "assistant", finalReply);
   return { reply: finalReply.trim(), provider, model, tools: toolTrace };
 }

@@ -98,7 +98,9 @@ async function run(name, args = {}) {
   }
 }
 
-const TOOL_RE = /```tool\s*\n([\s\S]+?)\n```/i;
+// Models are not always polite enough to put a newline after ```tool.
+// Accept the compact form too, but only execute complete, valid JSON blocks.
+const TOOL_RE = /```tool\s*({[\s\S]+?})\s*```/i;
 
 function tryParseTool(raw, json) {
   try {
@@ -115,9 +117,14 @@ export function extractToolCall(text) {
 
 /** Strip any leftover tool-call artifacts so they never leak into user-facing replies. */
 export function stripToolArtifacts(text) {
-  return text
+  return String(text || "")
     .replace(TOOL_RE, "")
+    // Never leak malformed or truncated tool syntax. This intentionally eats
+    // the rest of the response when a model opens a tool fence and fails to
+    // close it, because none of that partial generation is user-facing text.
+    .replace(/```(?:tool|function|json)\b[\s\S]*$/gi, "")
     .replace(/<tool_call>[\s\S]*?(?:<\/tool_call>|$)/gi, "")
+    .replace(/^\s*\{\s*"(?:tool|name)"\s*:[\s\S]*$/gim, "")
     .trim();
 }
 
