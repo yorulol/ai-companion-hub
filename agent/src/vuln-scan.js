@@ -1032,10 +1032,15 @@ export async function scanTarget(target, opts = {}) {
 
   onNote("probing query parameters (SQLi/XSS/LFI/SSTI/CMDi/CRLF/redirect)");
   const paramFindings = [];
-  for (const purl of paramUrls) {
-    const f = await probeParamsOnUrl(purl, baseline, onNote);
+  const paramUrlList = [...paramUrls];
+  for (let i = 0; i < paramUrlList.length; i++) {
+    const purl = paramUrlList[i];
+    onNote(`param URL ${i + 1}/${paramUrlList.length}: ${new URL(purl).pathname || "/"}`);
+    const allowGuess = i === 0; // only guess on the base URL to avoid explosion
+    const f = await probeParamsOnUrl(purl, baseline, onNote, { allowGuess });
     paramFindings.push(...f);
   }
+
 
   onNote("probing URL path segments (SQLi/XSS on /route/:id)");
   const pathSegFindings = await probePathSegments(u.toString(), pages, onNote).catch(() => []);
