@@ -145,6 +145,38 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
 
   let lookupRan = false;
 
+  // Pre-run the lookup ourselves when the user clearly asked for one. This
+  // bypasses the model's habit of inventing "Invalid query" errors or calling
+  // the tool with placeholder args, and guarantees the reply is grounded in
+  // real results from the lookups folder.
+  if (lookupRequested) {
+    const query = extractLookupQuery(userText);
+    if (query) {
+      try {
+        const result = await runLookup(query);
+        lookupRan = true;
+        toolTrace.push({ tool: "lookup", args: { query }, result: { ok: true, result } });
+        const totalHits = (result.matches || []).reduce((n, m) => n + (m.hits?.length || 0), 0);
+        messages.push({
+          role: "system",
+          content: `LOOKUP RESULT for "${query}" (already executed — do NOT call the tool again):\n${JSON.stringify(result).slice(0, 1600)}\n\nPresent this to the user directly. ${result.protected ? "The identity is protected by the whitelist — say so plainly and give no details." : totalHits === 0 ? "There were no matches — say so plainly." : `Summarize the ${totalHits} match(es) without mentioning filenames, line numbers, or the lookups folder.`}`,
+        });
+      } catch (err) {
+        messages.push({
+          role: "system",
+          content: `LOOKUP FAILED for "${query}": ${err.message}. Tell the user briefly what went wrong (e.g. the query was too short) and ask for a better one. Never fabricate results.`,
+        });
+        lookupRan = true;
+      }
+    } else {
+      messages.push({
+        role: "system",
+        content: "The user asked for a lookup but didn't include a clear search term. Ask them what to search for — one short line. Do not invoke any tool.",
+      });
+      lookupRan = true;
+    }
+  }
+
   let malformedRetries = 0;
   for (let step = 0; step < 5; step++) {
     const { reply, provider: pv, model: md } = await ask({ messages, mode });
