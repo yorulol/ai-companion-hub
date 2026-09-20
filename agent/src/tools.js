@@ -100,7 +100,10 @@ async function run(name, args = {}) {
 
 // Models are not always polite enough to put a newline after ```tool.
 // Accept the compact form too, but only execute complete, valid JSON blocks.
-const TOOL_RE = /```tool\s*({[\s\S]+?})\s*```/i;
+// Also accept bare ``` fences (no language tag) when the body is a tool JSON,
+// and untagged JSON objects that carry {"tool":"..."}.
+const TOOL_RE = /```(?:tool|function|json)?\s*({[\s\S]+?})\s*```/i;
+const BARE_TOOL_JSON_RE = /(\{\s*"tool"\s*:\s*"[^"]+"[\s\S]*?\})/i;
 
 function tryParseTool(raw, json) {
   try {
@@ -112,20 +115,30 @@ function tryParseTool(raw, json) {
 
 export function extractToolCall(text) {
   const match = TOOL_RE.exec(text);
-  return match ? tryParseTool(match[0], match[1]) : null;
+  if (match) {
+    const call = tryParseTool(match[0], match[1]);
+    if (call) return call;
+  }
+  const bare = BARE_TOOL_JSON_RE.exec(text);
+  if (bare) return tryParseTool(bare[0], bare[1]);
+  return null;
 }
 
 /** Strip any leftover tool-call artifacts so they never leak into user-facing replies. */
 export function stripToolArtifacts(text) {
-  return String(text || "")
+  let out = String(text || "")
     .replace(TOOL_RE, "")
     // Never leak malformed or truncated tool syntax. This intentionally eats
     // the rest of the response when a model opens a tool fence and fails to
     // close it, because none of that partial generation is user-facing text.
     .replace(/```(?:tool|function|json)\b[\s\S]*$/gi, "")
+    .replace(/```\s*\{\s*"(?:tool|name)"[\s\S]*$/gi, "")
     .replace(/<tool_call>[\s\S]*?(?:<\/tool_call>|$)/gi, "")
     .replace(/^\s*\{\s*"(?:tool|name)"\s*:[\s\S]*$/gim, "")
-    .trim();
+    .replace(BARE_TOOL_JSON_RE, "");
+  // Drop any dangling / empty triple-backtick fences left over from stripping.
+  out = out.replace(/```[a-z]*\s*```/gi, "").replace(/```+\s*$/g, "").replace(/^\s*```+\s*/g, "");
+  return out.trim();
 }
 
 export async function executeTool(call, { requesterIsOwner = false } = {}) {
