@@ -3,6 +3,30 @@ import { ask } from "./ai.js";
 import { extractToolCall, executeTool, stripToolArtifacts, toolSpecFor } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
 import { isDead, activateKillswitch, jumpstart, detectKillswitchIntent, canControlKillswitch } from "./killswitch.js";
+import { lookup as runLookup } from "./lookups.js";
+
+/**
+ * Pull the actual search term out of a lookup request. Handles quoted strings,
+ * "lookup X" / "look up X" / "search for X" / "find X". Returns null when the
+ * query is missing — the model is then asked to request one instead of
+ * hallucinating an "Invalid query" error.
+ */
+function extractLookupQuery(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  const quoted = raw.match(/["'`“”‘’]([^"'`“”‘’]{2,})["'`“”‘’]/);
+  if (quoted) return quoted[1].trim();
+  const m = raw.match(/\b(?:look\s*up|lookup|search(?:\s+for)?|find|check|scan)\b[:\s]+([^\n?!.,;]+)/i);
+  if (m) {
+    let q = m[1].trim();
+    q = q.replace(/^(?:for|on|in|the|my|please|pls|up)\s+/i, "").trim();
+    q = q.replace(/\s+(?:please|pls|for me|thx|thanks|really quick|real quick|now)$/i, "").trim();
+    q = q.replace(/^["'`“”‘’]+|["'`“”‘’]+$/g, "").trim();
+    if (q.length >= 2) return q;
+  }
+  const token = raw.match(/[\w.+-]+@[\w.-]+\.\w+|\b\d{15,22}\b|\b[\w][\w.-]{3,31}\b/);
+  return token ? token[0] : null;
+}
 
 function safeToolResult(call, result, isOwner) {
   if (call.tool === "system_info" && !isOwner && result?.result) {
@@ -120,6 +144,38 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   const toolTrace = [];
 
   let lookupRan = false;
+
+  // Pre-run the lookup ourselves when the user clearly asked for one. This
+  // bypasses the model's habit of inventing "Invalid query" errors or calling
+  // the tool with placeholder args, and guarantees the reply is grounded in
+  // real results from the lookups folder.
+  if (lookupRequested) {
+    const query = extractLookupQuery(userText);
+    if (query) {
+      try {
+        const result = await runLookup(query);
+        lookupRan = true;
+        toolTrace.push({ tool: "lookup", args: { query }, result: { ok: true, result } });
+        const totalHits = (result.matches || []).reduce((n, m) => n + (m.hits?.length || 0), 0);
+        messages.push({
+          role: "system",
+          content: `LOOKUP RESULT for "${query}" (already executed — do NOT call the tool again):\n${JSON.stringify(result).slice(0, 1600)}\n\nPresent this to the user directly. ${result.protected ? "The identity is protected by the whitelist — say so plainly and give no details." : totalHits === 0 ? "There were no matches — say so plainly." : `Summarize the ${totalHits} match(es) without mentioning filenames, line numbers, or the lookups folder.`}`,
+        });
+      } catch (err) {
+        messages.push({
+          role: "system",
+          content: `LOOKUP FAILED for "${query}": ${err.message}. Tell the user briefly what went wrong (e.g. the query was too short) and ask for a better one. Never fabricate results.`,
+        });
+        lookupRan = true;
+      }
+    } else {
+      messages.push({
+        role: "system",
+        content: "The user asked for a lookup but didn't include a clear search term. Ask them what to search for — one short line. Do not invoke any tool.",
+      });
+      lookupRan = true;
+    }
+  }
 
   let malformedRetries = 0;
   for (let step = 0; step < 5; step++) {

@@ -254,14 +254,20 @@ add({ name: "lookup", category: "ai", description: "Search the lookups folder.",
     const thinking = await message.reply({ embeds: [infoEmbed("Searching…", `Scanning the lookups folder for \`${q}\`.`)] });
     try {
       const out = await searchLookups(q);
-      const rows = [];
-      for (const m of out.matches) {
-        rows.push(`**${m.file}** — ${m.error ? `error: ${m.error}` : `${m.hits?.length || 0} hits`}`);
-        for (const h of (m.hits || []).slice(0, 5)) rows.push(`> ${String(typeof h === "string" ? h : JSON.stringify(h)).slice(0, 300)}`);
-      }
       await thinking.delete().catch(() => {});
-      if (!rows.length) return void message.reply({ embeds: [warnEmbed("No matches", `Nothing for \`${q}\` across ${out.files} files.`)] });
-      await paginate(message, listPages(rows, { title: `🔎 ${q} · ${out.files} files scanned`, perPage: 12 }), { userId: message.author.id });
+      if (out.protected) return void message.reply({ embeds: [warnEmbed("Protected", out.message || "That identity is whitelisted.")] });
+      const rows = [];
+      let totalHits = 0;
+      for (const m of out.matches || []) {
+        if (m.error) { rows.push(`⚠️ ${m.error}`); continue; }
+        for (const h of (m.hits || []).slice(0, 8)) {
+          totalHits++;
+          const body = h.row ? JSON.stringify(h.row) : (h.context || JSON.stringify(h));
+          rows.push(`> ${String(body).slice(0, 300)}`);
+        }
+      }
+      if (!totalHits) return void message.reply({ embeds: [warnEmbed("No matches", `Nothing for \`${q}\` across ${out.files} files.`)] });
+      await paginate(message, listPages(rows, { title: `🔎 ${q} · ${totalHits} hit(s) across ${out.files} files`, perPage: 12 }), { userId: message.author.id });
     } catch (err) {
       await thinking.edit({ embeds: [errEmbed("Lookup failed", String(err.message))] }).catch(() => {});
     }
