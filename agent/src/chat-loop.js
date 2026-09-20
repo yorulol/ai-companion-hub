@@ -3,6 +3,30 @@ import { ask } from "./ai.js";
 import { extractToolCall, executeTool, stripToolArtifacts, toolSpecFor } from "./tools.js";
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
 import { isDead, activateKillswitch, jumpstart, detectKillswitchIntent, canControlKillswitch } from "./killswitch.js";
+import { lookup as runLookup } from "./lookups.js";
+
+/**
+ * Pull the actual search term out of a lookup request. Handles quoted strings,
+ * "lookup X" / "look up X" / "search for X" / "find X". Returns null when the
+ * query is missing — the model is then asked to request one instead of
+ * hallucinating an "Invalid query" error.
+ */
+function extractLookupQuery(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  const quoted = raw.match(/["'`“”‘’]([^"'`“”‘’]{2,})["'`“”‘’]/);
+  if (quoted) return quoted[1].trim();
+  const m = raw.match(/\b(?:look\s*up|lookup|search(?:\s+for)?|find|check|scan)\b[:\s]+([^\n?!.,;]+)/i);
+  if (m) {
+    let q = m[1].trim();
+    q = q.replace(/^(?:for|on|in|the|my|please|pls|up)\s+/i, "").trim();
+    q = q.replace(/\s+(?:please|pls|for me|thx|thanks|really quick|real quick|now)$/i, "").trim();
+    q = q.replace(/^["'`“”‘’]+|["'`“”‘’]+$/g, "").trim();
+    if (q.length >= 2) return q;
+  }
+  const token = raw.match(/[\w.+-]+@[\w.-]+\.\w+|\b\d{15,22}\b|\b[\w][\w.-]{3,31}\b/);
+  return token ? token[0] : null;
+}
 
 function safeToolResult(call, result, isOwner) {
   if (call.tool === "system_info" && !isOwner && result?.result) {
