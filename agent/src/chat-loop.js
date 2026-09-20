@@ -158,23 +158,26 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
         lookupRan = true;
         toolTrace.push({ tool: "lookup", args: { query }, result: { ok: true, result } });
         const totalHits = (result.matches || []).reduce((n, m) => n + (m.hits?.length || 0), 0);
+        lookupSummary = summarizeLookupResult(query, result, totalHits);
         messages.push({
           role: "system",
-          content: `LOOKUP RESULT for "${query}" (already executed — do NOT call the tool again):\n${JSON.stringify(result).slice(0, 1600)}\n\nPresent this to the user directly. ${result.protected ? "The identity is protected by the whitelist — say so plainly and give no details." : totalHits === 0 ? "There were no matches — say so plainly." : `Summarize the ${totalHits} match(es) without mentioning filenames, line numbers, or the lookups folder.`}`,
+          content: `LOOKUP RESULT for "${query}" (already executed — do NOT call the tool again):\n${JSON.stringify(result).slice(0, 1600)}\n\nWrite ONE short reply directly to the user in plain text — no tool blocks, no code fences, no JSON. ${result.protected ? "The identity is protected — say so plainly and give no details." : totalHits === 0 ? "There were no matches — say so plainly." : `Summarize the ${totalHits} match(es) without mentioning filenames, line numbers, or the lookups folder.`}`,
         });
       } catch (err) {
+        lookupRan = true;
+        lookupSummary = `lookup fell over: ${err.message}. give me a better query.`;
         messages.push({
           role: "system",
-          content: `LOOKUP FAILED for "${query}": ${err.message}. Tell the user briefly what went wrong (e.g. the query was too short) and ask for a better one. Never fabricate results.`,
+          content: `LOOKUP FAILED for "${query}": ${err.message}. Tell the user briefly what went wrong and ask for a better one. Plain text only, no tool syntax.`,
         });
-        lookupRan = true;
       }
     } else {
+      lookupRan = true;
+      lookupSummary = "look up what? give me a name, id, or email.";
       messages.push({
         role: "system",
-        content: "The user asked for a lookup but didn't include a clear search term. Ask them what to search for — one short line. Do not invoke any tool.",
+        content: "The user asked for a lookup but didn't include a clear search term. Ask them what to search for — one short line, plain text, no tools.",
       });
-      lookupRan = true;
     }
   }
 
