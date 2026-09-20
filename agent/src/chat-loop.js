@@ -144,6 +144,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   const toolTrace = [];
 
   let lookupRan = false;
+  let lookupSummary = null;
 
   // Pre-run the lookup ourselves when the user clearly asked for one. This
   // bypasses the model's habit of inventing "Invalid query" errors or calling
