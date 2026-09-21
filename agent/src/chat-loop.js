@@ -28,6 +28,35 @@ function extractLookupQuery(text) {
   return token ? token[0] : null;
 }
 
+/**
+ * Human-readable fallback describing what the lookup returned. Used when the
+ * model produces an empty or fenced reply — we still owe the user a real
+ * answer grounded in the tool result.
+ */
+function summarizeLookupResult(query, result, totalHits) {
+  if (result?.protected) return `that identity is protected. not touching it.`;
+  if (!totalHits) return `nothing on "${query}". zero hits.`;
+  const rows = [];
+  for (const match of result.matches || []) {
+    for (const hit of match.hits || []) {
+      const row = hit.row || hit.context || hit;
+      if (row && typeof row === "object") {
+        const pairs = Object.entries(row)
+          .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== "")
+          .slice(0, 6)
+          .map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`);
+        if (pairs.length) rows.push("• " + pairs.join(" | "));
+      } else if (typeof row === "string" && row.trim()) {
+        rows.push("• " + row.trim().slice(0, 240));
+      }
+      if (rows.length >= 8) break;
+    }
+    if (rows.length >= 8) break;
+  }
+  const more = totalHits > rows.length ? `\n(+${totalHits - rows.length} more)` : "";
+  return `got ${totalHits} hit${totalHits === 1 ? "" : "s"} on "${query}":\n${rows.join("\n")}${more}`;
+}
+
 function safeToolResult(call, result, isOwner) {
   if (call.tool === "system_info" && !isOwner && result?.result) {
     const { platform, arch, cpus, memGB, freeMemGB, uptimeMin } = result.result;
@@ -242,6 +271,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   }
 
   finalReply = stripToolArtifacts(finalReply);
+  if ((!finalReply || finalReply.length < 2) && lookupSummary) finalReply = lookupSummary;
   if (!finalReply) finalReply = "my bad—brain skipped. say that again?";
   rememberMessage(scope, "assistant", finalReply);
   return { reply: finalReply.trim(), provider, model, tools: toolTrace };
