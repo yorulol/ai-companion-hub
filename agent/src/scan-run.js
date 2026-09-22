@@ -10,24 +10,33 @@ import { scanTarget } from "./vuln-scan.js";
 import { verifyAll, verifyFinding } from "./vuln-verify.js";
 import { renderFindingReport, renderSiteReport } from "./vuln-report.js";
 import { generatePayloadsFor } from "./payload-gen.js";
+import { exploitFinding } from "./vuln-exploit.js";
 import {
   saveScan, saveFindingArtifacts, saveSiteReport,
   loadLatest, hostDirFor, safeHost,
 } from "./scan-store.js";
 
 /**
- * Render the finding's report + any bonus payload pack, then persist all
- * artifacts. Payload pack goes to exploit-payloads.md (markdown) and
- * exploit-payloads.txt (raw list) inside the finding's folder.
+ * Render the finding's report + any bonus payload pack, run the exploit stage
+ * for verified findings, and persist all artifacts. Payload pack goes to
+ * exploit-payloads.md/.txt; exploit stage adds an "Impact demonstrated"
+ * section plus per-type proof files (schema.md, poc.html, poc-url.txt, etc.).
  */
-async function writeArtifacts(hostDir, finding, proof) {
+async function writeArtifacts(hostDir, finding, proof, scanTargetUrl) {
   const pack = await generatePayloadsFor(finding, proof);
   const baseReport = renderFindingReport(finding, proof);
-  const md = pack ? `${baseReport}\n\n${pack.markdown}\n` : baseReport;
+  const exploit = await exploitFinding(finding, proof, scanTargetUrl);
+  let md = pack ? `${baseReport}\n\n${pack.markdown}\n` : baseReport;
+  if (exploit?.addendum) md += `\n\n${exploit.addendum}\n`;
   const dir = await saveFindingArtifacts(hostDir, finding, proof, md);
   if (pack) {
     await fs.writeFile(path.join(dir, "exploit-payloads.md"), pack.markdown, "utf8");
     await fs.writeFile(path.join(dir, "exploit-payloads.txt"), pack.plain, "utf8");
+  }
+  if (exploit?.files?.length) {
+    for (const file of exploit.files) {
+      await fs.writeFile(path.join(dir, file.name), file.content, "utf8");
+    }
   }
   return dir;
 }
@@ -64,8 +73,8 @@ export async function runFullScan(target, opts = {}) {
   const saved = await saveScan(result);
 
   if (doReport) {
-    onNote("writing per-finding artifacts + payload packs");
-    for (const e of entries) await writeArtifacts(saved.hostDir, e.finding, e.proof);
+    onNote("writing per-finding artifacts + payload packs + exploit stage");
+    for (const e of entries) await writeArtifacts(saved.hostDir, e.finding, e.proof, result.target);
     onNote("drafting combined site report");
     const reportFile = await saveSiteReport(saved.hostDir, saved.host, result.target, entries, renderSiteReport);
     saved.reportFile = reportFile;
@@ -91,7 +100,7 @@ export async function reverifyHost(host, opts = {}) {
   result.proofs = proofs;
   result.verifiedCount = verified.filter((e) => e.proof.verified).length;
   await saveScan(result);
-  for (const e of verified) await writeArtifacts(hostDir, e.finding, e.proof);
+  for (const e of verified) await writeArtifacts(hostDir, e.finding, e.proof, result.target);
   const reportFile = await saveSiteReport(hostDir, safeHost(host), result.target, verified, renderSiteReport);
   return { hostDir, result, entries: verified, reportFile };
 }
@@ -104,7 +113,7 @@ export async function regenerateReports(host) {
   const entries = (result.findings || []).map((f) => ({
     finding: f, proof: result.proofs?.[f.id] || { verified: false, exploitable: false, confidence: "low", evidence: "", request: "", response: "", payloadsTried: [], notes: "" },
   }));
-  for (const e of entries) await writeArtifacts(hostDir, e.finding, e.proof);
+  for (const e of entries) await writeArtifacts(hostDir, e.finding, e.proof, result.target);
   const reportFile = await saveSiteReport(hostDir, safeHost(host), result.target, entries, renderSiteReport);
   return { hostDir, reportFile, entries };
 }
