@@ -47,15 +47,12 @@ function gradient(text) {
 
 function banner() {
   const W = 64;
-  const title = gradient("Y · O · R · U   T E R M I N A L");
-  const sub = "type freely — or /help · say “scan a site” or drop a URL";
+  const title = gradient("YORU  //  COMMAND  LINE");
   console.log("");
   console.log(p(GRAD[2], "╭" + "─".repeat(W) + "╮"));
   const titleLen = title.replace(/\x1b\[[0-9;]*m/g, "").length;
   const pad = " ".repeat(Math.max(0, Math.floor((W - titleLen) / 2)));
   console.log(p(GRAD[2], "│") + pad + title + " ".repeat(W - titleLen - pad.length) + p(GRAD[2], "│"));
-  const subPad = " ".repeat(Math.max(0, Math.floor((W - sub.length) / 2)));
-  console.log(p(GRAD[2], "│") + p(C.grey + C.dim, subPad + sub + " ".repeat(W - sub.length - subPad.length)) + p(GRAD[2], "│"));
   console.log(p(GRAD[2], "╰" + "─".repeat(W) + "╯"));
   console.log("");
 }
