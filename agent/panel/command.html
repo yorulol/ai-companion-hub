@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>YORU // Command Center</title>
+<meta name="description" content="YORU command center — Jarvis-style HUD for chat, voice, killswitch, lookups, scans, meetings, files and system control." />
+<link rel="stylesheet" href="/assets/command.css" />
+</head>
+<body>
+<canvas id="particles"></canvas>
+<div class="scanlines"></div>
+
+<div class="cc-shell">
+  <!-- ==== TOP BAR ==== -->
+  <header class="cc-top glass">
+    <div class="cc-brand">
+      <canvas id="coreOrb" width="76" height="76" aria-hidden="true"></canvas>
+      <div>
+        <h1>YORU</h1>
+        <small>command center</small>
+      </div>
+    </div>
+    <div class="cc-top-input">
+      <button id="micBtn" class="mic-btn" title="Hold to talk (or click to toggle)">
+        <span class="mic-dot"></span> voice
+      </button>
+      <input id="quickInput" placeholder="speak or type — scan a site, do a lookup, open a folder, ask anything…" />
+      <button id="quickSend" class="primary">send</button>
+    </div>
+    <div class="cc-top-status">
+      <span class="pill" id="pillKill"><span class="dot on"></span> killswitch: idle</span>
+      <span class="pill" id="pillProvider"><span class="dot wait"></span> provider…</span>
+      <details class="tab-group" id="settingsMenu">
+        <summary>⚙</summary>
+        <div class="tab-menu glass">
+          <button data-nav="owner">Owner tab</button>
+          <button data-nav="workspace">WorkSpace tab</button>
+          <button data-svc="ollama">Ollama · :11434</button>
+          <button data-svc="openclaw">OpenClaw · :18789</button>
+          <button data-svc="openrouter">OpenRouter</button>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <!-- ==== MAIN GRID ==== -->
+  <div class="cc-grid">
+
+    <!-- ==== LEFT RAIL ==== -->
+    <aside class="cc-rail cc-left glass">
+      <div class="rail-title">quick actions</div>
+      <button class="rail-btn" data-action="voice-toggle"><span class="ico">🎙</span> Voice</button>
+      <button class="rail-btn" data-action="killswitch"><span class="ico">⛔</span> Killswitch</button>
+      <button class="rail-btn" data-action="lookup"><span class="ico">🔎</span> Lookup</button>
+      <button class="rail-btn" data-action="email"><span class="ico">✉</span> Email forward</button>
+      <button class="rail-btn" data-action="scan"><span class="ico">🛰</span> Web scan</button>
+      <button class="rail-btn" data-action="meetings"><span class="ico">🎧</span> Meetings</button>
+      <button class="rail-btn" data-action="files"><span class="ico">📁</span> Files</button>
+      <button class="rail-btn" data-action="system"><span class="ico">🖥</span> System</button>
+      <div class="rail-title" style="margin-top:14px">provider</div>
+      <select id="providerSelect" class="rail-select"><option>auto</option></select>
+      <div class="rail-title" style="margin-top:14px">tabs</div>
+      <button class="rail-btn" data-nav="owner">Owner panel</button>
+      <button class="rail-btn" data-nav="workspace">WorkSpace</button>
+    </aside>
+
+    <!-- ==== CENTER: chat + embedded frame ==== -->
+    <section class="cc-center glass">
+      <div id="chatView" class="cc-view active">
+        <div id="messages" class="cc-messages" aria-live="polite"></div>
+        <div class="cc-composer">
+          <textarea id="input" rows="1" placeholder="type here…  (Enter to send, Shift+Enter for newline)"></textarea>
+          <button id="send" class="primary">send</button>
+        </div>
+      </div>
+      <iframe id="ownerFrame" class="cc-view cc-frame" title="Owner panel" data-src="/owner?embed=1"></iframe>
+      <iframe id="workspaceFrame" class="cc-view cc-frame" title="WorkSpace" data-src="/workspace?embed=1"></iframe>
+    </section>
+
+    <!-- ==== RIGHT RAIL: live status ==== -->
+    <aside class="cc-rail cc-right glass">
+      <div class="rail-title">status</div>
+
+      <div class="status-card">
+        <div class="sc-h"><span class="dot" id="dotAgent"></span> agent</div>
+        <div class="sc-v" id="txtAgent">connecting…</div>
+      </div>
+
+      <div class="status-card" id="cardProviders">
+        <div class="sc-h">providers</div>
+        <div class="sc-list" id="providerList"><div class="muted">loading…</div></div>
+      </div>
+
+      <div class="status-card">
+        <div class="sc-h"><span class="dot" id="dotBot"></span> discord bot</div>
+        <div class="sc-v" id="txtBot">—</div>
+        <div class="sc-h" style="margin-top:8px"><span class="dot" id="dotSelf"></span> alt account</div>
+        <div class="sc-v" id="txtSelf">—</div>
+      </div>
+
+      <div class="status-card">
+        <div class="sc-h"><span class="dot" id="dotCall"></span> active call</div>
+        <div class="sc-v" id="txtCall">not in a voice channel</div>
+      </div>
+
+      <div class="status-card">
+        <div class="sc-h"><span class="dot" id="dotKill"></span> killswitch</div>
+        <div class="sc-v" id="txtKill">idle</div>
+      </div>
+
+      <div class="status-card">
+        <div class="sc-h">system</div>
+        <div class="sc-v" id="txtSys">—</div>
+      </div>
+
+      <div class="status-card">
+        <div class="sc-h">last scan</div>
+        <div class="sc-v" id="txtScan">no scans yet</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ==== Slide-over drawer for quick-action panels ==== -->
+<aside id="drawer" class="cc-drawer glass hidden" role="dialog" aria-hidden="true">
+  <div class="drawer-head">
+    <h3 id="drawerTitle">Panel</h3>
+    <button id="drawerClose" class="ghost">close</button>
+  </div>
+  <div id="drawerBody" class="drawer-body"></div>
+</aside>
+
+<script type="module" src="/assets/command.js"></script>
+</body>
+</html>
