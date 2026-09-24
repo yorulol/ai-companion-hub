@@ -732,6 +732,36 @@ async function setupWebFolder() {
   ok("agent/web folder ready (per-host vulnerability reports)");
 }
 
+/**
+ * Creates agent/models/ where the Model Builder writes custom models built
+ * from Hugging Face folders or .gguf files.
+ */
+async function setupModelsFolder() {
+  const dir = path.resolve(ROOT, "models");
+  await fs.mkdir(dir, { recursive: true });
+  const readme = path.join(dir, "README.txt");
+  try { await fs.access(readme); }
+  catch {
+    await fs.writeFile(readme, [
+      "YORU custom models",
+      "",
+      "The Model Builder writes every custom model into its own folder here:",
+      "  agent/models/<name>/model.gguf     (or a reference to an HF folder)",
+      "  agent/models/<name>/Modelfile      (regeneratable)",
+      "  agent/models/<name>/model.json     (name, size, params, tuning, built-at)",
+      "",
+      "Build one from:",
+      "  • the panel   → AI Core → Custom Models → Build",
+      "  • the terminal → /build <source-path> [name]",
+      "  • the alt account → !build <source-path> [name]",
+      "",
+      "Flip LOCALMODEL_ENABLED=true in agent/.env to make chat prefer your built model.",
+      "",
+    ].join("\n"), "utf8");
+  }
+  ok("agent/models folder ready (custom-built models)");
+}
+
 
 
 
