@@ -153,6 +153,15 @@ export const config = {
 if (config.providers.ollama.uf.enabled) {
   config.providers.ollama.enabled = true;
 }
+// Heretic override: swap the default chat model for the abliterated Qwen 3B.
+// Runs through Ollama, so keep Ollama on when it's enabled.
+if (config.providers.ollama.heretic.enabled) {
+  config.providers.ollama.enabled = true;
+  // UF takes precedence if both are enabled — UF is the fully custom variant.
+  if (!config.providers.ollama.uf.enabled) {
+    config.providers.ollama.model = config.providers.ollama.heretic.model;
+  }
+}
 
 async function writeEnv(updates) {
   try {
