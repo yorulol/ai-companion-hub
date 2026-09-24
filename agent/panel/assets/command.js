@@ -61,3 +61,43 @@ async function loadSecurity(){try{const [ka,va,k,v]=await Promise.all([api("/api
 function ids(id){return $(id).value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean)}
 $("saveKillAdmins").onclick=async()=>{await api("/api/owner/killswitch-admins",{method:"POST",body:{admins:ids("killAdmins")}});toast("Killswitch admins saved.")};$("saveVoiceAdmins").onclick=async()=>{await api("/api/owner/voice-admins",{method:"POST",body:{admins:ids("voiceAdmins")}});toast("Voice admins saved.")};$("ksEngage").onclick=async()=>{await api("/api/owner/killswitch",{method:"POST",body:{reason:"command-center"}});toast("Killswitch engaged.");refreshAll()};$("ksRelease").onclick=async()=>{await api("/api/owner/jumpstart",{method:"POST"});toast("YORU jumpstarted.");refreshAll()};$("voiceJoin").onclick=async()=>{const channel=$("voiceChannel").value.trim();if(!channel)return toast("Enter a channel ID or name.");await api("/api/owner/voice/join",{method:"POST",body:{channel}});toast("Voice session started.");refreshAll()};$("voiceLeave").onclick=async()=>{const r=await api("/api/owner/voice/leave",{method:"POST"});toast(r.message||"Voice files saved.",4000);refreshAll()};
 const meetings=()=>showView("security");document.querySelectorAll('[data-action="meetings"]').forEach(b=>b.onclick=meetings);
+
+function fmtGb(n){return n?(n/1024**3).toFixed(2)+" GB":"?"}
+async function loadModels(){
+  try{
+    const r=await api("/api/models/custom");
+    $("modelsEnabled").checked=!!r.enabled;
+    const list=$("mbList");
+    if(!r.models?.length){list.innerHTML='<div class="empty-line">No models built yet. Point the builder at an HF folder or a .gguf file above.</div>';return}
+    list.innerHTML=r.models.map(m=>{
+      const active=m.name===r.active;
+      return `<div class="hud-panel" style="padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div><b>${esc(m.name)}</b> ${active?'<span style="color:#27dcf4">· ACTIVE</span>':''}
+          <div style="font-size:12px;opacity:.7">${fmtGb(m.sizeBytes)} · ~${m.paramsB||"?"}B params · ${m.kind||"?"} · ${m.runtime||"ollama"}</div>
+          <div style="font-size:11px;opacity:.5">${esc(m.source||"")}</div></div>
+        <div style="display:flex;gap:6px">
+          <button data-use="${esc(m.name)}">USE</button>
+          <button data-del="${esc(m.name)}" style="color:#ff6b6b">DELETE</button>
+        </div></div>`;
+    }).join("");
+    list.querySelectorAll("[data-use]").forEach(b=>b.onclick=async()=>{await api("/api/models/custom/use",{method:"POST",body:{name:b.dataset.use}});toast(`Now using ${b.dataset.use}`);loadModels()});
+    list.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(!confirm(`Delete ${b.dataset.del}?`))return;await api("/api/models/custom/delete",{method:"POST",body:{name:b.dataset.del}});toast("Deleted");loadModels()});
+  }catch(e){toast(e.message,4000)}
+}
+$("modelsEnabled")?.addEventListener("change",async e=>{await api("/api/models/custom/toggle",{method:"POST",body:{enabled:e.target.checked}});toast(`Custom models ${e.target.checked?"enabled":"disabled"}`)});
+$("mbRefresh")?.addEventListener("click",loadModels);
+$("mbBuild")?.addEventListener("click",async()=>{
+  const sourcePath=$("mbSource").value.trim();
+  if(!sourcePath)return toast("Enter a source path.");
+  const name=$("mbName").value.trim()||undefined;
+  const system=$("mbSystem").value.trim()||undefined;
+  const force=$("mbForce").checked;
+  const log=$("mbLog");log.textContent="Building — this can take a while for large models…\n";
+  $("mbBuild").disabled=true;
+  try{
+    const r=await api("/api/models/custom/build",{method:"POST",body:{sourcePath,name,system,force}});
+    log.textContent+=(r.logs||[]).join("\n")+`\n\n✓ Built ${r.built.name} (${fmtGb(r.built.sizeBytes)})`;
+    toast(`Built ${r.built.name}`);loadModels();
+  }catch(e){log.textContent+=`\n✗ ${e.message}`;toast(e.message,5000)}
+  finally{$("mbBuild").disabled=false}
+});
