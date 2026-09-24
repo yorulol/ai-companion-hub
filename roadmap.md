@@ -11,4 +11,4 @@
 - [x] Add full-computer file explorer/editor and selectable WorkSpace project folders
 - [x] Add Trusted Admin controls for killswitch and voice access
 - [x] Make agent-only source distribution easy without breaking Lovable project sync
-- [ ] Validate local Node agent syntax and panel flows
+- [x] Validate local Node agent syntax and panel flows
