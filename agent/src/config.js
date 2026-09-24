@@ -151,7 +151,7 @@ async function writeEnv(updates) {
   try {
     const { promises: fs } = await import("node:fs");
     const path = (await import("node:path")).default;
-    const envPath = path.resolve(process.cwd(), ".env");
+    const envPath = path.resolve(homeDir, ".env");
     let text = await fs.readFile(envPath, "utf8").catch(() => "");
     for (const [key, value] of Object.entries(updates)) {
       const lineRe = new RegExp(`^${key}=.*$`, "m");

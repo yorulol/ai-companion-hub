@@ -25,8 +25,7 @@ models if Ollama is running. Re-run it any time with `npm run setup` (e.g.
 after upgrading your GPU).
 
 Then the agent boots the AI router, the Discord bot (optional), and both web
-panels — all as one process, behind a colored terminal dashboard with an
-animated robot mascot.
+panels as one process behind the YORU command-line dashboard.
 
 > `npm run yoru` is the canonical command. `npm start` still works as an
 > alias.

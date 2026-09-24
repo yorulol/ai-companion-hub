@@ -6,9 +6,9 @@
 - [x] Selfbot: owner voice commands joinvoice/leavevoice/meetingnote/meetingnotes + Meetings controls in the panel; recap saved to agent/data/meetings/
 - [x] Selfbot: never respond to @everyone / @here pings
 - [x] WorkSpace panel (8789, and embedded in the hub): YORU (Ollama default) + ACE (OpenRouter/OpenClaw) collaborate; home auto-detected as agent/; both can edit their own code files via confined tools
-- [ ] Rebuild all local panels to match the dense futuristic YORU control-center reference
-- [ ] Remove Email Forward from the panel; polish lookup results and terminal chat
-- [ ] Add full-computer file explorer/editor and selectable WorkSpace project folders
-- [ ] Add Trusted Admin controls for killswitch and voice access
-- [ ] Make agent-only source distribution easy without breaking Lovable project sync
+- [x] Rebuild all local panels to match the dense futuristic YORU control-center reference
+- [x] Remove Email Forward from the panel; polish lookup results and terminal chat
+- [x] Add full-computer file explorer/editor and selectable WorkSpace project folders
+- [x] Add Trusted Admin controls for killswitch and voice access
+- [x] Make agent-only source distribution easy without breaking Lovable project sync
 - [ ] Validate local Node agent syntax and panel flows
