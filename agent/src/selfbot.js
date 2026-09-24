@@ -116,7 +116,8 @@ export async function startSelfbot() {
       // Plain-English voice control — no command needed, just ping and ask.
       const voiceIntent = detectVoiceIntent(text);
       if (voiceIntent) {
-        if (!isOwner) {
+        const canVoice = isOwner || isVoiceAdmin(message.author.id);
+        if (!canVoice) {
           await message.reply("Those are my master's commands. Fuck off trying to use them.").catch(() => {});
           return;
         }
