@@ -832,6 +832,9 @@ async function main() {
   try { await setupWebFolder(); }
   catch (e) { warn(`web folder setup skipped: ${e.message}`); }
 
+  try { await setupModelsFolder(); }
+  catch (e) { warn(`models folder setup skipped: ${e.message}`); }
+
   try { await setupUfVariant(); }
   catch (e) { warn(`uf variant setup skipped: ${e.message}`); }
 

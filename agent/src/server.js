@@ -1,7 +1,8 @@
 /** Tiny HTTP service the web panels talk to. No framework — plain node:http. */
 import http from "node:http";
-import { config, isOwnerId, setOwnerPrefix, setProviderEnabled, setProviderKey, setPreferredProvider } from "./config.js";
-import { ask, providerStatus, refreshModels, knownModels, ollamaModels } from "./ai.js";
+import { config, isOwnerId, setOwnerPrefix, setProviderEnabled, setProviderKey, setPreferredProvider, setLocalModel } from "./config.js";
+import { ask, providerStatus, refreshModels, knownModels, ollamaModels, refreshLocalModel } from "./ai.js";
+import { listBuiltModels, buildModel, deleteBuiltModel } from "./model-builder.js";
 import { chat } from "./chat-loop.js";
 import {
   getSettings, setSettings, allGuilds, getGuild, saveGuild,
@@ -440,6 +441,57 @@ const ROUTES = {
   "POST /api/owner/voice/note": async (req) => { requireOwner(req); return addMeetingNote((await readBody(req)).text); },
   "GET /api/owner/voice/recap": async (req) => { requireOwner(req); return await latestMeetingRecap(); },
   "GET /api/owner/voice/calls": async (req) => { requireOwner(req); return await listCallFiles(); },
+
+  // ---- Custom Model Builder ----
+  "GET /api/models/custom": async (req) => {
+    requireOwner(req);
+    const models = await listBuiltModels();
+    return {
+      models,
+      enabled: config.localmodel.enabled,
+      active: config.localmodel.active || null,
+      dir: config.localmodel.dir,
+    };
+  },
+  "POST /api/models/custom/build": async (req) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (!b.sourcePath) throw new Error("sourcePath required");
+    const logs = [];
+    const built = await buildModel({
+      sourcePath: b.sourcePath,
+      name: b.name,
+      system: b.system,
+      force: !!b.force,
+      onLog: (l) => logs.push(l),
+    });
+    await refreshLocalModel();
+    return { ok: true, built, logs };
+  },
+  "POST /api/models/custom/use": async (req) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (!b.name) throw new Error("name required");
+    const state = await setLocalModel({ enabled: true, active: b.name });
+    await refreshLocalModel();
+    return { ok: true, ...state };
+  },
+  "POST /api/models/custom/toggle": async (req) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    const state = await setLocalModel({ enabled: !!b.enabled });
+    await refreshLocalModel();
+    return { ok: true, ...state };
+  },
+  "POST /api/models/custom/delete": async (req) => {
+    requireOwner(req);
+    const b = await readBody(req);
+    if (!b.name) throw new Error("name required");
+    const res = await deleteBuiltModel(b.name);
+    if (config.localmodel.active === b.name) await setLocalModel({ active: "" });
+    await refreshLocalModel();
+    return res;
+  },
 };
 
 function match(method, url) {
