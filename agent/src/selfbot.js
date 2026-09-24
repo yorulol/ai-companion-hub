@@ -44,7 +44,8 @@ export async function startSelfbot() {
         // Owner voice-meeting commands (work even outside the command registry).
         const VOICE_CMDS = new Set(["joinvoice", "leavevoice", "meetingnote", "meetingnotes"]);
         if (VOICE_CMDS.has(cmdName)) {
-          if (!isOwnerId(message.author.id)) {
+          const canVoice = isOwnerId(message.author.id) || isVoiceAdmin(message.author.id);
+          if (!canVoice) {
             await message.reply("Those are my master's commands. Fuck off trying to use them.").catch(() => {});
             return;
           }
