@@ -31,6 +31,7 @@
   <nav class="side-nav" aria-label="Command center">
     <button class="nav-btn active" data-view="dashboard"><svg><use href="#i-grid"/></svg><span>Command Center</span></button>
     <button class="nav-btn" data-view="core"><svg><use href="#i-core"/></svg><span>AI Core</span></button>
+    <button class="nav-btn" data-view="models"><svg><use href="#i-core"/></svg><span>Custom Models</span></button>
     <button class="nav-btn" data-view="terminal"><svg><use href="#i-terminal"/></svg><span>Conversations</span></button>
     <button class="nav-btn" data-view="workspace"><svg><use href="#i-work"/></svg><span>WorkSpace</span></button>
     <button class="nav-btn" data-view="lookup"><svg><use href="#i-search"/></svg><span>Lookups</span></button>
@@ -64,6 +65,28 @@
     <div class="llm-panel hud-panel"><div class="panel-label">LLM STATUS <span id="llmCount">0 CONNECTED</span></div><div id="providerCards" class="provider-cards"></div></div>
   </section>
   <section id="coreView" class="view standard-view"><div class="view-head"><div><span>AI CORE</span><h2>Intelligence routing</h2></div><select id="providerSelect"><option>Loading…</option></select></div><div class="core-console"><div class="hud-panel"><div class="panel-label">PROVIDER MATRIX</div><div id="providerMatrix"></div></div><div class="hud-panel"><div class="panel-label">SYSTEM TELEMETRY</div><pre id="systemTelemetry">Loading…</pre></div></div></section>
+  <section id="modelsView" class="view standard-view">
+    <div class="view-head"><div><span>CUSTOM MODELS</span><h2>Model Builder</h2></div><label class="switch"><input id="modelsEnabled" type="checkbox"/> <span>Use built models for chat</span></label></div>
+    <div class="hud-panel">
+      <div class="panel-label">BUILD A NEW MODEL</div>
+      <p style="margin:8px 0;font-size:13px;opacity:.75">Point at any HuggingFace source folder (config.json + safetensors) or a <code>.gguf</code> file. YORU stages it into <code>agent/models/&lt;name&gt;/</code>, generates a Modelfile, tunes it for this machine, and registers it with Ollama so chat can use it instantly.</p>
+      <div style="display:grid;grid-template-columns:1fr 200px;gap:8px;margin:8px 0">
+        <input id="mbSource" placeholder="/absolute/path/to/model-folder-or-file.gguf" style="padding:10px;background:rgba(0,0,0,.35);border:1px solid rgba(39,220,244,.3);color:inherit;border-radius:6px"/>
+        <input id="mbName" placeholder="name (optional)" style="padding:10px;background:rgba(0,0,0,.35);border:1px solid rgba(39,220,244,.3);color:inherit;border-radius:6px"/>
+      </div>
+      <textarea id="mbSystem" rows="3" placeholder="Optional custom system prompt (leave blank for the YORU default)" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid rgba(39,220,244,.3);color:inherit;border-radius:6px;margin-bottom:8px"></textarea>
+      <div style="display:flex;gap:8px">
+        <button id="mbBuild">BUILD MODEL</button>
+        <button id="mbRefresh">REFRESH LIST</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.8"><input id="mbForce" type="checkbox"/> overwrite if exists</label>
+      </div>
+      <pre id="mbLog" style="margin-top:12px;max-height:180px;overflow:auto;background:rgba(0,0,0,.4);padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap"></pre>
+    </div>
+    <div class="hud-panel" style="margin-top:16px">
+      <div class="panel-label">BUILT MODELS</div>
+      <div id="mbList" style="display:flex;flex-direction:column;gap:8px;margin-top:8px"></div>
+    </div>
+  </section>
   <section id="terminalView" class="view terminal-view"><div class="terminal-head"><span class="terminal-lights"><i></i><i></i><i></i></span><b>YORU://CONVERSATION</b><small id="terminalProvider">AUTO ROUTING</small></div><div id="messages" class="terminal-output" aria-live="polite"></div><form id="terminalForm" class="terminal-composer"><span>oz@yoru:~$</span><textarea id="input" rows="1" placeholder="enter command or talk to YORU" autofocus></textarea><button id="send" title="Execute"><svg><use href="#i-send"/></svg></button></form></section>
   <section id="lookupView" class="view standard-view"><div class="view-head"><div><span>KNOWLEDGE SYSTEM</span><h2>Identity lookup</h2></div><div class="query-bar"><input id="lookupQuery" placeholder="Handle, Discord ID, email, or name"/><button id="lookupGo">SEARCH</button></div></div><div id="lookupSummary" class="lookup-summary hud-panel"><b>READY</b><span>Enter at least three characters to search all indexed sources.</span></div><div id="lookupResults" class="lookup-results"></div></section>
   <section id="filesView" class="view file-view"><div class="view-head"><div><span>COMPUTER ACCESS</span><h2>File navigator</h2></div><div class="file-address"><button id="fileUp" title="Parent folder"><svg><use href="#i-up"/></svg></button><input id="filePath" value="~"/><button id="fileGo">OPEN</button></div></div><div class="file-workbench"><aside class="roots-panel hud-panel"><div class="panel-label">LOCATIONS</div><div id="fileRoots"></div></aside><div class="browser-panel hud-panel"><div id="breadcrumbs" class="breadcrumbs"></div><div id="fileList" class="file-list"></div></div><div class="editor-panel hud-panel"><div class="editor-head"><span id="editorName">NO FILE SELECTED</span><div><button id="askFile" disabled>ASK YORU</button><button id="saveFile" disabled>SAVE</button></div></div><textarea id="fileEditor" spellcheck="false" placeholder="Select a text file to inspect or edit."></textarea></div></div></section>
