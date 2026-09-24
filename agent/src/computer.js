@@ -36,10 +36,36 @@ function resolveSafe(p) {
 export async function listDir(p) {
   const full = resolveSafe(p);
   const items = await fs.readdir(full, { withFileTypes: true });
-  return items.map((d) => ({
-    name: d.name,
-    type: d.isDirectory() ? "dir" : d.isFile() ? "file" : "other",
+  const rows = await Promise.all(items.map(async (d) => {
+    const itemPath = path.join(full, d.name);
+    const stat = await fs.stat(itemPath).catch(() => null);
+    return {
+      name: d.name,
+      path: itemPath,
+      type: d.isDirectory() ? "dir" : d.isFile() ? "file" : "other",
+      size: stat?.size || 0,
+      modifiedAt: stat?.mtimeMs || 0,
+    };
   }));
+  return rows.sort((a, b) => Number(b.type === "dir") - Number(a.type === "dir") || a.name.localeCompare(b.name));
+}
+
+export async function fileRoots() {
+  assertEnabled();
+  if (config.os.isWindows) {
+    const roots = [];
+    for (let code = 65; code <= 90; code++) {
+      const drive = `${String.fromCharCode(code)}:\\`;
+      if (existsSync(drive)) roots.push({ name: drive, path: drive });
+    }
+    return { roots, home: os.homedir(), separator: "\\" };
+  }
+  const candidates = [os.homedir(), "/", "/mnt", "/media"];
+  return {
+    roots: [...new Set(candidates)].filter((p) => existsSync(p)).map((p) => ({ name: p === os.homedir() ? "Home" : p, path: p })),
+    home: os.homedir(),
+    separator: "/",
+  };
 }
 
 export async function readFile(p, maxBytes = 512_000) {
