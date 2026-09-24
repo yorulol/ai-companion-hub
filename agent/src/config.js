@@ -77,6 +77,13 @@ export const config = {
         model: process.env.OLLAMA_UF_MODEL || "qwen-yoru",
         modelfile: process.env.OLLAMA_UF_MODELFILE || "agent/UF/Modelfile",
       },
+      // Heretic abliterated variant of Qwen2.5-3B-Instruct — same size and speed
+      // profile as the default chat model, with the refusal layer removed.
+      // Pulled from Hugging Face via Ollama's `hf.co/...` shorthand.
+      heretic: {
+        enabled: bool(process.env.OLLAMA_HERETIC_ENABLED, false),
+        model: process.env.OLLAMA_HERETIC_MODEL || "hf.co/richardyoung/Qwen2.5-3B-Instruct-heretic:Q4_K_M",
+      },
     },
     openai: {
       enabled: bool(process.env.OPENAI_ENABLED, false),
