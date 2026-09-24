@@ -1,0 +1,9 @@
+.env
+.env.*.local
+node_modules/
+vendor/
+data/*.sqlite
+data/*.sqlite-*
+calls/
+web/
+*.log

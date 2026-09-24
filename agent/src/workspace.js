@@ -5,18 +5,19 @@
  *          Ollama is disabled/unreachable).
  * ACE   -> OpenRouter or OpenClaw (owner's pick), falls back to the chain.
  *
- * Both agents share one transcript, take turns, and may act inside their
- * HOME folder (the agent/ directory, auto-detected from this file) using
+ * Both agents share one transcript, take turns, and may act inside the
+ * selected project folder (agent/ by default) using
  * fenced tool blocks:
  *
  *   ```tool
  *   {"tool":"ws_write","args":{"path":"src/foo.js","content":"..."}}
  *   ```
  *
- * Paths are always confined to HOME — anything escaping it is rejected.
+ * Paths are always confined to the owner-selected project root.
  */
-import { promises as fs } from "node:fs";
+import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { ask } from "./ai.js";
@@ -29,67 +30,69 @@ export const WORKSPACE_HOME = path.resolve(__dirname, "..");
 
 const sessions = new Map(); // id -> session
 
-const YORU_SYSTEM = `You are YORU, working in the WorkSpace with another agent named ACE.
-You two collaborate on plans, coding projects, or general discussion inside your home folder: ${WORKSPACE_HOME}
+function systemPrompt(agent, root) {
+  const voice = agent === "YORU"
+    ? "Be sharp, witty, concise. No filler. Disagree with ACE when it's wrong — back it up."
+    : "Be precise, technical, and constructive. Challenge weak ideas with better ones.";
+  return `You are ${agent}, working in the WorkSpace with ${agent === "YORU" ? "ACE" : "YORU"}.
+You collaborate on plans and code inside the selected project folder: ${root}
 Rules:
-- Be sharp, witty, concise. No filler. Disagree with ACE when it's wrong — back it up.
+- ${voice}
 - You can read/write/list files inside your home folder with ONE tool block per turn:
   \`\`\`tool
   {"tool":"ws_list","args":{"path":"."}}
   \`\`\`
   tools: ws_list({path}), ws_read({path}), ws_write({path,content}), ws_mkdir({path}), ws_remove({path})
-- Paths are relative to your home folder. After a tool runs you get its result, then continue.
+- Paths are relative to the selected project folder. After a tool runs you get its result, then continue.
 - When editing code, keep changes complete and working — no half files.
 - When the task is done, say "TASK COMPLETE:" followed by a short summary.`;
-
-const ACE_SYSTEM = `You are ACE, working in the WorkSpace with another agent named YORU.
-You two collaborate on plans, coding projects, or general discussion inside your home folder: ${WORKSPACE_HOME}
-Rules:
-- Precise, technical, constructive. Challenge weak ideas with better ones.
-- You can read/write/list files inside your home folder with ONE tool block per turn:
-  \`\`\`tool
-  {"tool":"ws_list","args":{"path":"."}}
-  \`\`\`
-  tools: ws_list({path}), ws_read({path}), ws_write({path,content}), ws_mkdir({path}), ws_remove({path})
-- Paths are relative to your home folder. After a tool runs you get its result, then continue.
-- When the task is done, say "TASK COMPLETE:" followed by a short summary.`;
+}
 
 const TOOL_RE = /```tool\s*\n([\s\S]+?)\n```/i;
 
-function resolveHome(rel = ".") {
-  const full = path.resolve(WORKSPACE_HOME, String(rel).replace(/^~+/, ""));
-  if (full !== WORKSPACE_HOME && !full.startsWith(WORKSPACE_HOME + path.sep)) {
-    throw new Error(`Path escapes home folder: ${rel}`);
+function normalizeRoot(root = WORKSPACE_HOME) {
+  const expanded = String(root || WORKSPACE_HOME).replace(/^~(?=$|[\\/])/, os.homedir());
+  const full = path.resolve(expanded);
+  if (!existsSync(full)) throw new Error(`Project folder does not exist: ${full}`);
+  return full;
+}
+
+function resolveHome(root, rel = ".") {
+  const home = normalizeRoot(root);
+  const full = path.resolve(home, String(rel).replace(/^~+/, ""));
+  if (full !== home && !full.startsWith(home + path.sep)) {
+    throw new Error(`Path escapes selected project folder: ${rel}`);
   }
   return full;
 }
 
 /** Panel file browser helpers (same confinement as the agent tools). */
-export async function listHome(rel = ".") {
-  const dir = resolveHome(rel);
+export async function listHome(rel = ".", root = WORKSPACE_HOME) {
+  const home = normalizeRoot(root);
+  const dir = resolveHome(home, rel);
   const entries = await fs.readdir(dir, { withFileTypes: true });
   return entries
     .filter((e) => !["node_modules", ".git"].includes(e.name))
-    .map((e) => ({ name: e.name, dir: e.isDirectory(), path: path.relative(WORKSPACE_HOME, path.join(dir, e.name)) || "." }))
+    .map((e) => ({ name: e.name, dir: e.isDirectory(), path: path.relative(home, path.join(dir, e.name)) || "." }))
     .sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
 }
 
-export async function readHomeFile(rel) {
-  return await fs.readFile(resolveHome(rel), "utf8");
+export async function readHomeFile(rel, root = WORKSPACE_HOME) {
+  return await fs.readFile(resolveHome(root, rel), "utf8");
 }
 
-export async function writeHomeFile(rel, content) {
-  const file = resolveHome(rel);
+export async function writeHomeFile(rel, content, root = WORKSPACE_HOME) {
+  const file = resolveHome(root, rel);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, String(content ?? ""), "utf8");
   return { ok: true };
 }
 
-async function runWsTool(call) {
+async function runWsTool(call, root) {
   const { tool, args = {} } = call;
   switch (tool) {
     case "ws_list": {
-      const dir = resolveHome(args.path || ".");
+      const dir = resolveHome(root, args.path || ".");
       const entries = await fs.readdir(dir, { withFileTypes: true });
       return entries
         .filter((e) => !["node_modules", ".git"].includes(e.name))
@@ -97,22 +100,22 @@ async function runWsTool(call) {
         .join("\n") || "(empty)";
     }
     case "ws_read": {
-      const file = resolveHome(args.path);
+      const file = resolveHome(root, args.path);
       const data = await fs.readFile(file, "utf8");
       return data.length > 12000 ? data.slice(0, 12000) + "\n…(truncated)" : data;
     }
     case "ws_write": {
-      const file = resolveHome(args.path);
+      const file = resolveHome(root, args.path);
       await fs.mkdir(path.dirname(file), { recursive: true });
       await fs.writeFile(file, String(args.content ?? ""), "utf8");
-      return `wrote ${path.relative(WORKSPACE_HOME, file)} (${String(args.content ?? "").length} bytes)`;
+      return `wrote ${path.relative(root, file)} (${String(args.content ?? "").length} bytes)`;
     }
     case "ws_mkdir": {
-      await fs.mkdir(resolveHome(args.path), { recursive: true });
+      await fs.mkdir(resolveHome(root, args.path), { recursive: true });
       return `created ${args.path}`;
     }
     case "ws_remove": {
-      await fs.rm(resolveHome(args.path), { recursive: true, force: true });
+      await fs.rm(resolveHome(root, args.path), { recursive: true, force: true });
       return `removed ${args.path}`;
     }
     default:
@@ -120,7 +123,7 @@ async function runWsTool(call) {
   }
 }
 
-async function agentTurn({ agent, system, provider, transcript, task }) {
+async function agentTurn({ agent, system, provider, transcript, task, root }) {
   const messages = [
     { role: "system", content: system },
     { role: "user", content: `TASK: ${task}\n\nTranscript so far:\n${transcript || "(you start — give your first take)"}\n\nYour turn, ${agent}.` },
@@ -135,7 +138,7 @@ async function agentTurn({ agent, system, provider, transcript, task }) {
   if (m) {
     try {
       const call = JSON.parse(m[1]);
-      const result = await runWsTool(call);
+      const result = await runWsTool(call, root);
       toolNote = { tool: call.tool, ok: true, result: String(result).slice(0, 2000) };
     } catch (err) {
       toolNote = { tool: "?", ok: false, result: err.message };
@@ -153,16 +156,17 @@ async function agentTurn({ agent, system, provider, transcript, task }) {
   return { reply, provider: out.provider, model: out.model, tool: toolNote };
 }
 
-export function startWorkspaceSession({ task, rounds = 4, aceProvider = "openrouter" }) {
+export function startWorkspaceSession({ task, rounds = 4, aceProvider = "openrouter", root = WORKSPACE_HOME }) {
   if (!task || typeof task !== "string") throw new Error("Task is required.");
   rounds = Math.min(12, Math.max(1, Number(rounds) || 4));
+  const selectedRoot = normalizeRoot(root);
   const id = crypto.randomBytes(6).toString("hex");
   const session = {
     id,
     task,
     rounds,
     aceProvider,
-    home: WORKSPACE_HOME,
+    home: selectedRoot,
     status: "running",
     createdAt: Date.now(),
     messages: [],
@@ -179,10 +183,11 @@ export function startWorkspaceSession({ task, rounds = 4, aceProvider = "openrou
         try {
           const out = await agentTurn({
             agent: who,
-            system: who === "YORU" ? YORU_SYSTEM : ACE_SYSTEM,
+            system: systemPrompt(who, selectedRoot),
             provider: who === "YORU" ? "ollama" : aceProvider,
             transcript,
             task,
+            root: selectedRoot,
           });
           const msg = { agent: who, round, reply: out.reply, provider: out.provider, model: out.model, tool: out.tool, at: Date.now() };
           session.messages.push(msg);
@@ -203,7 +208,7 @@ export function startWorkspaceSession({ task, rounds = 4, aceProvider = "openrou
     session.error = err.message;
   });
 
-  return { id, home: WORKSPACE_HOME };
+  return { id, home: selectedRoot };
 }
 
 export function getWorkspaceSession(id) {

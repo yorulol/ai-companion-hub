@@ -2,7 +2,9 @@
 
 Runs on your PC or any VPS. Cross-platform: **Linux (Parrot / Debian / Ubuntu / Arch)**
 and **Windows 10 / 11**. Everything you need lives in this `agent/` folder — no
-frontend build, no Lovable, no extra terminals.
+frontend build, no Lovable, no extra terminals. If this repository includes
+Lovable preview files, only `agent/` is required for YORU; copy that directory
+into its own repository once for an agent-only GitHub clone.
 
 ## Setup (standalone)
 
@@ -23,8 +25,7 @@ models if Ollama is running. Re-run it any time with `npm run setup` (e.g.
 after upgrading your GPU).
 
 Then the agent boots the AI router, the Discord bot (optional), and both web
-panels — all as one process, behind a colored terminal dashboard with an
-animated robot mascot.
+panels as one process behind the YORU command-line dashboard.
 
 > `npm run yoru` is the canonical command. `npm start` still works as an
 > alias.
@@ -33,13 +34,13 @@ animated robot mascot.
 
 | Address                 | What it is                                        |
 | ----------------------- | ------------------------------------------------- |
-| http://localhost:8788   | **Chat panel** — talk to your AI agent            |
-| http://localhost:8789   | **Owner panel** — Discord bot + owner controls    |
+| http://localhost:8788   | **YORU Command Center** — all controls and chat   |
+| http://localhost:8789   | **WorkSpace** — collaborative project work        |
 | http://localhost:8787   | Agent API (the panels use it for you)             |
 
-Each panel is its own port and only shows its own screen — the owner page is
-blocked on the chat port. Change the ports with `CHAT_PANEL_PORT` /
-`OWNER_PANEL_PORT` in `.env`, or turn the panels off with `PANELS_ENABLED=false`.
+The command center embeds owner controls and WorkSpace while each remains
+reachable directly. Change ports with `CHAT_PANEL_PORT` /
+`WORKSPACE_PANEL_PORT` in `.env`, or use `PANELS_ENABLED=false`.
 
 ## Running on a VPS
 

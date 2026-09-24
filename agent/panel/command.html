@@ -2,135 +2,75 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>YORU // Command Center</title>
-<meta name="description" content="YORU command center — Jarvis-style HUD for chat, voice, killswitch, lookups, scans, meetings, files and system control." />
+<meta name="description" content="YORU local AI command center for agents, missions, system controls, lookups, files, security, and voice." />
 <link rel="stylesheet" href="/assets/command.css" />
 </head>
 <body>
-<canvas id="particles"></canvas>
-<div class="scanlines"></div>
-
-<div class="cc-shell">
-  <!-- ==== TOP BAR ==== -->
-  <header class="cc-top glass">
-    <div class="cc-brand">
-      <canvas id="coreOrb" width="76" height="76" aria-hidden="true"></canvas>
-      <div>
-        <h1>YORU</h1>
-        <small>command center</small>
-      </div>
-    </div>
-    <div class="cc-top-input">
-      <button id="micBtn" class="mic-btn" title="Hold to talk (or click to toggle)">
-        <span class="mic-dot"></span> voice
-      </button>
-      <input id="quickInput" placeholder="speak or type — scan a site, do a lookup, open a folder, ask anything…" />
-      <button id="quickSend" class="primary">send</button>
-    </div>
-    <div class="cc-top-status">
-      <span class="pill" id="pillKill"><span class="dot on"></span> killswitch: idle</span>
-      <span class="pill" id="pillProvider"><span class="dot wait"></span> provider…</span>
-      <details class="tab-group" id="settingsMenu">
-        <summary>⚙</summary>
-        <div class="tab-menu glass">
-          <button data-nav="owner">Owner tab</button>
-          <button data-nav="workspace">WorkSpace tab</button>
-          <button data-svc="ollama">Ollama · :11434</button>
-          <button data-svc="openclaw">OpenClaw · :18789</button>
-          <button data-svc="openrouter">OpenRouter</button>
-        </div>
-      </details>
-    </div>
-  </header>
-
-  <!-- ==== MAIN GRID ==== -->
-  <div class="cc-grid">
-
-    <!-- ==== LEFT RAIL ==== -->
-    <aside class="cc-rail cc-left glass">
-      <div class="rail-title">quick actions</div>
-      <button class="rail-btn" data-action="voice-toggle"><span class="ico">🎙</span> Voice</button>
-      <button class="rail-btn" data-action="killswitch"><span class="ico">⛔</span> Killswitch</button>
-      <button class="rail-btn" data-action="lookup"><span class="ico">🔎</span> Lookup</button>
-      <button class="rail-btn" data-action="email"><span class="ico">✉</span> Email forward</button>
-      <button class="rail-btn" data-action="scan"><span class="ico">🛰</span> Web scan</button>
-      <button class="rail-btn" data-action="meetings"><span class="ico">🎧</span> Meetings</button>
-      <button class="rail-btn" data-action="files"><span class="ico">📁</span> Files</button>
-      <button class="rail-btn" data-action="system"><span class="ico">🖥</span> System</button>
-      <div class="rail-title" style="margin-top:14px">provider</div>
-      <select id="providerSelect" class="rail-select"><option>auto</option></select>
-      <div class="rail-title" style="margin-top:14px">tabs</div>
-      <button class="rail-btn" data-nav="owner">Owner panel</button>
-      <button class="rail-btn" data-nav="workspace">WorkSpace</button>
-    </aside>
-
-    <!-- ==== CENTER: chat + embedded frame ==== -->
-    <section class="cc-center glass">
-      <div id="chatView" class="cc-view active">
-        <div id="messages" class="cc-messages" aria-live="polite"></div>
-        <div class="cc-composer">
-          <textarea id="input" rows="1" placeholder="type here…  (Enter to send, Shift+Enter for newline)"></textarea>
-          <button id="send" class="primary">send</button>
-        </div>
-      </div>
-      <iframe id="ownerFrame" class="cc-view cc-frame" title="Owner panel" data-src="/owner?embed=1"></iframe>
-      <iframe id="workspaceFrame" class="cc-view cc-frame" title="WorkSpace" data-src="/workspace?embed=1"></iframe>
-    </section>
-
-    <!-- ==== RIGHT RAIL: live status ==== -->
-    <aside class="cc-rail cc-right glass">
-      <div class="rail-title">status</div>
-
-      <div class="status-card">
-        <div class="sc-h"><span class="dot" id="dotAgent"></span> agent</div>
-        <div class="sc-v" id="txtAgent">connecting…</div>
-      </div>
-
-      <div class="status-card" id="cardProviders">
-        <div class="sc-h">providers</div>
-        <div class="sc-list" id="providerList"><div class="muted">loading…</div></div>
-      </div>
-
-      <div class="status-card">
-        <div class="sc-h"><span class="dot" id="dotBot"></span> discord bot</div>
-        <div class="sc-v" id="txtBot">—</div>
-        <div class="sc-h" style="margin-top:8px"><span class="dot" id="dotSelf"></span> alt account</div>
-        <div class="sc-v" id="txtSelf">—</div>
-      </div>
-
-      <div class="status-card">
-        <div class="sc-h"><span class="dot" id="dotCall"></span> active call</div>
-        <div class="sc-v" id="txtCall">not in a voice channel</div>
-      </div>
-
-      <div class="status-card">
-        <div class="sc-h"><span class="dot" id="dotKill"></span> killswitch</div>
-        <div class="sc-v" id="txtKill">idle</div>
-      </div>
-
-      <div class="status-card">
-        <div class="sc-h">system</div>
-        <div class="sc-v" id="txtSys">—</div>
-      </div>
-
-      <div class="status-card">
-        <div class="sc-h">last scan</div>
-        <div class="sc-v" id="txtScan">no scans yet</div>
-      </div>
-    </aside>
+<canvas id="particles"></canvas><div class="grid-noise"></div>
+<svg class="icon-library" aria-hidden="true"><defs>
+<symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></symbol>
+<symbol id="i-core" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+<symbol id="i-agent" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 11h.01M15 11h.01M9 15h6M12 7V3"/></symbol>
+<symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></symbol>
+<symbol id="i-work" viewBox="0 0 24 24"><path d="M4 7h16v13H4zM9 7V4h6v3M4 12h16"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3 8-8 10-5-2-8-5-8-10V6z"/><path d="m9 12 2 2 4-5"/></symbol>
+<symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6"/></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="m3 11 18-8-8 18-2-8zM11 13l5-5"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h5"/></symbol>
+</defs></svg>
+<div class="app-shell">
+<aside class="sidebar">
+  <div class="brand-lockup"><div class="brand-mark"><span></span></div><div><strong>YORU</strong><small>COMMAND CENTER</small></div></div>
+  <nav class="side-nav" aria-label="Command center">
+    <button class="nav-btn active" data-view="dashboard"><svg><use href="#i-grid"/></svg><span>Command Center</span></button>
+    <button class="nav-btn" data-view="core"><svg><use href="#i-core"/></svg><span>AI Core</span></button>
+    <button class="nav-btn" data-view="terminal"><svg><use href="#i-terminal"/></svg><span>Conversations</span></button>
+    <button class="nav-btn" data-view="workspace"><svg><use href="#i-work"/></svg><span>WorkSpace</span></button>
+    <button class="nav-btn" data-view="lookup"><svg><use href="#i-search"/></svg><span>Lookups</span></button>
+    <button class="nav-btn" data-view="files"><svg><use href="#i-folder"/></svg><span>Files</span></button>
+    <button class="nav-btn" data-view="owner"><svg><use href="#i-agent"/></svg><span>Agents &amp; Tools</span></button>
+    <button class="nav-btn" data-view="security"><svg><use href="#i-shield"/></svg><span>Security</span></button>
+  </nav>
+  <div class="voice-module hud-panel">
+    <div class="panel-label">VOICE STATUS <span>LIVE</span></div>
+    <div class="wave-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <button id="micBtn" class="voice-core" title="Start voice input"><svg><use href="#i-mic"/></svg></button>
+    <small id="voiceLabel">TAP TO SPEAK</small>
   </div>
-</div>
-
-<!-- ==== Slide-over drawer for quick-action panels ==== -->
-<aside id="drawer" class="cc-drawer glass hidden" role="dialog" aria-hidden="true">
-  <div class="drawer-head">
-    <h3 id="drawerTitle">Panel</h3>
-    <button id="drawerClose" class="ghost">close</button>
-  </div>
-  <div id="drawerBody" class="drawer-body"></div>
+  <button class="focus-btn" data-view="terminal"><svg><use href="#i-pulse"/></svg> Focus Mode</button>
 </aside>
-
+<main class="main-shell">
+  <header class="topbar">
+    <div class="system-badge">SYSTEM STATUS <b><i></i> OPTIMAL</b></div>
+    <div class="clock"><small id="dateLine">—</small><strong id="clockLine">--:--:--</strong></div>
+    <div class="top-actions"><label class="searchbox"><svg><use href="#i-search"/></svg><input id="globalInput" placeholder="Ask YORU or search controls…" /></label><button id="globalSend" class="icon-btn" title="Send"><svg><use href="#i-send"/></svg></button><details id="settingsMenu" class="settings-menu"><summary class="icon-btn" title="Settings"><svg><use href="#i-settings"/></svg></summary><div class="settings-pop hud-panel"><button data-view="security">Trusted Admins</button><button data-view="owner">Owner Controls</button><button data-view="workspace">Open WorkSpace</button><button data-svc="ollama">Ollama Console</button><button data-svc="openrouter">OpenRouter</button></div></details><span class="operator">OPERATOR <b>oz</b></span></div>
+  </header>
+  <section id="dashboardView" class="view active dashboard-view">
+    <div class="overview-stack hud-panel"><div class="panel-label">AI CORE OVERVIEW</div><div id="overviewRows" class="overview-rows"></div></div>
+    <div class="core-stage hud-panel"><canvas id="coreOrb" width="580" height="280"></canvas><div class="core-title"><strong>YORU</strong><span>AI CORE</span><small>LOCAL INTELLIGENCE SYSTEM</small></div></div>
+    <div class="intel-feed hud-panel"><div class="panel-label">LIVE INTELLIGENCE FEED <span>LIVE</span></div><div id="activityFeed" class="feed-list"><div class="empty-line">Waiting for live activity…</div></div></div>
+    <div class="agents-panel hud-panel"><div class="panel-label">ACTIVE AGENTS <button data-view="owner">VIEW ALL</button></div><div id="agentGrid" class="agent-grid"></div></div>
+    <div class="mission-panel hud-panel"><div class="panel-label">MISSION TIMELINE <span>TODAY</span></div><div id="missionList" class="mission-list"></div></div>
+    <div class="quick-panel hud-panel"><div class="panel-label">QUICK COMMANDS</div><button data-view="terminal">Start Conversation</button><button data-view="workspace">Launch WorkSpace</button><button data-view="lookup">Run Lookup</button><button data-action="meetings">Voice Meeting</button></div>
+    <div class="system-panel hud-panel"><div class="panel-label">SYSTEM MONITOR</div><div class="gauges"><div class="gauge" id="cpuGauge"><b>CPU</b><span>—</span></div><div class="gauge" id="ramGauge"><b>RAM</b><span>—</span></div><div class="gauge" id="diskGauge"><b>UPTIME</b><span>—</span></div></div></div>
+    <div class="memory-panel hud-panel"><div class="panel-label">MEMORY INSIGHTS</div><div class="memory-viz"><svg viewBox="0 0 260 70"><polyline points="0,52 25,38 50,44 75,20 100,34 125,12 150,45 175,31 200,52 230,28 260,40"/></svg><div><b>Context</b><strong>24</strong><b>Sessions</b><strong id="sessionCount">0</strong></div></div></div>
+    <div class="llm-panel hud-panel"><div class="panel-label">LLM STATUS <span id="llmCount">0 CONNECTED</span></div><div id="providerCards" class="provider-cards"></div></div>
+  </section>
+  <section id="coreView" class="view standard-view"><div class="view-head"><div><span>AI CORE</span><h2>Intelligence routing</h2></div><select id="providerSelect"><option>Loading…</option></select></div><div class="core-console"><div class="hud-panel"><div class="panel-label">PROVIDER MATRIX</div><div id="providerMatrix"></div></div><div class="hud-panel"><div class="panel-label">SYSTEM TELEMETRY</div><pre id="systemTelemetry">Loading…</pre></div></div></section>
+  <section id="terminalView" class="view terminal-view"><div class="terminal-head"><span class="terminal-lights"><i></i><i></i><i></i></span><b>YORU://CONVERSATION</b><small id="terminalProvider">AUTO ROUTING</small></div><div id="messages" class="terminal-output" aria-live="polite"></div><form id="terminalForm" class="terminal-composer"><span>oz@yoru:~$</span><textarea id="input" rows="1" placeholder="enter command or talk to YORU" autofocus></textarea><button id="send" title="Execute"><svg><use href="#i-send"/></svg></button></form></section>
+  <section id="lookupView" class="view standard-view"><div class="view-head"><div><span>KNOWLEDGE SYSTEM</span><h2>Identity lookup</h2></div><div class="query-bar"><input id="lookupQuery" placeholder="Handle, Discord ID, email, or name"/><button id="lookupGo">SEARCH</button></div></div><div id="lookupSummary" class="lookup-summary hud-panel"><b>READY</b><span>Enter at least three characters to search all indexed sources.</span></div><div id="lookupResults" class="lookup-results"></div></section>
+  <section id="filesView" class="view file-view"><div class="view-head"><div><span>COMPUTER ACCESS</span><h2>File navigator</h2></div><div class="file-address"><button id="fileUp" title="Parent folder"><svg><use href="#i-up"/></svg></button><input id="filePath" value="~"/><button id="fileGo">OPEN</button></div></div><div class="file-workbench"><aside class="roots-panel hud-panel"><div class="panel-label">LOCATIONS</div><div id="fileRoots"></div></aside><div class="browser-panel hud-panel"><div id="breadcrumbs" class="breadcrumbs"></div><div id="fileList" class="file-list"></div></div><div class="editor-panel hud-panel"><div class="editor-head"><span id="editorName">NO FILE SELECTED</span><div><button id="askFile" disabled>ASK YORU</button><button id="saveFile" disabled>SAVE</button></div></div><textarea id="fileEditor" spellcheck="false" placeholder="Select a text file to inspect or edit."></textarea></div></div></section>
+  <section id="securityView" class="view standard-view"><div class="view-head"><div><span>ACCESS CONTROL</span><h2>Security &amp; trusted admins</h2></div><span id="killState" class="security-state">CHECKING</span></div><div class="security-grid"><div class="hud-panel security-card"><div class="panel-label">KILLSWITCH</div><p>Immediately pause protected actions while Discord services remain connected.</p><div class="command-row"><button id="ksEngage">ENGAGE</button><button id="ksRelease">JUMPSTART</button></div></div><div class="hud-panel security-card"><div class="panel-label">KILLSWITCH ADMINS</div><p>Discord IDs authorized to engage and release the killswitch.</p><textarea id="killAdmins" placeholder="One Discord ID per line"></textarea><button id="saveKillAdmins">SAVE IDS</button></div><div class="hud-panel security-card"><div class="panel-label">VOICE ADMINS</div><p>Discord IDs authorized to tell YORU to join or leave voice channels.</p><textarea id="voiceAdmins" placeholder="One Discord ID per line"></textarea><button id="saveVoiceAdmins">SAVE IDS</button></div><div class="hud-panel security-card"><div class="panel-label">VOICE SESSION</div><p id="voiceState">Checking voice connection…</p><input id="voiceChannel" placeholder="Voice channel ID or exact name"/><div class="command-row"><button id="voiceJoin">JOIN</button><button id="voiceLeave">LEAVE &amp; SAVE</button></div></div></div></section>
+  <section id="ownerView" class="view frame-view"><iframe id="ownerFrame" title="Owner controls" data-src="/owner?embed=1"></iframe></section>
+  <section id="workspaceView" class="view frame-view"><iframe id="workspaceFrame" title="WorkSpace" data-src="/workspace?embed=1"></iframe></section>
+  <footer class="voice-dock"><div class="dock-info"><span id="networkState">NETWORK / LOCAL</span><span id="callState">VOICE / STANDBY</span></div><button id="dockMic"><span class="dock-wave"></span><svg><use href="#i-mic"/></svg><b>TALK TO YORU</b><small>I AM LISTENING</small><span class="dock-wave mirror"></span></button><button data-view="terminal">EXECUTIVE TERMINAL</button></footer>
+</main></div>
 <script type="module" src="/assets/command.js"></script>
-</body>
-</html>
+</body></html>
