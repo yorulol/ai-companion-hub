@@ -70,6 +70,16 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
   }
   const files = await listLookupFiles();
   const needle = query.toLowerCase();
+  // Fuzzy tokenization: also match rows/lines that contain every whitespace-
+  // or punctuation-separated token from the query (order-independent). This
+  // catches "john doe" when the file has "Doe, John" and multi-word handles.
+  const tokens = [...new Set(needle.split(/[\s,;|/\\]+/).filter((t) => t.length >= 2))];
+  const matchesLine = (line) => {
+    const s = line.toLowerCase();
+    if (s.includes(needle)) return true;
+    if (tokens.length > 1 && tokens.every((t) => s.includes(t))) return true;
+    return false;
+  };
   const results = [];
 
   for (const name of files) {
@@ -82,7 +92,7 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
         const lines = text.split(/\r?\n/).filter(Boolean);
         const header = lines.length ? parseCsvLine(lines[0]) : [];
         for (let i = 1; i < lines.length; i++) {
-          if (lines[i].toLowerCase().includes(needle)) {
+          if (matchesLine(lines[i])) {
             const cols = parseCsvLine(lines[i]);
             const row = {};
             header.forEach((h, k) => { row[h || `col_${k}`] = cols[k] ?? ""; });
@@ -95,15 +105,14 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
         const data = JSON.parse(text);
         const arr = Array.isArray(data) ? data : Object.values(data);
         for (let i = 0; i < arr.length; i++) {
-          const s = JSON.stringify(arr[i]).toLowerCase();
-          if (s.includes(needle)) hits.push({ index: i, row: arr[i] });
+          if (matchesLine(JSON.stringify(arr[i]))) hits.push({ index: i, row: arr[i] });
           if (hits.length >= limitPerFile) break;
         }
       } else if (ext === ".pdf") {
         const text = await readPdf(full);
         const lines = text.split(/\r?\n/);
         for (let i = 0; i < lines.length; i++) {
-          if (lines[i].toLowerCase().includes(needle)) {
+          if (matchesLine(lines[i])) {
             hits.push({ line: i + 1, context: lines.slice(Math.max(0, i - 1), i + 2).join(" | ") });
             if (hits.length >= limitPerFile) break;
           }
@@ -112,7 +121,7 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
         const text = await fs.readFile(full, "utf8");
         const lines = text.split(/\r?\n/);
         for (let i = 0; i < lines.length; i++) {
-          if (lines[i].toLowerCase().includes(needle)) {
+          if (matchesLine(lines[i])) {
             hits.push({ line: i + 1, context: lines[i].slice(0, 500) });
             if (hits.length >= limitPerFile) break;
           }

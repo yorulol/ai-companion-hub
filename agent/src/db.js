@@ -121,6 +121,15 @@ const DEFAULT_SETTINGS = {
   discord: { defaultPrefix: config.discord.defaultPrefix },
   // Extra Discord IDs (besides OWNER_DISCORD_ID) allowed to engage/release the killswitch.
   killswitchAdmins: [],
+  // Extra Discord IDs allowed to tell YORU to join/leave a voice channel and take notes.
+  voiceAdmins: [],
+};
+
+export const isVoiceAdmin = (id) => {
+  const target = String(id || "").trim();
+  if (!target) return false;
+  const list = getSettings().voiceAdmins || [];
+  return list.map((x) => String(x).trim()).includes(target);
 };
 
 export function getSettings() {

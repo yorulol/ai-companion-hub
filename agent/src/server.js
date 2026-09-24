@@ -94,6 +94,20 @@ const ROUTES = {
     return { ok: true, admins: cleaned };
   },
 
+  "GET /api/owner/voice-admins": async (req) => {
+    requireOwner(req);
+    return { admins: getSettings().voiceAdmins || [] };
+  },
+  "POST /api/owner/voice-admins": async (req) => {
+    requireOwner(req);
+    const body = await readBody(req);
+    const list = Array.isArray(body?.admins) ? body.admins : [];
+    const cleaned = [...new Set(list.map((s) => String(s || "").trim()).filter((s) => /^\d{5,25}$/.test(s)))];
+    setSettings({ voiceAdmins: cleaned });
+    return { ok: true, admins: cleaned };
+  },
+
+
   "POST /api/email-forward": async (req) => {
     const body = await readBody(req);
     const { op, ...rest } = body;

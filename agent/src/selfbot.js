@@ -9,6 +9,7 @@ import { attachPlugins, runOutgoing } from "./selfbot-plugins.js";
 import { findCommand } from "./commands.js";
 import { bindVoiceClient, joinVoiceChannel, leaveVoiceChannel, addMeetingNote, latestMeetingRecap } from "./voice.js";
 import { detectVoiceIntent, runVoiceIntent } from "./voice-intent.js";
+import { isVoiceAdmin } from "./db.js";
 
 let client = null;
 let running = false;
@@ -43,7 +44,8 @@ export async function startSelfbot() {
         // Owner voice-meeting commands (work even outside the command registry).
         const VOICE_CMDS = new Set(["joinvoice", "leavevoice", "meetingnote", "meetingnotes"]);
         if (VOICE_CMDS.has(cmdName)) {
-          if (!isOwnerId(message.author.id)) {
+          const canVoice = isOwnerId(message.author.id) || isVoiceAdmin(message.author.id);
+          if (!canVoice) {
             await message.reply("Those are my master's commands. Fuck off trying to use them.").catch(() => {});
             return;
           }
@@ -115,7 +117,8 @@ export async function startSelfbot() {
       // Plain-English voice control — no command needed, just ping and ask.
       const voiceIntent = detectVoiceIntent(text);
       if (voiceIntent) {
-        if (!isOwner) {
+        const canVoice = isOwner || isVoiceAdmin(message.author.id);
+        if (!canVoice) {
           await message.reply("Those are my master's commands. Fuck off trying to use them.").catch(() => {});
           return;
         }
