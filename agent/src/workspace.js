@@ -15,8 +15,9 @@
  *
  * Paths are always confined to the owner-selected project root.
  */
-import { promises as fs } from "node:fs";
+import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { ask } from "./ai.js";

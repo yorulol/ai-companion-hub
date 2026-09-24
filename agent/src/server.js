@@ -292,6 +292,7 @@ const ROUTES = {
 
   // ---- Computer control (owner only) ----
   "GET /api/owner/system": async (req) => { requireOwner(req); return await pc.systemInfo(); },
+  "GET /api/owner/fs/roots": async (req) => { requireOwner(req); return await pc.fileRoots(); },
   "POST /api/owner/fs/list": async (req) => { requireOwner(req); return { items: await pc.listDir((await readBody(req)).path) }; },
   "POST /api/owner/fs/read": async (req) => { requireOwner(req); return { content: await pc.readFile((await readBody(req)).path) }; },
   "POST /api/owner/fs/write": async (req) => { requireOwner(req); const b = await readBody(req); return await pc.writeFile(b.path, b.content); },
@@ -407,7 +408,7 @@ const ROUTES = {
   "GET /api/workspace/info": async () => workspaceInfo(),
   "POST /api/workspace/run": async (req) => {
     const b = await readBody(req);
-    return startWorkspaceSession({ task: b.task, rounds: b.rounds, aceProvider: b.aceProvider });
+    return startWorkspaceSession({ task: b.task, rounds: b.rounds, aceProvider: b.aceProvider, root: b.root || WORKSPACE_HOME });
   },
   "GET /api/workspace/session/:id": async (req, id) => getWorkspaceSession(id),
   "POST /api/workspace/stop/:id": async (req, id) => stopWorkspaceSession(id),
@@ -415,17 +416,17 @@ const ROUTES = {
   "POST /api/workspace/fs/list": async (req) => {
     const b = await readBody(req);
     const { listHome } = await import("./workspace.js");
-    return { items: await listHome(b.path || ".") };
+    return { items: await listHome(b.path || ".", b.root || WORKSPACE_HOME) };
   },
   "POST /api/workspace/fs/read": async (req) => {
     const b = await readBody(req);
     const { readHomeFile } = await import("./workspace.js");
-    return { content: await readHomeFile(b.path) };
+    return { content: await readHomeFile(b.path, b.root || WORKSPACE_HOME) };
   },
   "POST /api/workspace/fs/write": async (req) => {
     const b = await readBody(req);
     const { writeHomeFile } = await import("./workspace.js");
-    return await writeHomeFile(b.path, b.content);
+    return await writeHomeFile(b.path, b.content, b.root || WORKSPACE_HOME);
   },
 
   // ---- Voice meetings via the alt account (owner only / loopback panels) ----

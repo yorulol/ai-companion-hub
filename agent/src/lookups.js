@@ -63,20 +63,28 @@ async function readPdf(file) {
  * For CSV/TSV: returns matching rows keyed by the header row. For text/PDF:
  * returns matching lines with a bit of surrounding context.
  */
-export async function lookup(query, { limitPerFile = 25 } = {}) {
-  if (!query || query.length < 2) throw new Error("Query must be at least 2 characters.");
+export async function lookup(query, { limitPerFile = 200 } = {}) {
+  if (!query || query.length < 3) throw new Error("Query must be at least 3 characters.");
   if (isLookupWhitelisted(query)) {
     return { query, files: (await listLookupFiles()).length, matches: [], protected: true, message: "That identity is protected by the lookup whitelist." };
   }
   const files = await listLookupFiles();
   const needle = query.toLowerCase();
+  const variants = [...new Set([
+    needle,
+    needle.replace(/[\s_.-]+/g, ""),
+    needle.replace(/[\s_.-]+/g, "_"),
+    needle.replace(/[\s_.-]+/g, "."),
+    needle.replace(/[\s_.-]+/g, "-"),
+  ].filter(Boolean))];
   // Fuzzy tokenization: also match rows/lines that contain every whitespace-
   // or punctuation-separated token from the query (order-independent). This
   // catches "john doe" when the file has "Doe, John" and multi-word handles.
   const tokens = [...new Set(needle.split(/[\s,;|/\\]+/).filter((t) => t.length >= 2))];
   const matchesLine = (line) => {
     const s = line.toLowerCase();
-    if (s.includes(needle)) return true;
+    const compact = s.replace(/[\s_.-]+/g, "");
+    if (variants.some((variant) => s.includes(variant) || compact.includes(variant.replace(/[\s_.-]+/g, "")))) return true;
     if (tokens.length > 1 && tokens.every((t) => s.includes(t))) return true;
     return false;
   };
