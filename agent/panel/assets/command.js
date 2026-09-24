@@ -1,356 +1,62 @@
-/* YORU command center — single-page HUD.
-   Reuses /api/* on the panel server (proxied to the agent service). */
 import { api, particles, render, toast, esc } from "./common.js";
 import { coreOrb } from "./core-orb.js";
-
 particles(document.getElementById("particles"));
 const orb = coreOrb(document.getElementById("coreOrb"));
-
-/* ========== view switching ========== */
-const views = {
-  chat: document.getElementById("chatView"),
-  owner: document.getElementById("ownerFrame"),
-  workspace: document.getElementById("workspaceFrame"),
-};
+const $ = (id) => document.getElementById(id);
+const views = [...document.querySelectorAll(".view")];
+let activeView = "dashboard";
 function showView(name) {
-  for (const [k, el] of Object.entries(views)) {
-    const on = k === name;
-    el.classList.toggle("active", on);
-    if (on && el.tagName === "IFRAME" && !el.src && el.dataset.src) el.src = el.dataset.src;
-  }
+  activeView = name;
+  views.forEach((v) => v.classList.toggle("active", v.id === `${name}View`));
+  document.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  const frame = $(`${name}Frame`);
+  if (frame?.dataset.src && !frame.src) frame.src = frame.dataset.src;
+  document.querySelectorAll("details[open]").forEach((d) => d.removeAttribute("open"));
+  if (name === "files") loadRoots().then(() => browseFiles(fileCwd));
+  if (name === "security") loadSecurity();
+  if (name === "terminal") setTimeout(() => $("input").focus(), 50);
 }
-document.querySelectorAll("[data-nav]").forEach((b) =>
-  b.addEventListener("click", () => { showView(b.dataset.nav); closeDropdowns(); }),
-);
-document.querySelectorAll("[data-svc]").forEach((b) =>
-  b.addEventListener("click", () => {
-    const urls = { ollama: "http://localhost:11434", openclaw: "http://localhost:18789", openrouter: "https://openrouter.ai" };
-    window.open(urls[b.dataset.svc], "_blank", "noopener"); closeDropdowns();
-  }),
-);
-function closeDropdowns(){ document.querySelectorAll("details[open]").forEach(d=>d.removeAttribute("open")); }
-document.addEventListener("click", (e) => {
-  document.querySelectorAll("details[open]").forEach((d) => { if (!d.contains(e.target)) d.removeAttribute("open"); });
-});
+document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
+document.querySelectorAll("[data-svc]").forEach((b) => b.addEventListener("click", () => window.open({ollama:"http://localhost:11434",openrouter:"https://openrouter.ai"}[b.dataset.svc], "_blank", "noopener")));
+document.addEventListener("click", (e) => document.querySelectorAll("details[open]").forEach((d) => { if (!d.contains(e.target)) d.removeAttribute("open"); }));
+function updateClock(){const d=new Date();$("dateLine").textContent=d.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric"});$("clockLine").textContent=d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});}updateClock();setInterval(updateClock,1000);
 
-/* ========== chat ========== */
-const messages = document.getElementById("messages");
-const input = document.getElementById("input");
-const sendBtn = document.getElementById("send");
-const quickInput = document.getElementById("quickInput");
-const quickSend = document.getElementById("quickSend");
-const SCOPE = "panel:" + (localStorage.getItem("yoru.scope") || (() => {
-  const s = Math.random().toString(36).slice(2);
-  localStorage.setItem("yoru.scope", s); return s;
-})());
+const messages = $("messages"), input = $("input"), sendBtn = $("send");
+const SCOPE = "panel:" + (localStorage.getItem("yoru.scope") || (()=>{const s=crypto.randomUUID?.()||Math.random().toString(36).slice(2);localStorage.setItem("yoru.scope",s);return s})());
+function termLine(role,text,tools=[]){const line=document.createElement("div");line.className=`term-line ${role}`;const label=role==="user"?"oz@yoru:~$":role==="system"?"system::":"yoru::";line.innerHTML=`<div class="prompt">${label}</div><div class="content">${render(text)}${tools.length?`<div class="tools">TOOLS / ${tools.map(t=>esc(t.tool)).join(" → ")}</div>`:""}</div>`;messages.appendChild(line);messages.scrollTop=messages.scrollHeight;return line;}
+termLine("system","YORU core online. Natural language and terminal commands are ready.");
+async function send(text){text=String(text||"").trim();if(!text)return;showView("terminal");termLine("user",text);const pending=termLine("assistant","processing…");sendBtn.disabled=true;orb.setLevel(.7);try{const r=await api("/api/chat",{method:"POST",body:{userText:text,mode:"general",scope:SCOPE}});pending.querySelector(".content").innerHTML=`${render(r.reply||"No response.")}${r.tools?.length?`<div class="tools">TOOLS / ${r.tools.map(t=>esc(t.tool)).join(" → ")}</div>`:""}`;$("terminalProvider").textContent=`${r.provider||"AUTO"}${r.model?` / ${r.model}`:""}`.toUpperCase();}catch(e){pending.querySelector(".content").textContent=`ERROR / ${e.message}`;}finally{sendBtn.disabled=false;orb.setLevel(.15);messages.scrollTop=messages.scrollHeight;input.focus();}}
+$("terminalForm").addEventListener("submit",e=>{e.preventDefault();const t=input.value;input.value="";input.style.height="auto";send(t)});input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("terminalForm").requestSubmit()}});input.addEventListener("input",()=>{input.style.height="auto";input.style.height=Math.min(150,input.scrollHeight)+"px"});
+$("globalSend").onclick=()=>{const t=$("globalInput").value;$("globalInput").value="";send(t)};$("globalInput").addEventListener("keydown",e=>{if(e.key==="Enter")$("globalSend").click()});
 
-function bubble(who, text, tools) {
-  const el = document.createElement("div");
-  el.className = `msg ${who}`;
-  el.innerHTML = `<div class="who">${who === "user" ? "oz" : who === "system" ? "system" : "yoru"}</div><div>${render(text)}</div>`;
-  if (tools?.length) {
-    const t = document.createElement("div"); t.className = "tools";
-    t.textContent = "▶ " + tools.map((x) => x.tool).join(" → ");
-    el.appendChild(t);
-  }
-  messages.appendChild(el);
-  messages.scrollTop = messages.scrollHeight;
-  return el;
-}
-bubble("system", "yoru online. talk to me, or use the quick actions on the left.");
+let recog=null;try{const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(R){recog=new R();recog.interimResults=true;recog.lang="en-US";let last="";recog.onresult=e=>{last="";for(const r of e.results)last+=r[0].transcript;$("globalInput").value=last;orb.setLevel(.65)};recog.onend=()=>{$("micBtn").classList.remove("on");$("voiceLabel").textContent="TAP TO SPEAK";if(last.trim()){const t=last;last="";send(t)}};}}
+catch{}
+function toggleMic(){if(!recog)return toast("Voice input is not supported by this browser.");if($("micBtn").classList.contains("on")){recog.stop();return}$("micBtn").classList.add("on");$("voiceLabel").textContent="LISTENING";try{recog.start()}catch{}}
+$("micBtn").onclick=toggleMic;$("dockMic").onclick=toggleMic;
 
-async function send(text) {
-  text = (text || "").trim();
-  if (!text) return;
-  bubble("user", text);
-  const pending = bubble("bot", "…thinking");
-  sendBtn.disabled = true; quickSend.disabled = true;
-  orb.setLevel(0.6);
-  try {
-    const r = await api("/api/chat", { method: "POST", body: { userText: text, mode: "general", scope: SCOPE } });
-    pending.innerHTML = `<div class="who">yoru</div><div>${render(r.reply || "…")}</div>`;
-    if (r.tools?.length) {
-      const t = document.createElement("div"); t.className = "tools";
-      t.textContent = "▶ " + r.tools.map((x) => x.tool).join(" → ");
-      pending.appendChild(t);
-    }
-    if (r.provider) setProviderPill(`${r.provider}${r.model ? " · " + r.model : ""}`, true);
-    speak(r.reply);
-  } catch (err) {
-    pending.innerHTML = `<div class="who">yoru</div><div>⚠ ${esc(err.message)}</div>`;
-  } finally {
-    sendBtn.disabled = false; quickSend.disabled = false; orb.setLevel(0.15);
-    messages.scrollTop = messages.scrollHeight;
-  }
-}
-sendBtn.addEventListener("click", () => { const t = input.value; input.value = ""; input.style.height = "auto"; showView("chat"); send(t); });
-quickSend.addEventListener("click", () => { const t = quickInput.value; quickInput.value = ""; showView("chat"); send(t); });
-input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
-});
-input.addEventListener("input", () => {
-  input.style.height = "auto"; input.style.height = Math.min(180, input.scrollHeight) + "px";
-});
-quickInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); quickSend.click(); }});
-input.focus();
+function overviewRow(code,name,status,tone="on"){return `<div class="overview-row"><i>${code}</i><div><b>${name}</b><small>${status}</small></div><em class="${tone}">${tone==="on"?"ACTIVE":"IDLE"}</em></div>`}
+function renderProviders(list,preferred){const enabled=list.filter(p=>p.enabled&&(!p.keyRequired||p.hasKey));$("llmCount").textContent=`${enabled.length} CONNECTED`;$("providerCards").innerHTML=list.map(p=>`<div class="provider-card ${p.enabled?"on":""}"><b>${esc(p.name)}${p.name===preferred?" / PRIMARY":""}</b><small>${p.enabled?(p.keyRequired&&!p.hasKey?"KEY REQUIRED":esc(p.model||"CONNECTED")):"OFFLINE"}</small></div>`).join("");$("providerMatrix").innerHTML=list.map(p=>`<div class="matrix-card"><strong>${esc(p.name.toUpperCase())}</strong><small>${p.enabled?`ENABLED / ${esc(p.model||"AUTO MODEL")}`:"DISABLED"}</small></div>`).join("");const select=$("providerSelect");select.innerHTML=`<option value="">AUTO / ${esc(preferred||"ROUTER")}</option>`+list.filter(p=>p.enabled).map(p=>`<option value="${esc(p.name)}">${esc(p.name.toUpperCase())}</option>`).join("");$("overviewRows").innerHTML=[overviewRow("AI","AI Core",preferred||"Auto routing"),overviewRow("M","Memory","24-message context"),overviewRow("V","Voice",voiceConnected?"In session":"Standby",voiceConnected?"on":"off"),overviewRow("AG","Agents","YORU + ACE"),overviewRow("LLM","Providers",`${enabled.length} connected`),overviewRow("SYS","System","Operational")].join("");}
+$("providerSelect").onchange=async e=>{if(!e.target.value)return;await api("/api/providers",{method:"POST",body:{preferred:e.target.value}});toast(`Primary provider: ${e.target.value}`);refreshAll()};
+let voiceConnected=false;
+function agents(h){const list=[{c:"Y",n:"YORU Core",s:h.ok?"Active":"Offline"},{c:"A",n:"ACE Agent",s:"Standby"},{c:"D",n:"Discord Bot",s:h.bot?.running?"Active":"Offline"},{c:"ALT",n:"Alt Interface",s:h.selfbot?.running?"Active":"Offline"}];$("agentGrid").innerHTML=list.map(a=>`<div class="agent-card"><i>${a.c}</i><div><b>${a.n}</b><small>${a.s}</small></div></div>`).join("");}
+function missions(events){const latest=events.slice(-4).reverse();$("missionList").innerHTML=(latest.length?latest:[{at:new Date().toISOString(),message:"Command center initialized"},{at:new Date().toISOString(),message:"Provider health monitoring"},{at:new Date().toISOString(),message:"Voice recorder standing by"}]).map((e,i)=>`<div class="mission-row"><time>${new Date(e.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</time><div>${esc(e.message)}<i style="width:${90-i*15}%"></i></div><span>${i?"LOGGED":"NOW"}</span></div>`).join("");}
+function activity(events){$("activityFeed").innerHTML=(events.slice(-8).reverse().map(e=>`<div class="feed-item"><i>${esc((e.kind||"E").slice(0,1).toUpperCase())}</i><div><b>${esc(e.message)}</b><small>${esc(e.kind||"system")}</small></div><time>${new Date(e.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</time></div>`).join(""))||`<div class="empty-line">No activity logged yet.</div>`;}
+async function refreshAll(){try{const [h,p,s,a,v,k,w]=await Promise.all([api("/api/health",{owner:false}),api("/api/providers"),api("/api/owner/system"),api("/api/owner/activity"),api("/api/owner/voice"),api("/api/owner/killswitch"),api("/api/workspace/info",{owner:false})]);voiceConnected=!!v.inChannel;renderProviders(p.providers,p.preferred);agents(h);activity(a.events||[]);missions(a.events||[]);$("sessionCount").textContent=String(w.sessions?.length||0);const used=Math.round(((s.memGB-s.freeMemGB)/s.memGB)*100);$("cpuGauge").style.setProperty("--value",Math.min(100,s.cpus*5));$("cpuGauge").querySelector("span").textContent=`${s.cpus}C`;$("ramGauge").style.setProperty("--value",used);$("ramGauge").querySelector("span").textContent=`${used}%`;const up=Math.min(99,Math.round(s.uptimeMin/60));$("diskGauge").style.setProperty("--value",up);$("diskGauge").querySelector("span").textContent=`${up}H`;$("systemTelemetry").textContent=`HOST       ${s.hostname}\nPLATFORM   ${s.platform} ${s.arch}\nPROCESSORS ${s.cpus}\nMEMORY     ${(s.memGB-s.freeMemGB).toFixed(1)} / ${s.memGB} GB\nUPTIME     ${s.uptimeMin} minutes\nHOME       ${s.home}\nACCESS     ${s.unrestricted?"UNRESTRICTED":"SANDBOXED"}`;$("networkState").textContent=`NETWORK / ${h.ok?"CONNECTED":"OFFLINE"}`;$("callState").textContent=`VOICE / ${v.inChannel?"RECORDING":"STANDBY"}`;$("killState").textContent=k.active?"LOCKDOWN ACTIVE":"SYSTEM CLEAR";$("killState").style.color=k.active?"var(--red)":"var(--green)";$("voiceState").textContent=v.inChannel?`Recording channel ${v.channelId}; ${v.events||0} voice events captured.`:"No active voice session.";}catch(e){$("networkState").textContent="NETWORK / OFFLINE";}}
+refreshAll();setInterval(refreshAll,7000);
 
-/* ========== voice: mic + browser TTS (server voice pipe ships in the next batch) ========== */
-const micBtn = document.getElementById("micBtn");
-let recog = null;
-try {
-  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (R) {
-    recog = new R();
-    recog.continuous = false;
-    recog.interimResults = true;
-    recog.lang = "en-US";
-    let last = "";
-    recog.onresult = (e) => {
-      last = "";
-      for (const r of e.results) last += r[0].transcript;
-      quickInput.value = last;
-      orb.setLevel(0.5 + Math.min(0.4, last.length / 80));
-    };
-    recog.onend = () => {
-      micBtn.classList.remove("on");
-      orb.setLevel(0.15);
-      if (last.trim()) { const t = last; last = ""; quickInput.value = ""; showView("chat"); send(t); }
-    };
-    recog.onerror = () => { micBtn.classList.remove("on"); orb.setLevel(0.15); };
-  }
-} catch {}
-micBtn.addEventListener("click", () => {
-  if (!recog) { toast("browser mic unsupported — type instead"); return; }
-  if (micBtn.classList.contains("on")) { recog.stop(); return; }
-  micBtn.classList.add("on"); orb.setLevel(0.55);
-  try { recog.start(); } catch {}
-});
-function speak(text) {
-  if (!text || !window.speechSynthesis) return;
-  const clean = String(text).replace(/```[\s\S]*?```/g, " ").replace(/[*_`>#]/g, "").slice(0, 400);
-  if (!clean.trim()) return;
-  const u = new SpeechSynthesisUtterance(clean);
-  u.rate = 1.05; u.pitch = 0.95;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
-}
+$("lookupGo").onclick=runLookup;$("lookupQuery").addEventListener("keydown",e=>{if(e.key==="Enter")runLookup()});
+function flattenHit(hit){if(hit.row&&typeof hit.row==="object")return Object.entries(hit.row);if(hit.context)return [["Context",hit.context],["Line",hit.line||"—"]];return Object.entries(hit).filter(([k])=>!['row','context'].includes(k));}
+async function runLookup(){const q=$("lookupQuery").value.trim();if(q.length<3)return toast("Use at least three characters.");$("lookupSummary").innerHTML="<b>SEARCHING</b><span>Scanning indexed knowledge sources…</span>";$("lookupResults").innerHTML="";try{const r=await api("/api/owner/lookup",{method:"POST",body:{query:q}});const hits=(r.matches||[]).flatMap(group=>(group.hits||[]).map(hit=>({hit,error:group.error})));if(r.protected&&!hits.length){$("lookupSummary").innerHTML="<b>PROTECTED</b><span>This identity is excluded from lookup output.</span>";return}$("lookupSummary").innerHTML=`<b>${hits.length} MATCH${hits.length===1?"":"ES"}</b><span>Searched ${r.files||0} indexed sources for “${esc(q)}”. Source identities remain private.</span>`;$("lookupResults").innerHTML=hits.map(({hit},i)=>`<article class="result-card"><header><b>RESULT ${String(i+1).padStart(3,"0")}</b><span>CONFIRMED MATCH</span></header><dl class="result-fields">${flattenHit(hit).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(typeof v==="object"?JSON.stringify(v):v)}</dd>`).join("")}</dl></article>`).join("")||`<div class="lookup-summary hud-panel"><b>NO MATCHES</b><span>No indexed records matched that query.</span></div>`;}catch(e){$("lookupSummary").innerHTML=`<b>ERROR</b><span>${esc(e.message)}</span>`;}}
 
-/* ========== drawer (quick actions) ========== */
-const drawer = document.getElementById("drawer");
-const drawerTitle = document.getElementById("drawerTitle");
-const drawerBody = document.getElementById("drawerBody");
-document.getElementById("drawerClose").addEventListener("click", () => drawer.classList.add("hidden"));
-function openDrawer(title, html) {
-  drawerTitle.textContent = title;
-  drawerBody.innerHTML = html;
-  drawer.classList.remove("hidden");
-}
+let fileCwd="~",selectedFile=null;
+async function loadRoots(){try{const r=await api("/api/owner/fs/roots");$("fileRoots").innerHTML=r.roots.map(root=>`<button data-root="${esc(root.path)}">${esc(root.name)}</button>`).join("");$("fileRoots").querySelectorAll("button").forEach(b=>b.onclick=()=>browseFiles(b.dataset.root));}catch(e){$("fileRoots").innerHTML=`<div class="empty-line">${esc(e.message)}</div>`;}}
+function bytes(n){if(!n)return "—";if(n<1024)return `${n} B`;if(n<1048576)return `${(n/1024).toFixed(1)} KB`;return `${(n/1048576).toFixed(1)} MB`;}
+async function browseFiles(path=fileCwd){$("filePath").value=path;$("fileList").innerHTML='<div class="empty-line">Opening location…</div>';try{const r=await api("/api/owner/fs/list",{method:"POST",body:{path}});fileCwd=r.items[0]?.path?parentPath(r.items[0].path):path;$("filePath").value=fileCwd;$("breadcrumbs").textContent=fileCwd;$("fileList").innerHTML=r.items.map(item=>`<div class="file-row"><button data-path="${esc(item.path)}" data-type="${item.type}"><svg><use href="#i-${item.type==='dir'?'folder':'file'}"/></svg><b>${esc(item.name)}</b><small>${item.type==='dir'?'DIRECTORY':bytes(item.size)}</small></button></div>`).join("")||'<div class="empty-line">Empty folder.</div>';$("fileList").querySelectorAll("button").forEach(b=>b.onclick=()=>b.dataset.type==="dir"?browseFiles(b.dataset.path):openFile(b.dataset.path));}catch(e){$("fileList").innerHTML=`<div class="empty-line">${esc(e.message)}</div>`;}}
+function parentPath(p){if(/^[A-Za-z]:\\?$/.test(p))return p;const clean=p.replace(/[\\/]+$/,'');const idx=Math.max(clean.lastIndexOf('/'),clean.lastIndexOf('\\'));return idx<=0?(clean.includes('\\')?clean.slice(0,3):'/'):clean.slice(0,idx)}
+async function openFile(path){try{const r=await api("/api/owner/fs/read",{method:"POST",body:{path}});selectedFile=path;$("editorName").textContent=path;$("fileEditor").value=r.content;$("saveFile").disabled=false;$("askFile").disabled=false;}catch(e){toast(e.message,4000)}}
+$("fileGo").onclick=()=>browseFiles($("filePath").value.trim());$("filePath").addEventListener("keydown",e=>{if(e.key==="Enter")$("fileGo").click()});$("fileUp").onclick=()=>browseFiles(parentPath(fileCwd));$("saveFile").onclick=async()=>{if(!selectedFile)return;await api("/api/owner/fs/write",{method:"POST",body:{path:selectedFile,content:$("fileEditor").value}});toast("File saved.")};$("askFile").onclick=()=>selectedFile&&send(`Review and help me edit this file: ${selectedFile}`);
 
-const ACTIONS = {
-  "voice-toggle": () => micBtn.click(),
-  killswitch: async () => {
-    const s = await api("/api/owner/killswitch").catch(() => ({ active: false }));
-    openDrawer("Killswitch", `
-      <div class="muted">current: <b>${s.active ? "ACTIVE" : "idle"}</b></div>
-      <div class="drawer-actions">
-        <button class="primary" id="ksEngage">Engage killswitch</button>
-        <button class="ghost" id="ksJump">Jumpstart (release)</button>
-      </div>
-      <pre id="ksOut" class="muted">—</pre>`);
-    document.getElementById("ksEngage").onclick = async () => {
-      try { const r = await api("/api/owner/killswitch", { method: "POST", body: { reason: "panel" } });
-        document.getElementById("ksOut").textContent = JSON.stringify(r, null, 2); refreshStatus(); }
-      catch (e) { toast(e.message); }
-    };
-    document.getElementById("ksJump").onclick = async () => {
-      try { const r = await api("/api/owner/jumpstart", { method: "POST" });
-        document.getElementById("ksOut").textContent = JSON.stringify(r, null, 2); refreshStatus(); }
-      catch (e) { toast(e.message); }
-    };
-  },
-  lookup: () => {
-    openDrawer("Lookup", `
-      <label>query</label>
-      <input id="lkq" placeholder="handle, id, email…" />
-      <div class="drawer-actions"><button class="primary" id="lkGo">Search</button></div>
-      <pre id="lkOut" class="muted">results appear here</pre>`);
-    document.getElementById("lkGo").onclick = async () => {
-      const q = document.getElementById("lkq").value.trim(); if (!q) return;
-      document.getElementById("lkOut").textContent = "searching…";
-      try { const r = await api("/api/owner/lookup", { method: "POST", body: { query: q } });
-        document.getElementById("lkOut").textContent = JSON.stringify(r, null, 2); }
-      catch (e) { document.getElementById("lkOut").textContent = "error: " + e.message; }
-    };
-  },
-  email: () => {
-    openDrawer("Email forward", `
-      <label>operation</label>
-      <select id="efOp">
-        <option value="domains">list domains</option>
-        <option value="aliases">list aliases</option>
-        <option value="create">create alias</option>
-        <option value="delete">delete alias</option>
-      </select>
-      <label>domain</label><input id="efDom" placeholder="example.com" />
-      <label>alias (for create/delete)</label><input id="efAlias" placeholder="hello" />
-      <label>destination (for create)</label><input id="efDest" placeholder="you@gmail.com" />
-      <div class="drawer-actions"><button class="primary" id="efGo">Run</button></div>
-      <pre id="efOut" class="muted">—</pre>`);
-    document.getElementById("efGo").onclick = async () => {
-      const body = {
-        op: document.getElementById("efOp").value,
-        domain: document.getElementById("efDom").value.trim(),
-        alias: document.getElementById("efAlias").value.trim(),
-        destination: document.getElementById("efDest").value.trim(),
-      };
-      document.getElementById("efOut").textContent = "…";
-      try { const r = await api("/api/email-forward", { method: "POST", body });
-        document.getElementById("efOut").textContent = JSON.stringify(r, null, 2); }
-      catch (e) { document.getElementById("efOut").textContent = "error: " + e.message; }
-    };
-  },
-  scan: () => {
-    openDrawer("Web scan", `
-      <div class="muted">web scans run in the terminal — say "scan a site" or type <code>/scan &lt;url&gt;</code> in your <b>npm start</b> terminal. Files land under <code>agent/web/&lt;host&gt;/</code>. This panel just kicks it off through chat.</div>
-      <label>target URL</label><input id="scanUrl" placeholder="https://example.com" />
-      <div class="drawer-actions"><button class="primary" id="scanGo">Ask yoru to scan</button></div>`);
-    document.getElementById("scanGo").onclick = () => {
-      const u = document.getElementById("scanUrl").value.trim(); if (!u) return;
-      drawer.classList.add("hidden"); showView("chat"); send(`scan ${u}`);
-    };
-  },
-  meetings: async () => {
-    const v = await api("/api/owner/voice").catch(()=>({ inChannel:false }));
-    openDrawer("Meetings", `
-      <div class="muted">alt account joins a voice channel, records + transcribes on speech; leave saves PDF + TXT + MP3 into <code>agent/calls</code>.</div>
-      <div class="muted">status: ${v.inChannel ? `in voice channel ${v.channelId} — ${v.events||0} events, ${v.notes||0} notes` : "not in a voice channel"}</div>
-      <label>channel (ID or exact name)</label>
-      <input id="vcCh" placeholder="voice channel ID or name" />
-      <div class="drawer-actions">
-        <button class="primary" id="vcJoin">Join</button>
-        <button id="vcLeave">Leave &amp; save</button>
-        <button class="ghost" id="vcRecap">Last recap</button>
-      </div>
-      <pre id="vcOut" class="muted">—</pre>`);
-    const out = document.getElementById("vcOut");
-    document.getElementById("vcJoin").onclick = async () => {
-      const ch = document.getElementById("vcCh").value.trim(); if (!ch) return toast("channel ID or name required");
-      try { const r = await api("/api/owner/voice/join", { method: "POST", body: { channel: ch } });
-        out.textContent = JSON.stringify(r, null, 2); refreshStatus(); }
-      catch (e) { toast(e.message); }
-    };
-    document.getElementById("vcLeave").onclick = async () => {
-      try { const r = await api("/api/owner/voice/leave", { method: "POST" });
-        out.textContent = JSON.stringify(r, null, 2); refreshStatus(); }
-      catch (e) { toast(e.message); }
-    };
-    document.getElementById("vcRecap").onclick = async () => {
-      try { const r = await api("/api/owner/voice/recap"); out.textContent = r.recap || "no recaps yet"; }
-      catch (e) { toast(e.message); }
-    };
-  },
-  files: () => {
-    openDrawer("Files", `
-      <label>path (absolute, or ~)</label>
-      <input id="fpath" value="~" />
-      <div class="drawer-actions">
-        <button class="primary" id="flist">List</button>
-        <button id="fread">Read</button>
-      </div>
-      <pre id="fout" class="muted">—</pre>`);
-    document.getElementById("flist").onclick = async () => {
-      try { const r = await api("/api/owner/fs/list", { method: "POST", body: { path: document.getElementById("fpath").value } });
-        document.getElementById("fout").textContent = r.items.map(i => `${i.type.padEnd(4)}  ${i.name}`).join("\n"); }
-      catch (e) { document.getElementById("fout").textContent = "error: " + e.message; }
-    };
-    document.getElementById("fread").onclick = async () => {
-      try { const r = await api("/api/owner/fs/read", { method: "POST", body: { path: document.getElementById("fpath").value } });
-        document.getElementById("fout").textContent = r.content.slice(0, 8000); }
-      catch (e) { document.getElementById("fout").textContent = "error: " + e.message; }
-    };
-  },
-  system: async () => {
-    try { const r = await api("/api/owner/system");
-      openDrawer("System", `<pre>${esc(JSON.stringify(r, null, 2))}</pre>`); }
-    catch (e) { toast(e.message); }
-  },
-};
-document.querySelectorAll("[data-action]").forEach((b) =>
-  b.addEventListener("click", () => ACTIONS[b.dataset.action]?.()),
-);
-
-/* ========== provider selector ========== */
-const providerSelect = document.getElementById("providerSelect");
-async function loadProviders() {
-  try {
-    const r = await api("/api/providers");
-    providerSelect.innerHTML = "";
-    const auto = document.createElement("option"); auto.value = ""; auto.textContent = `auto (${r.preferred || "?"})`;
-    providerSelect.appendChild(auto);
-    for (const p of r.providers.filter((x) => x.enabled)) {
-      const o = document.createElement("option"); o.value = p.name; o.textContent = p.name; providerSelect.appendChild(o);
-    }
-    renderProviderList(r.providers, r.preferred);
-  } catch {}
-}
-providerSelect.addEventListener("change", async () => {
-  if (!providerSelect.value) return;
-  try { await api("/api/providers", { method: "POST", body: { preferred: providerSelect.value } }); toast(`preferred: ${providerSelect.value}`); loadProviders(); }
-  catch (e) { toast(e.message); }
-});
-function renderProviderList(providers, preferred) {
-  const el = document.getElementById("providerList");
-  el.innerHTML = providers.map((p) => {
-    const state = p.enabled ? (p.keyRequired && !p.hasKey ? "off" : "ok") : "off";
-    const label = p.enabled ? (state === "ok" ? "on" : "no key") : "off";
-    const star = p.name === preferred ? " ★" : "";
-    return `<div class="row"><span class="k">${esc(p.name)}${star}</span><span class="v ${state}">${label}</span></div>`;
-  }).join("");
-}
-
-/* ========== providers pill ========== */
-function setProviderPill(text, ok) {
-  const pill = document.getElementById("pillProvider");
-  pill.querySelector(".dot").className = "dot " + (ok ? "on" : "off");
-  pill.lastChild.textContent = " " + text;
-}
-
-/* ========== live status ========== */
-async function refreshStatus() {
-  try {
-    const h = await api("/api/health", { owner: false });
-    document.getElementById("dotAgent").className = "dot " + (h.ok ? "on" : "off");
-    document.getElementById("txtAgent").textContent = h.ok ? `${h.preferred || "agent"} online` : "offline";
-    setProviderPill(h.preferred || "?", !!h.ok);
-    document.getElementById("dotBot").className = "dot " + (h.bot?.running ? "on" : "off");
-    document.getElementById("txtBot").textContent = h.bot?.running ? "connected" : "offline";
-    document.getElementById("dotSelf").className = "dot " + (h.selfbot?.running ? "on" : "off");
-    document.getElementById("txtSelf").textContent = h.selfbot?.running ? "connected" : "offline";
-  } catch {
-    document.getElementById("dotAgent").className = "dot off";
-    document.getElementById("txtAgent").textContent = "offline";
-  }
-  try {
-    const v = await api("/api/owner/voice");
-    document.getElementById("dotCall").className = "dot " + (v.inChannel ? "on" : "");
-    document.getElementById("txtCall").textContent = v.inChannel
-      ? `channel ${v.channelId} · ${v.events||0} events, ${v.notes||0} notes` : "not in a voice channel";
-  } catch {}
-  try {
-    const k = await api("/api/owner/killswitch");
-    document.getElementById("dotKill").className = "dot " + (k.active ? "off" : "on");
-    document.getElementById("txtKill").textContent = k.active ? "ACTIVE (jumpstart to release)" : "idle";
-    const kp = document.getElementById("pillKill");
-    kp.querySelector(".dot").className = "dot " + (k.active ? "off" : "on");
-    kp.lastChild.textContent = " killswitch: " + (k.active ? "ACTIVE" : "idle");
-  } catch {}
-  try {
-    const s = await api("/api/owner/system");
-    document.getElementById("txtSys").textContent =
-      `${s.platform} ${s.arch} · ${s.cpus} cpu · ${(s.memGB - s.freeMemGB).toFixed(1)}/${s.memGB} GB · up ${s.uptimeMin}m`;
-  } catch {}
-}
-refreshStatus();
-setInterval(refreshStatus, 6000);
-loadProviders();
-setInterval(loadProviders, 30000);
+async function loadSecurity(){try{const [ka,va,k,v]=await Promise.all([api("/api/owner/killswitch-admins"),api("/api/owner/voice-admins"),api("/api/owner/killswitch"),api("/api/owner/voice")]);$("killAdmins").value=(ka.admins||[]).join("\n");$("voiceAdmins").value=(va.admins||[]).join("\n");$("killState").textContent=k.active?"LOCKDOWN ACTIVE":"SYSTEM CLEAR";$("voiceState").textContent=v.inChannel?`Recording channel ${v.channelId}.`:"No active voice session.";}catch(e){toast(e.message)}}
+function ids(id){return $(id).value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean)}
+$("saveKillAdmins").onclick=async()=>{await api("/api/owner/killswitch-admins",{method:"POST",body:{admins:ids("killAdmins")}});toast("Killswitch admins saved.")};$("saveVoiceAdmins").onclick=async()=>{await api("/api/owner/voice-admins",{method:"POST",body:{admins:ids("voiceAdmins")}});toast("Voice admins saved.")};$("ksEngage").onclick=async()=>{await api("/api/owner/killswitch",{method:"POST",body:{reason:"command-center"}});toast("Killswitch engaged.");refreshAll()};$("ksRelease").onclick=async()=>{await api("/api/owner/jumpstart",{method:"POST"});toast("YORU jumpstarted.");refreshAll()};$("voiceJoin").onclick=async()=>{const channel=$("voiceChannel").value.trim();if(!channel)return toast("Enter a channel ID or name.");await api("/api/owner/voice/join",{method:"POST",body:{channel}});toast("Voice session started.");refreshAll()};$("voiceLeave").onclick=async()=>{const r=await api("/api/owner/voice/leave",{method:"POST"});toast(r.message||"Voice files saved.",4000);refreshAll()};
+const meetings=()=>showView("security");document.querySelectorAll('[data-action="meetings"]').forEach(b=>b.onclick=meetings);
