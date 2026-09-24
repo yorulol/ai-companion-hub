@@ -157,7 +157,7 @@ function startPanel({ name, port, entryHtml }) {
 export function startPanels() {
   if (!config.panels.enabled) return [];
   return [
-    startPanel({ name: "YORU panel", port: config.panels.chatPort, entryHtml: "hub.html" }),
+    startPanel({ name: "YORU panel", port: config.panels.chatPort, entryHtml: "command.html" }),
     startPanel({ name: "YORU WorkSpace", port: config.panels.workspacePort, entryHtml: "workspace.html" }),
   ];
 }
