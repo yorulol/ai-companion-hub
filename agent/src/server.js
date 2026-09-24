@@ -462,6 +462,7 @@ const ROUTES = {
       sourcePath: b.sourcePath,
       name: b.name,
       system: b.system,
+      base: b.base,
       force: !!b.force,
       onLog: (l) => logs.push(l),
     });
