@@ -295,6 +295,16 @@ function budgetPredict(model, ceiling) {
   return Math.max(p.minPredict, Math.min(ceiling, fit));
 }
 
+// Cached active local model (refreshed by refreshLocalModel()).
+let ACTIVE_LOCAL = null;
+export async function refreshLocalModel() {
+  try {
+    const { activeLocalModel } = await import("./localmodel-runner.js");
+    ACTIVE_LOCAL = await activeLocalModel();
+  } catch { ACTIVE_LOCAL = null; }
+  return ACTIVE_LOCAL;
+}
+
 function ollamaWorkload(messages, mode) {
   const p = config.providers.ollama;
   const latest = [...messages].reverse().find((message) => message.role === "user")?.content || "";
@@ -303,7 +313,10 @@ function ollamaWorkload(messages, mode) {
   // needs it, otherwise the fast model handles it and stays inside the budget.
   const complex = mode === "coding" || (COMPLEX_REQUEST_RE.test(latest) && latest.length > 240) || latest.length > 1200;
   const large = chars > Math.max(9000, p.numCtx * 4) || latest.length > 2600;
-  const fastModel = p.uf?.enabled ? p.uf.model : p.model;
+  // Custom local model wins over UF and heretic when enabled — it's the
+  // operator's explicitly-built model, tuned to their hardware at build time.
+  const localActive = config.localmodel.enabled && ACTIVE_LOCAL ? ACTIVE_LOCAL : null;
+  const fastModel = localActive?.name || (p.uf?.enabled ? p.uf.model : p.model);
   if (large) {
     return {
       name: "balanced",
