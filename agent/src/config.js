@@ -231,3 +231,18 @@ export async function setOwnerPrefix(prefix) {
   await writeEnv({ OWNER_PREFIX: value });
   return value;
 }
+
+/** Toggle the local-model provider and/or set the active model (persisted to .env). */
+export async function setLocalModel({ enabled, active } = {}) {
+  const updates = {};
+  if (typeof enabled === "boolean") {
+    config.localmodel.enabled = enabled;
+    updates.LOCALMODEL_ENABLED = enabled;
+  }
+  if (typeof active === "string") {
+    config.localmodel.active = active.trim();
+    updates.LOCALMODEL_ACTIVE = active.trim();
+  }
+  if (Object.keys(updates).length) await writeEnv(updates);
+  return { enabled: config.localmodel.enabled, active: config.localmodel.active };
+}
