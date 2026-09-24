@@ -415,6 +415,11 @@ export function startTerminalRepl() {
         await runList(linein.slice(6).trim() || extractHost(linein));
         rl.prompt(); return;
       }
+      if (linein === "/models") { await runListModels(); rl.prompt(); return; }
+      if (linein.startsWith("/build")) { await runBuildModel(linein.slice(6).trim()); rl.prompt(); return; }
+      if (linein.startsWith("/use")) { await runUseModel(linein.slice(4).trim()); rl.prompt(); return; }
+
+
 
       if (awaitingScanUrl) {
         awaitingScanUrl = false;
