@@ -7,6 +7,8 @@ import { refreshModels } from "./ai.js";
 import { startOpenClaw } from "./openclaw-runner.js";
 import { autotuneOpenClaw } from "./openclaw-autotune.js";
 import { startOllama } from "./ollama-runner.js";
+import { preloadLocalModel } from "./localmodel-runner.js";
+import { refreshLocalModel } from "./ai.js";
 import { bootUI, log } from "./boot-ui.js";
 import { startTerminalRepl } from "./terminal-repl.js";
 
@@ -61,6 +63,13 @@ if (config.providers.openclaw.enabled) {
 } else {
   boot.push(waitWithCap(ollamaBoot, 20000, "ollama"));
 }
+
+// Custom-built local model: refresh the active reference and pre-warm it so
+// the first reply after boot is fast. Non-fatal if it can't preload.
+boot.push(waitWithCap(
+  refreshLocalModel().then(() => preloadLocalModel()).catch((e) => log.warn("localmodel", e.message)),
+  20000, "localmodel"
+));
 
 const { isDead } = await import("./killswitch.js");
 if (isDead()) {

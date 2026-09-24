@@ -21,10 +21,11 @@ import path from "node:path";
 import { chat } from "./chat-loop.js";
 import { runFullScan, reverifyHost, regenerateReports, listVulns } from "./scan-run.js";
 import { WEB_DIR } from "./scan-store.js";
-import { ask } from "./ai.js";
+import { ask, refreshLocalModel } from "./ai.js";
 import { getSettings } from "./db.js";
-import { config } from "./config.js";
+import { config, setLocalModel } from "./config.js";
 import { spinner } from "./boot-ui.js";
+import { listBuiltModels, buildModel, deleteBuiltModel } from "./model-builder.js";
 
 const SCOPE = "terminal:local";
 
@@ -279,17 +280,70 @@ async function runList(host) {
 function help() {
   console.log("");
   console.log(p(C.pink + C.bold, "  commands"));
-  console.log(`    ${p(C.cyan, "/scan <url>")}       deep scan + verify + draft reports`);
-  console.log(`    ${p(C.cyan, "/verify <host>")}    re-verify the latest scan for that host`);
-  console.log(`    ${p(C.cyan, "/report <host>")}    regenerate reports from current findings`);
-  console.log(`    ${p(C.cyan, "/vulns <host>")}     list findings grouped by type (verified flag)`);
-  console.log(`    ${p(C.cyan, "/provider <name>")}  pin provider for the next reply`);
-  console.log(`    ${p(C.cyan, "/providers")}        list enabled providers`);
-  console.log(`    ${p(C.cyan, "/web")}              print the agent/web folder path`);
-  console.log(`    ${p(C.cyan, "/clear /help /exit")}`);
+    console.log(`    ${p(C.cyan, "/scan <url>")}       deep scan + verify + draft reports`);
+    console.log(`    ${p(C.cyan, "/verify <host>")}    re-verify the latest scan for that host`);
+    console.log(`    ${p(C.cyan, "/report <host>")}    regenerate reports from current findings`);
+    console.log(`    ${p(C.cyan, "/vulns <host>")}     list findings grouped by type (verified flag)`);
+    console.log(`    ${p(C.cyan, "/models")}           list custom-built local models`);
+    console.log(`    ${p(C.cyan, "/build <src> [n]")}  build a custom model from an HF folder or .gguf`);
+    console.log(`    ${p(C.cyan, "/use <name>")}       switch chat to a built local model`);
+    console.log(`    ${p(C.cyan, "/provider <name>")}  pin provider for the next reply`);
+    console.log(`    ${p(C.cyan, "/providers")}        list enabled providers`);
+    console.log(`    ${p(C.cyan, "/web")}              print the agent/web folder path`);
+    console.log(`    ${p(C.cyan, "/clear /help /exit")}`);
   console.log("");
   console.log(p(C.grey, "  natural: “scan a site”, “verify last scan on x.com”, “draft reports for x.com”, “what's exploitable on x.com”"));
   console.log("");
+}
+
+async function runListModels() {
+  const models = await listBuiltModels();
+  if (!models.length) {
+    console.log(p(C.yellow, "  no custom models built yet. Use /build <source-path> [name]"));
+    return;
+  }
+  const active = config.localmodel.active;
+  console.log("");
+  console.log(p(C.pink + C.bold, "  custom models") + p(C.grey, `   enabled=${config.localmodel.enabled}`));
+  for (const m of models) {
+    const flag = m.name === active ? p(C.green, "✓") : p(C.grey, "·");
+    const sizeGb = m.sizeBytes ? (m.sizeBytes / 1024 ** 3).toFixed(2) + " GB" : "?";
+    console.log(`    ${flag} ${p(C.cyan, m.name)} ${p(C.grey, `${sizeGb} · ~${m.paramsB || "?"}B · ${m.runtime || "ollama"}`)}`);
+  }
+  console.log("");
+}
+
+async function runBuildModel(rest) {
+  const parts = rest.trim().split(/\s+/).filter(Boolean);
+  const source = parts[0];
+  const name = parts[1];
+  if (!source) { console.log(p(C.red, "  usage: /build <source-path> [name]")); return; }
+  const spin = spinner(`building custom model from ${source}`);
+  try {
+    const built = await buildModel({
+      sourcePath: source, name,
+      onLog: (l) => spin.update(l),
+    });
+    spin.stop(p(C.greenSoft, `  ✓ built ${built.name}`));
+    console.log(p(C.grey, `    folder ${built.dir}`));
+    console.log(p(C.grey, `    size   ${(built.sizeBytes / 1024 ** 3).toFixed(2)} GB`));
+    console.log(p(C.cyan, `    /use ${built.name}   to activate`));
+  } catch (err) {
+    spin.stop();
+    console.log(p(C.red, `  build failed: ${err.message}`));
+  }
+}
+
+async function runUseModel(name) {
+  if (!name) { console.log(p(C.red, "  usage: /use <name>")); return; }
+  const models = await listBuiltModels();
+  if (!models.find((m) => m.name === name)) {
+    console.log(p(C.red, `  no such model: ${name}`));
+    return;
+  }
+  await setLocalModel({ enabled: true, active: name });
+  await refreshLocalModel();
+  console.log(p(C.green, `  ✓ chat now uses "${name}" (LOCALMODEL_ENABLED=true, LOCALMODEL_ACTIVE=${name})`));
 }
 
 export function startTerminalRepl() {
@@ -361,6 +415,11 @@ export function startTerminalRepl() {
         await runList(linein.slice(6).trim() || extractHost(linein));
         rl.prompt(); return;
       }
+      if (linein === "/models") { await runListModels(); rl.prompt(); return; }
+      if (linein.startsWith("/build")) { await runBuildModel(linein.slice(6).trim()); rl.prompt(); return; }
+      if (linein.startsWith("/use")) { await runUseModel(linein.slice(4).trim()); rl.prompt(); return; }
+
+
 
       if (awaitingScanUrl) {
         awaitingScanUrl = false;

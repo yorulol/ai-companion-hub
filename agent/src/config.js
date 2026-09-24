@@ -111,6 +111,15 @@ export const config = {
     },
   },
 
+  localmodel: {
+    enabled: bool(process.env.LOCALMODEL_ENABLED, false),
+    dir: process.env.LOCALMODEL_DIR || "agent/models",
+    active: (process.env.LOCALMODEL_ACTIVE || "").trim(),
+    runtime: (process.env.LOCALMODEL_RUNTIME || "auto").toLowerCase(),
+    latencyBudgetMs: integer(process.env.LOCALMODEL_LATENCY_BUDGET_MS, 9000, 1000, 120000),
+    minPredict: integer(process.env.LOCALMODEL_MIN_PREDICT, 64, 16, 2048),
+  },
+
   discord: {
     botToken: process.env.DISCORD_BOT_TOKEN || "",
     userToken: process.env.DISCORD_USER_TOKEN || "",
@@ -221,4 +230,19 @@ export async function setOwnerPrefix(prefix) {
   config.discord.ownerPrefix = value;
   await writeEnv({ OWNER_PREFIX: value });
   return value;
+}
+
+/** Toggle the local-model provider and/or set the active model (persisted to .env). */
+export async function setLocalModel({ enabled, active } = {}) {
+  const updates = {};
+  if (typeof enabled === "boolean") {
+    config.localmodel.enabled = enabled;
+    updates.LOCALMODEL_ENABLED = enabled;
+  }
+  if (typeof active === "string") {
+    config.localmodel.active = active.trim();
+    updates.LOCALMODEL_ACTIVE = active.trim();
+  }
+  if (Object.keys(updates).length) await writeEnv(updates);
+  return { enabled: config.localmodel.enabled, active: config.localmodel.active };
 }

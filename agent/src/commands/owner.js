@@ -273,3 +273,51 @@ add({ name: "jumpstart", category: "owner", description: "Revive the agent after
     const res = await jumpstart();
     message.channel.send({ embeds: [okEmbed("Jumpstart complete", `bot: ${res.bot || "skipped"} · selfbot: ${res.selfbot || "skipped"}`)] });
   })});
+
+// 19 — models: list built custom models
+add({ name: "models", category: "owner", description: "List custom-built local models.", usage: "models", permission: "owner",
+  run: guard(async ({ message }) => {
+    const { listBuiltModels } = await import("../model-builder.js");
+    const models = await listBuiltModels();
+    if (!models.length) return void message.reply({ embeds: [infoEmbed("No custom models yet", "Build one with `!build <source-path> [name]` or from the panel.")] });
+    const active = config.localmodel.active;
+    const rows = models.map((m) => {
+      const gb = m.sizeBytes ? (m.sizeBytes / 1024 ** 3).toFixed(2) + " GB" : "?";
+      return `${m.name === active ? "✓" : "·"} \`${m.name}\` — ${gb} · ~${m.paramsB || "?"}B`;
+    });
+    message.reply({ embeds: [embed({ title: "🧠 Custom models", description: rows.join("\n"), color: COLORS.info })] });
+  })});
+
+// 20 — build: build a custom model from a source path
+add({ name: "build", category: "owner", description: "Build a custom model from an HF folder or .gguf file.", usage: "build <source-path> [name]", permission: "owner",
+  run: guard(async ({ message, args }) => {
+    if (!args.length) return void message.reply({ embeds: [infoEmbed("Which source?", "`build /path/to/model-folder my-model`")] });
+    const source = args[0];
+    const name = args[1];
+    await message.reply({ embeds: [infoEmbed("Building…", `Compiling \`${source}\` — this can take a while.`)] });
+    try {
+      const { buildModel } = await import("../model-builder.js");
+      const { refreshLocalModel } = await import("../ai.js");
+      const built = await buildModel({ sourcePath: source, name });
+      await refreshLocalModel();
+      const gb = built.sizeBytes ? (built.sizeBytes / 1024 ** 3).toFixed(2) + " GB" : "?";
+      message.channel.send({ embeds: [okEmbed("Model built", `\`${built.name}\` · ${gb}\nActivate with \`!use ${built.name}\``)] });
+    } catch (err) {
+      message.channel.send({ embeds: [errEmbed("Build failed", String(err.message))] });
+    }
+  })});
+
+// 21 — use: switch chat to a built local model
+add({ name: "use", category: "owner", description: "Switch chat to a built local model.", usage: "use <name>", permission: "owner",
+  run: guard(async ({ message, args }) => {
+    const name = args[0];
+    if (!name) return void message.reply({ embeds: [infoEmbed("Which model?", "`use my-model` — list with `models`.")] });
+    const { listBuiltModels } = await import("../model-builder.js");
+    const { setLocalModel } = await import("../config.js");
+    const { refreshLocalModel } = await import("../ai.js");
+    const list = await listBuiltModels();
+    if (!list.find((m) => m.name === name)) return void message.reply({ embeds: [errEmbed("No such model", `Run \`!models\` to see what's available.`)] });
+    await setLocalModel({ enabled: true, active: name });
+    await refreshLocalModel();
+    message.reply({ embeds: [okEmbed("Chat model switched", `Now using \`${name}\` on every surface.`)] });
+  })});
