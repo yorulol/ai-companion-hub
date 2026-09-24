@@ -70,6 +70,16 @@ export async function lookup(query, { limitPerFile = 25 } = {}) {
   }
   const files = await listLookupFiles();
   const needle = query.toLowerCase();
+  // Fuzzy tokenization: also match rows/lines that contain every whitespace-
+  // or punctuation-separated token from the query (order-independent). This
+  // catches "john doe" when the file has "Doe, John" and multi-word handles.
+  const tokens = [...new Set(needle.split(/[\s,;|/\\]+/).filter((t) => t.length >= 2))];
+  const matchesLine = (line) => {
+    const s = line.toLowerCase();
+    if (s.includes(needle)) return true;
+    if (tokens.length > 1 && tokens.every((t) => s.includes(t))) return true;
+    return false;
+  };
   const results = [];
 
   for (const name of files) {
