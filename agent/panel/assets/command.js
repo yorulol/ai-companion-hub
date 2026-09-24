@@ -13,6 +13,7 @@ function showView(name) {
   if (frame?.dataset.src && !frame.src) frame.src = frame.dataset.src;
   document.querySelectorAll("details[open]").forEach((d) => d.removeAttribute("open"));
   if (name === "files") loadRoots().then(() => browseFiles(fileCwd));
+  if (name === "models") loadModels();
   if (name === "security") loadSecurity();
   if (name === "terminal") setTimeout(() => $("input").focus(), 50);
 }
