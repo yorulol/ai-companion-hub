@@ -88,16 +88,17 @@ $("modelsEnabled")?.addEventListener("change",async e=>{await api("/api/models/c
 $("mbRefresh")?.addEventListener("click",loadModels);
 $("mbBuild")?.addEventListener("click",async()=>{
   const sourcePath=$("mbSource").value.trim();
-  if(!sourcePath)return toast("Enter a source path.");
+  if(!sourcePath)return toast("Enter a HuggingFace repo ID, folder, or .gguf path.");
   const name=$("mbName").value.trim()||undefined;
   const system=$("mbSystem").value.trim()||undefined;
+  const base=$("mbBase")?.value.trim()||undefined;
   const force=$("mbForce").checked;
-  const log=$("mbLog");log.textContent="Building — this can take a while for large models…\n";
+  const log=$("mbLog");log.textContent=`Building from ${sourcePath}\n(this can take a while — HuggingFace downloads stream progress below.)\n\n`;
   $("mbBuild").disabled=true;
   try{
-    const r=await api("/api/models/custom/build",{method:"POST",body:{sourcePath,name,system,force}});
+    const r=await api("/api/models/custom/build",{method:"POST",body:{sourcePath,name,system,base,force}});
     log.textContent+=(r.logs||[]).join("\n")+`\n\n✓ Built ${r.built.name} (${fmtGb(r.built.sizeBytes)})`;
     toast(`Built ${r.built.name}`);loadModels();
-  }catch(e){log.textContent+=`\n✗ ${e.message}`;toast(e.message,5000)}
-  finally{$("mbBuild").disabled=false}
+  }catch(e){log.textContent+=`\n✗ ${e.message}`;toast(e.message,6000)}
+  finally{$("mbBuild").disabled=false;log.scrollTop=log.scrollHeight}
 });

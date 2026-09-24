@@ -69,18 +69,19 @@
     <div class="view-head"><div><span>CUSTOM MODELS</span><h2>Model Builder</h2></div><label class="switch"><input id="modelsEnabled" type="checkbox"/> <span>Use built models for chat</span></label></div>
     <div class="hud-panel">
       <div class="panel-label">BUILD A NEW MODEL</div>
-      <p style="margin:8px 0;font-size:13px;opacity:.75">Point at any HuggingFace source folder (config.json + safetensors) or a <code>.gguf</code> file. YORU stages it into <code>agent/models/&lt;name&gt;/</code>, generates a Modelfile, tunes it for this machine, and registers it with Ollama so chat can use it instantly.</p>
+      <p style="margin:8px 0;font-size:13px;opacity:.78">Accepts a <b>HuggingFace repo ID</b> (e.g. <code>TheBloke/Llama-2-7B-Chat-GGUF</code>), a local folder, or a <code>.gguf</code> file. Auto-detects GGUF (single or sharded), safetensors, PyTorch weights, and LoRA adapters. AWQ/GPTQ are rejected with a fix hint. For gated repos, set <code>HF_TOKEN</code> in <code>.env</code>.</p>
       <div style="display:grid;grid-template-columns:1fr 200px;gap:8px;margin:8px 0">
-        <input id="mbSource" placeholder="/absolute/path/to/model-folder-or-file.gguf" style="padding:10px;background:rgba(0,0,0,.35);border:1px solid rgba(39,220,244,.3);color:inherit;border-radius:6px"/>
+        <input id="mbSource" placeholder="TheBloke/Llama-2-7B-GGUF · or /abs/path · or file.gguf" style="padding:10px;background:rgba(0,0,0,.35);border:1px solid rgba(39,220,244,.3);color:inherit;border-radius:6px"/>
         <input id="mbName" placeholder="name (optional)" style="padding:10px;background:rgba(0,0,0,.35);border:1px solid rgba(39,220,244,.3);color:inherit;border-radius:6px"/>
       </div>
+      <input id="mbBase" placeholder="LoRA base model (only for adapter sources, e.g. llama3.2:3b-instruct)" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid rgba(39,220,244,.3);color:inherit;border-radius:6px;margin-bottom:8px"/>
       <textarea id="mbSystem" rows="3" placeholder="Optional custom system prompt (leave blank for the YORU default)" style="width:100%;padding:10px;background:rgba(0,0,0,.35);border:1px solid rgba(39,220,244,.3);color:inherit;border-radius:6px;margin-bottom:8px"></textarea>
       <div style="display:flex;gap:8px">
         <button id="mbBuild">BUILD MODEL</button>
         <button id="mbRefresh">REFRESH LIST</button>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.8"><input id="mbForce" type="checkbox"/> overwrite if exists</label>
       </div>
-      <pre id="mbLog" style="margin-top:12px;max-height:180px;overflow:auto;background:rgba(0,0,0,.4);padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap"></pre>
+      <pre id="mbLog" style="margin-top:12px;max-height:220px;overflow:auto;background:rgba(0,0,0,.4);padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap"></pre>
     </div>
     <div class="hud-panel" style="margin-top:16px">
       <div class="panel-label">BUILT MODELS</div>

@@ -314,14 +314,27 @@ async function runListModels() {
 }
 
 async function runBuildModel(rest) {
-  const parts = rest.trim().split(/\s+/).filter(Boolean);
-  const source = parts[0];
-  const name = parts[1];
-  if (!source) { console.log(p(C.red, "  usage: /build <source-path> [name]")); return; }
+  // /build <source> [name] [--base <ollama-model>] [--force]
+  const tokens = rest.trim().split(/\s+/).filter(Boolean);
+  const opts = { force: false };
+  const positional = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === "--force" || t === "-f") opts.force = true;
+    else if (t === "--base" && tokens[i + 1]) { opts.base = tokens[++i]; }
+    else positional.push(t);
+  }
+  const source = positional[0];
+  const name = positional[1];
+  if (!source) {
+    console.log(p(C.red, "  usage: /build <source> [name] [--base <ollama-model>] [--force]"));
+    console.log(p(C.grey, "  source can be an HF repo id (TheBloke/Llama-2-7B-GGUF), a folder, or a .gguf file."));
+    return;
+  }
   const spin = spinner(`building custom model from ${source}`);
   try {
     const built = await buildModel({
-      sourcePath: source, name,
+      sourcePath: source, name, base: opts.base, force: opts.force,
       onLog: (l) => spin.update(l),
     });
     spin.stop(p(C.greenSoft, `  ✓ built ${built.name}`));
@@ -331,6 +344,9 @@ async function runBuildModel(rest) {
   } catch (err) {
     spin.stop();
     console.log(p(C.red, `  build failed: ${err.message}`));
+    if (/gated|HF_TOKEN/i.test(err.message)) console.log(p(C.grey, `    set HF_TOKEN in agent/.env for gated repos.`));
+    if (/GPTQ|AWQ/i.test(err.message)) console.log(p(C.grey, `    tip: look for a "-GGUF" sibling repo on HuggingFace.`));
+    if (/LoRA|adapter/i.test(err.message)) console.log(p(C.grey, `    tip: pass --base <ollama-model> or set LOCALMODEL_LORA_BASE in .env.`));
   }
 }
 

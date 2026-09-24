@@ -289,21 +289,34 @@ add({ name: "models", category: "owner", description: "List custom-built local m
   })});
 
 // 20 — build: build a custom model from a source path
-add({ name: "build", category: "owner", description: "Build a custom model from an HF folder or .gguf file.", usage: "build <source-path> [name]", permission: "owner",
+add({ name: "build", category: "owner", description: "Build a custom model from an HF repo ID, folder, or .gguf file.", usage: "build <source> [name] [--base <ollama-model>]", permission: "owner",
   run: guard(async ({ message, args }) => {
-    if (!args.length) return void message.reply({ embeds: [infoEmbed("Which source?", "`build /path/to/model-folder my-model`")] });
-    const source = args[0];
-    const name = args[1];
-    await message.reply({ embeds: [infoEmbed("Building…", `Compiling \`${source}\` — this can take a while.`)] });
+    if (!args.length) return void message.reply({ embeds: [infoEmbed("Which source?",
+      "HF repo id: `build TheBloke/Llama-2-7B-GGUF my-llama`\nFolder: `build /path/to/model my-model`\nLoRA: `build owner/lora my-lora --base llama3.2:3b-instruct`")] });
+    const opts = { force: false };
+    const positional = [];
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (a === "--force" || a === "-f") opts.force = true;
+      else if (a === "--base" && args[i + 1]) opts.base = args[++i];
+      else positional.push(a);
+    }
+    const source = positional[0];
+    const name = positional[1];
+    await message.reply({ embeds: [infoEmbed("Building…", `Compiling \`${source}\` — this can take a while (HF downloads run in the background).`)] });
     try {
       const { buildModel } = await import("../model-builder.js");
       const { refreshLocalModel } = await import("../ai.js");
-      const built = await buildModel({ sourcePath: source, name });
+      const built = await buildModel({ sourcePath: source, name, base: opts.base, force: opts.force });
       await refreshLocalModel();
       const gb = built.sizeBytes ? (built.sizeBytes / 1024 ** 3).toFixed(2) + " GB" : "?";
       message.channel.send({ embeds: [okEmbed("Model built", `\`${built.name}\` · ${gb}\nActivate with \`!use ${built.name}\``)] });
     } catch (err) {
-      message.channel.send({ embeds: [errEmbed("Build failed", String(err.message))] });
+      const hints = [];
+      if (/gated|HF_TOKEN/i.test(err.message)) hints.push("Set `HF_TOKEN` in `.env` for gated repos.");
+      if (/GPTQ|AWQ/i.test(err.message)) hints.push("Try a `-GGUF` sibling repo on HuggingFace.");
+      if (/LoRA|adapter/i.test(err.message)) hints.push("Pass `--base <ollama-model>` or set `LOCALMODEL_LORA_BASE`.");
+      message.channel.send({ embeds: [errEmbed("Build failed", `${err.message}${hints.length ? "\n\n" + hints.join("\n") : ""}`)] });
     }
   })});
 
