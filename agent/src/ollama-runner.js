@@ -56,7 +56,9 @@ export async function startOllama() {
   if (p.codeModel === "qwen2.5-coder") p.codeModel = RECOMMENDED.coding;
 
   const installed = await listInstalled();
-  const need = [...new Set([p.model, p.reasoningModel, p.codeModel])].filter((m) => !installed.includes(m));
+  const wanted = [p.model, p.reasoningModel, p.codeModel];
+  if (p.heretic?.enabled && p.heretic.model) wanted.push(p.heretic.model);
+  const need = [...new Set(wanted)].filter((m) => !installed.includes(m));
 
   // UF variant enabled: (re)build from agent/UF/Modelfile whenever it's missing
   // or its tuning changed — ensureUfModel compares a content hash itself.
