@@ -12,6 +12,7 @@ import { preloadLocalModel } from "./localmodel-runner.js";
 import { refreshLocalModel } from "./ai.js";
 import { bootUI, log } from "./boot-ui.js";
 import { startTerminalRepl } from "./terminal-repl.js";
+import { startAutoUpdate } from "./auto-update.js";
 
 await bootUI();
 
@@ -109,4 +110,5 @@ process.on("SIGINT", () => {
 // Terminal REPL — talk to YORU directly in the same terminal after `npm start`.
 // From here on, late-starting services stay silent so the prompt stays clean.
 terminalUp = true;
+startAutoUpdate();
 startTerminalRepl();
