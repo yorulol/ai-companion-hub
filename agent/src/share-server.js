@@ -17,6 +17,8 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { log } from "./boot-ui.js";
+import { openSharePort } from "./firewall.js";
+import { startShareOnion } from "./tor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PANEL_DIR = path.join(__dirname, "..", "panel");
@@ -69,11 +71,25 @@ async function proxy(req, res, pathname) {
   const target = `http://127.0.0.1:${config.port}${pathname}`;
   const chunks = [];
   for await (const c of req) chunks.push(c);
-  const body = Buffer.concat(chunks);
+  let body = Buffer.concat(chunks);
+  // Force fast "share" mode + strip any client-supplied owner header. Teammates
+  // must never inherit master privileges through the share proxy.
+  if (pathname === "/api/chat") {
+    try {
+      const parsed = JSON.parse(body.toString("utf8") || "{}");
+      parsed.mode = "share";
+      body = Buffer.from(JSON.stringify(parsed));
+    } catch { /* pass-through on malformed body — server will 400 */ }
+  }
   try {
     const upstream = await fetch(target, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // Sentinel value: server treats non-owner IDs as unprivileged, and
+        // config.ownerId is only used when the header is entirely absent.
+        "x-owner-id": "share-guest",
+      },
       body,
     });
     const text = await upstream.text();
@@ -137,13 +153,25 @@ export async function startShareServer() {
   });
 
   return new Promise((resolve) => {
-    server.listen(share.port, share.bind, () => {
+    server.listen(share.port, share.bind, async () => {
       const ips = localIPs();
       const lan = ips[0] || "127.0.0.1";
       const url = `http://${lan}:${share.port}/`;
       log.ok("share", `team link: ${url}`);
       if (ips.length > 1) log.dim("share", `also on: ${ips.slice(1).map((ip) => `http://${ip}:${share.port}/`).join(", ")}`);
-      log.dim("share", `chat + lookup only · open port ${share.port}/tcp on the LAN firewall if teammates can't connect`);
+
+      // 1) Auto-open the LAN port (best-effort, no admin prompts).
+      try {
+        const fw = await openSharePort(share.port);
+        if (fw.opened) log.ok("share", `firewall port opened via ${fw.via}`);
+        else log.dim("share", `firewall auto-open skipped — if teammates can't connect: ${firewallHint(share.port)}`);
+      } catch { /* never block startup */ }
+
+      // 2) Bring up a temporary Tor onion so teammates still get in when the
+      //    LAN port is closed off. Runs in the background; url appears when
+      //    Tor publishes its descriptor.
+      startShareOnion(share.port, log).catch((e) => log.warn("share", `onion setup failed: ${e.message}`));
+
       resolve(server);
     });
     server.on("error", (err) => {
@@ -151,4 +179,14 @@ export async function startShareServer() {
       resolve(null);
     });
   });
+}
+
+function firewallHint(port) {
+  if (process.platform === "win32") {
+    return `run elevated: netsh advfirewall firewall add rule name="YORU Share" dir=in action=allow protocol=TCP localport=${port}`;
+  }
+  if (process.platform === "linux") {
+    return `run: sudo ufw allow ${port}/tcp   (or: sudo firewall-cmd --add-port=${port}/tcp --permanent && sudo firewall-cmd --reload)`;
+  }
+  return `open TCP :${port} in your OS firewall`;
 }
