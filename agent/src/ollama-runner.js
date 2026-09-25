@@ -37,8 +37,30 @@ async function pullModel(name) {
     body: JSON.stringify({ name, stream: false }),
     signal: AbortSignal.timeout(30 * 60 * 1000),
   });
-  if (!res.ok) throw new Error(`pull ${name} → ${res.status}`);
-  log.ok("ollama", `${name} ready`);
+  if (res.ok) { log.ok("ollama", `${name} ready`); return; }
+
+  const detail = (await res.text().catch(() => "")).slice(0, 200);
+  // hf.co/ refs need a recent Ollama; older servers 500 on the HTTP API but
+  // the CLI on the same box often still works — try it before giving up.
+  if (name.startsWith("hf.co/") || name.startsWith("hf.co")) {
+    try {
+      const { execFile } = await import("node:child_process");
+      await new Promise((resolve, reject) => {
+        execFile("ollama", ["pull", name], { timeout: 30 * 60 * 1000 }, (err, _stdout, stderr) => {
+          if (err) reject(new Error((stderr || err.message || "").slice(0, 200)));
+          else resolve();
+        });
+      });
+      log.ok("ollama", `${name} ready (pulled via ollama CLI)`);
+      return;
+    } catch (cliErr) {
+      throw new Error(
+        `pull ${name} → ${res.status} (${detail}); CLI fallback also failed (${cliErr.message}). ` +
+        `Fix: upgrade Ollama (https://ollama.com/download) then run: ollama pull ${name}`
+      );
+    }
+  }
+  throw new Error(`pull ${name} → ${res.status}${detail ? ` (${detail})` : ""}`);
 }
 
 export async function startOllama() {
