@@ -37,10 +37,8 @@ export const config = {
   },
 
   share: {
-    enabled: bool(process.env.TEAM_SHARE_ENABLED, false),
     port: Number(process.env.TEAM_SHARE_PORT || 8790),
     bind: process.env.TEAM_SHARE_BIND || "0.0.0.0",
-    token: process.env.TEAM_SHARE_TOKEN || "",
   },
 
   providers: {
