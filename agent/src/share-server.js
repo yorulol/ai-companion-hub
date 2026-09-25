@@ -1,13 +1,11 @@
 /**
- * Team-share server. A second, opt-in HTTP surface that lets teammates on
- * your LAN (or via a tunnel/port-forward) use ONLY the terminal chat and
- * the lookup tab, gated behind a shared token.
+ * Team-share server. A second HTTP surface that lets teammates on your LAN
+ * use ONLY the terminal chat and the lookup tab.
  *
  *  - Serves /share.html + assets from agent/panel/
  *  - Proxies exactly two endpoints to the main agent service:
  *      POST /api/chat      → conversation
  *      POST /api/lookup    → identity lookup (protected-row redaction stays on)
- *  - Every request needs ?token=... in the URL or X-Share-Token header.
  *  - Naive per-IP rate limit (60 requests/minute).
  *  - Everything else returns 404 — no owner/files/workspace/settings paths.
  */
@@ -43,11 +41,6 @@ function rateLimited(ip) {
   fresh.push(now);
   rateBuckets.set(ip, fresh);
   return fresh.length > RATE_LIMIT;
-}
-
-function tokenFrom(req) {
-  const url = new URL(req.url, "http://x");
-  return url.searchParams.get("token") || req.headers["x-share-token"] || "";
 }
 
 function json(res, code, body) {
@@ -105,11 +98,6 @@ export function localIPs() {
 
 export async function startShareServer() {
   const share = config.share || {};
-  if (!share.enabled) return null;
-  if (!share.token) {
-    log.warn("share", "TEAM_SHARE_ENABLED=true but TEAM_SHARE_TOKEN is empty — refusing to start (regenerate with npm run setup)");
-    return null;
-  }
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -121,11 +109,6 @@ export async function startShareServer() {
 
       // Static entry: /, /share, /share.html
       if (["/", "/share", "/share.html"].includes(pathname)) {
-        // Require token on the entry too so a bare URL doesn't render the shell.
-        if (tokenFrom(req) !== share.token) {
-          res.writeHead(401, { "content-type": "text/html; charset=utf-8" });
-          return res.end("<h1>YORU team access</h1><p>Missing or invalid token. Ask oz for the correct link.</p>");
-        }
         return void (await serveFile(res, path.join(PANEL_DIR, "share.html")) || notFound(res));
       }
 
@@ -139,10 +122,9 @@ export async function startShareServer() {
         return notFound(res);
       }
 
-      // API proxy — chat + lookup only, token required
+      // API proxy — chat + lookup only
       if (ALLOWED_PROXY.has(pathname)) {
         if (req.method !== "POST") { res.writeHead(405); return res.end(); }
-        if (tokenFrom(req) !== share.token) return json(res, 401, { error: "Invalid share token." });
         // Force lookup endpoint through the owner path so the whitelist redaction runs.
         const forwardPath = pathname === "/api/lookup" ? "/api/owner/lookup" : pathname;
         return await proxy(req, res, forwardPath);
@@ -158,7 +140,7 @@ export async function startShareServer() {
     server.listen(share.port, share.bind, () => {
       const ips = localIPs();
       const lan = ips[0] || "127.0.0.1";
-      const url = `http://${lan}:${share.port}/?token=${share.token}`;
+      const url = `http://${lan}:${share.port}/`;
       log.ok("share", `team link: ${url}`);
       if (ips.length > 1) log.dim("share", `also on: ${ips.slice(1).map((ip) => `http://${ip}:${share.port}/`).join(", ")}`);
       log.dim("share", `chat + lookup only · open port ${share.port}/tcp on the LAN firewall if teammates can't connect`);

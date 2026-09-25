@@ -43,9 +43,7 @@ log.ok("api", `listening on :${config.port}`);
 
 boot.push(waitWithCap(Promise.allSettled(startPanels()), 10000, "panel"));
 
-if (config.share.enabled) {
-  boot.push(waitWithCap(startShareServer().catch((e) => log.warn("share", e.message)), 10000, "share"));
-}
+boot.push(waitWithCap(startShareServer().catch((e) => log.warn("share", e.message)), 10000, "share"));
 
 boot.push(waitWithCap(
   refreshModels(true).then((models) => log.ok("ai", `${models?.free?.length ?? 0} free OpenRouter models cached`)),

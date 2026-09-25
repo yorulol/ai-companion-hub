@@ -1,5 +1,4 @@
-/* Team-share panel: terminal chat + lookup only. Token is in the URL. */
-const TOKEN = new URLSearchParams(location.search).get("token") || "";
+/* Team-share panel: terminal chat + lookup only. */
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const render = (t) => {
   const parts = String(t ?? "").split(/```/);
@@ -9,9 +8,9 @@ const render = (t) => {
 };
 
 async function api(path, body) {
-  const res = await fetch(`${path}?token=${encodeURIComponent(TOKEN)}`, {
+  const res = await fetch(path, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-share-token": TOKEN },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body || {}),
   });
   const text = await res.text();
