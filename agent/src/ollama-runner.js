@@ -67,6 +67,16 @@ export async function startOllama() {
   const p = config.providers.ollama;
   if (!p.enabled) return;
 
+  // Keep Ollama current so hf.co/ pulls and new features keep working.
+  try {
+    const { ensureOllamaLatest } = await import("./ollama-update.js");
+    await ensureOllamaLatest({
+      url: p.url,
+      log: (m) => log.info("ollama", m),
+      warn: (m) => log.warn("ollama", m),
+    });
+  } catch { /* never block boot */ }
+
   if (!(await ollamaUp())) {
     log.warn("ollama", `not reachable at ${p.url}. Install from https://ollama.com and run: ollama serve`);
     return;
