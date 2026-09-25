@@ -98,11 +98,6 @@ export function localIPs() {
 
 export async function startShareServer() {
   const share = config.share || {};
-  if (!share.enabled) return null;
-  if (!share.token) {
-    log.warn("share", "TEAM_SHARE_ENABLED=true but TEAM_SHARE_TOKEN is empty — refusing to start (regenerate with npm run setup)");
-    return null;
-  }
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -114,11 +109,6 @@ export async function startShareServer() {
 
       // Static entry: /, /share, /share.html
       if (["/", "/share", "/share.html"].includes(pathname)) {
-        // Require token on the entry too so a bare URL doesn't render the shell.
-        if (tokenFrom(req) !== share.token) {
-          res.writeHead(401, { "content-type": "text/html; charset=utf-8" });
-          return res.end("<h1>YORU team access</h1><p>Missing or invalid token. Ask oz for the correct link.</p>");
-        }
         return void (await serveFile(res, path.join(PANEL_DIR, "share.html")) || notFound(res));
       }
 
@@ -132,10 +122,9 @@ export async function startShareServer() {
         return notFound(res);
       }
 
-      // API proxy — chat + lookup only, token required
+      // API proxy — chat + lookup only
       if (ALLOWED_PROXY.has(pathname)) {
         if (req.method !== "POST") { res.writeHead(405); return res.end(); }
-        if (tokenFrom(req) !== share.token) return json(res, 401, { error: "Invalid share token." });
         // Force lookup endpoint through the owner path so the whitelist redaction runs.
         const forwardPath = pathname === "/api/lookup" ? "/api/owner/lookup" : pathname;
         return await proxy(req, res, forwardPath);
