@@ -762,6 +762,64 @@ async function setupModelsFolder() {
   ok("agent/models folder ready (custom-built models)");
 }
 
+// ─────────────────────── team share (LAN link for teammates) ───────────────
+async function setupTeamShare() {
+  const cfg = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
+  const existing = cfg.match(/^TEAM_SHARE_TOKEN=(.*)$/m)?.[1]?.trim();
+  if (existing) { ok("team-share token already set (edit agent/.env to rotate)"); return; }
+  const token = randomBytes(24).toString("hex");
+  await patchEnv({
+    TEAM_SHARE_ENABLED: cfg.match(/^TEAM_SHARE_ENABLED=(.*)$/m)?.[1]?.trim() || "false",
+    TEAM_SHARE_PORT: cfg.match(/^TEAM_SHARE_PORT=(.*)$/m)?.[1]?.trim() || "8790",
+    TEAM_SHARE_BIND: cfg.match(/^TEAM_SHARE_BIND=(.*)$/m)?.[1]?.trim() || "0.0.0.0",
+    TEAM_SHARE_TOKEN: token,
+  });
+  ok("team-share token generated (set TEAM_SHARE_ENABLED=true to expose it)");
+  const port = 8790;
+  if (process.platform === "win32") {
+    info(`  open the port on Windows (run once, elevated):`);
+    console.log(`${C.grey}    netsh advfirewall firewall add rule name="YORU Share" dir=in action=allow protocol=TCP localport=${port}${C.reset}`);
+  } else if (process.platform === "linux") {
+    info(`  open the port on Linux (run once):`);
+    console.log(`${C.grey}    sudo ufw allow ${port}/tcp   ${C.dim}# or: sudo firewall-cmd --add-port=${port}/tcp --permanent && sudo firewall-cmd --reload${C.reset}`);
+  }
+}
+
+// ─────────────────────── system packages (Linux / Windows) ─────────────────
+async function ensureSystemPackages() {
+  if (process.platform === "linux") {
+    const has = async (bin) => {
+      try { execFileSync("which", [bin], { stdio: "ignore" }); return true; } catch { return false; }
+    };
+    const needs = [];
+    if (!(await has("sqlite3"))) needs.push("sqlite3");
+    if (!(await has("make"))) needs.push("build-essential");
+    if (!(await has("curl"))) needs.push("curl");
+    if (!needs.length) { ok("system packages present (sqlite3, build-essential, curl)"); return; }
+    info(`installing system packages: ${needs.join(", ")}`);
+    const mgrs = [
+      ["sudo", ["-n", "apt-get", "install", "-y", ...needs]],
+      ["sudo", ["-n", "dnf", "install", "-y", ...needs]],
+      ["sudo", ["-n", "pacman", "-S", "--noconfirm", ...needs]],
+    ];
+    for (const [cmd, args] of mgrs) {
+      try { execFileSync(cmd, args, { stdio: "ignore", timeout: 5 * 60 * 1000 }); ok("system packages installed"); return; }
+      catch {}
+    }
+    warn(`could not auto-install: ${needs.join(", ")} — install manually with your package manager`);
+  } else if (process.platform === "win32") {
+    // vcredist is needed for prebuilt native binaries. Best-effort winget.
+    try {
+      execFileSync("winget", ["install", "--id", "Microsoft.VCRedist.2015+.x64", "-e", "--silent",
+        "--accept-package-agreements", "--accept-source-agreements"],
+        { stdio: "ignore", timeout: 5 * 60 * 1000, windowsHide: true });
+      ok("Windows VCRedist present");
+    } catch {
+      info("VCRedist install skipped (already installed, or winget unavailable)");
+    }
+  }
+}
+
 
 
 
@@ -834,6 +892,12 @@ async function main() {
 
   try { await setupModelsFolder(); }
   catch (e) { warn(`models folder setup skipped: ${e.message}`); }
+
+  try { await setupTeamShare(); }
+  catch (e) { warn(`team-share setup skipped: ${e.message}`); }
+
+  try { await ensureSystemPackages(); }
+  catch (e) { warn(`system packages skipped: ${e.message}`); }
 
   try { await setupUfVariant(); }
   catch (e) { warn(`uf variant setup skipped: ${e.message}`); }

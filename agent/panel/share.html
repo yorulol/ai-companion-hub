@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>YORU // Team Terminal</title>
+<meta name="description" content="Shared YORU terminal chat and lookup access for the team." />
+<link rel="stylesheet" href="/assets/share.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><b>YORU</b><small>TEAM ACCESS</small></div>
+  <nav class="tabs">
+    <button class="tab active" data-view="chat">TERMINAL</button>
+    <button class="tab" data-view="lookup">LOOKUP</button>
+  </nav>
+  <span class="operator">TEAM SESSION</span>
+</header>
+<main>
+  <section id="chatView" class="view active">
+    <div class="terminal-head"><span class="lights"><i></i><i></i><i></i></span><b>YORU://CONVERSATION</b><small>SHARED SESSION</small></div>
+    <div id="messages" class="terminal-output" aria-live="polite"></div>
+    <form id="composer" class="composer">
+      <span>team@yoru:~$</span>
+      <textarea id="input" rows="1" placeholder="Ask YORU anything…" autofocus></textarea>
+      <button id="send" title="Send">SEND</button>
+    </form>
+  </section>
+  <section id="lookupView" class="view">
+    <div class="lookup-head">
+      <input id="lookupQuery" placeholder="Handle, Discord ID, email, or name" />
+      <button id="lookupGo">SEARCH</button>
+    </div>
+    <div id="lookupSummary" class="lookup-summary"><b>READY</b><span>Enter at least three characters to search all indexed sources.</span></div>
+    <div id="lookupResults" class="lookup-results"></div>
+  </section>
+</main>
+<script type="module" src="/assets/share.js"></script>
+</body></html>
