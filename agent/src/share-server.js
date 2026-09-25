@@ -140,7 +140,7 @@ export async function startShareServer() {
     server.listen(share.port, share.bind, () => {
       const ips = localIPs();
       const lan = ips[0] || "127.0.0.1";
-      const url = `http://${lan}:${share.port}/?token=${share.token}`;
+      const url = `http://${lan}:${share.port}/`;
       log.ok("share", `team link: ${url}`);
       if (ips.length > 1) log.dim("share", `also on: ${ips.slice(1).map((ip) => `http://${ip}:${share.port}/`).join(", ")}`);
       log.dim("share", `chat + lookup only · open port ${share.port}/tcp on the LAN firewall if teammates can't connect`);

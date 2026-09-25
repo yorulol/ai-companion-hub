@@ -1,5 +1,4 @@
-/* Team-share panel: terminal chat + lookup only. Token is in the URL. */
-const TOKEN = new URLSearchParams(location.search).get("token") || "";
+/* Team-share panel: terminal chat + lookup only. */
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const render = (t) => {
   const parts = String(t ?? "").split(/```/);
