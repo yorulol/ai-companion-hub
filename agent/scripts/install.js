@@ -910,6 +910,11 @@ async function main() {
   });
   ok("tuned Ollama settings written to .env");
 
+  try {
+    const { ensureOllamaLatest } = await import("../src/ollama-update.js");
+    await ensureOllamaLatest({ url: OLLAMA_URL, log: (m) => ok(m), warn });
+  } catch (e) { warn(`ollama update check skipped: ${e.message}`); }
+
   if (await ollamaReachable()) {
     const have = await installedModels();
     const want = [...new Set([pickedModels.chat, pickedModels.reasoning, pickedModels.code])];
