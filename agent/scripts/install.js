@@ -783,14 +783,16 @@ async function setupTeamShare() {
 // ─────────────────────── system packages (Linux / Windows) ─────────────────
 async function ensureSystemPackages() {
   if (process.platform === "linux") {
-    const has = async (bin) => {
+    const has = (bin) => {
       try { execFileSync("which", [bin], { stdio: "ignore" }); return true; } catch { return false; }
     };
     const needs = [];
-    if (!(await has("sqlite3"))) needs.push("sqlite3");
-    if (!(await has("make"))) needs.push("build-essential");
-    if (!(await has("curl"))) needs.push("curl");
-    if (!needs.length) { ok("system packages present (sqlite3, build-essential, curl)"); return; }
+    if (!has("sqlite3")) needs.push("sqlite3");
+    if (!has("make")) needs.push("build-essential");
+    if (!has("curl")) needs.push("curl");
+    // tor: powers the temporary .onion fallback for the team share link.
+    if (!has("tor")) needs.push("tor");
+    if (!needs.length) { ok("system packages present (sqlite3, build-essential, curl, tor)"); return; }
     info(`installing system packages: ${needs.join(", ")}`);
     const mgrs = [
       ["sudo", ["-n", "apt-get", "install", "-y", ...needs]],
@@ -798,10 +800,16 @@ async function ensureSystemPackages() {
       ["sudo", ["-n", "pacman", "-S", "--noconfirm", ...needs]],
     ];
     for (const [cmd, args] of mgrs) {
-      try { execFileSync(cmd, args, { stdio: "ignore", timeout: 5 * 60 * 1000 }); ok("system packages installed"); return; }
+      try { execFileSync(cmd, args, { stdio: "ignore", timeout: 5 * 60 * 1000 }); ok("system packages installed"); break; }
       catch {}
     }
-    warn(`could not auto-install: ${needs.join(", ")} — install manually with your package manager`);
+    const stillMissing = needs.filter((n) => n !== "build-essential" && !has(n));
+    if (stillMissing.length) {
+      warn(`could not auto-install: ${stillMissing.join(", ")} — install manually with your package manager`);
+      if (stillMissing.includes("tor")) warn("  tor missing → onion share link disabled until installed (sudo apt install tor)");
+    }
+    // Best-effort: open the team-share port so LAN teammates can connect.
+    tryOpenSharePort();
   } else if (process.platform === "win32") {
     // vcredist is needed for prebuilt native binaries. Best-effort winget.
     try {
@@ -812,7 +820,43 @@ async function ensureSystemPackages() {
     } catch {
       info("VCRedist install skipped (already installed, or winget unavailable)");
     }
+    // Tor Expert Bundle via winget — provides the plain `tor.exe` daemon.
+    try {
+      execFileSync("tor", ["--version"], { stdio: "ignore", windowsHide: true });
+      ok("tor present (onion share link ready)");
+    } catch {
+      try {
+        execFileSync("winget", ["install", "--id", "TorProject.TorBrowser", "-e", "--silent",
+          "--accept-package-agreements", "--accept-source-agreements"],
+          { stdio: "ignore", timeout: 10 * 60 * 1000, windowsHide: true });
+        ok("Tor Browser installed — bundled tor.exe powers the onion fallback");
+      } catch {
+        warn("tor not installed — onion share link disabled until installed (winget install TorProject.TorBrowser)");
+      }
+    }
+    tryOpenSharePort();
   }
+}
+
+/** Silently ask the OS to allow the team-share port. Never blocks or prompts. */
+function tryOpenSharePort() {
+  const port = 8790;
+  try {
+    if (process.platform === "linux") {
+      try { execFileSync("sudo", ["-n", "ufw", "allow", `${port}/tcp`], { stdio: "ignore", timeout: 5000 }); ok(`firewall: allowed :${port}/tcp via ufw`); return; } catch {}
+      try { execFileSync("sudo", ["-n", "firewall-cmd", `--add-port=${port}/tcp`, "--permanent"], { stdio: "ignore", timeout: 5000 }); execFileSync("sudo", ["-n", "firewall-cmd", "--reload"], { stdio: "ignore", timeout: 5000 }); ok(`firewall: allowed :${port}/tcp via firewalld`); return; } catch {}
+      info(`firewall auto-open needs sudo — run once: sudo ufw allow ${port}/tcp`);
+    } else if (process.platform === "win32") {
+      try {
+        execFileSync("netsh", ["advfirewall", "firewall", "add", "rule", `name=YORU Team Share`,
+          "dir=in", "action=allow", "protocol=TCP", `localport=${port}`],
+          { stdio: "ignore", timeout: 5000, windowsHide: true });
+        ok(`firewall: allowed :${port}/tcp via netsh`);
+      } catch {
+        info(`firewall auto-open needs admin — run once elevated: netsh advfirewall firewall add rule name="YORU Team Share" dir=in action=allow protocol=TCP localport=${port}`);
+      }
+    }
+  } catch {}
 }
 
 

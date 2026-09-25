@@ -340,6 +340,20 @@ function ollamaWorkload(messages, mode) {
       numPredict: budgetPredict(model, Math.max(p.numPredict, 300)),
     };
   }
+  // Team-share surface: same fast model, but harder caps so teammates get
+  // sub-3s replies even under contention. Half the context, tighter predict.
+  if (mode === "share") {
+    const tightPredict = Math.min(p.numPredict, 96);
+    return {
+      name: "gpu-share",
+      model: fastModel,
+      temp: 0.55,
+      numGpu: p.numGpu,
+      numThread: p.numThread,
+      numCtx: Math.min(p.numCtx, 1024),
+      numPredict: budgetPredict(fastModel, tightPredict),
+    };
+  }
   // Fast chat path: use the UF variant (qwen-yoru) when enabled, else the plain
   // model. Context stays tight — prompt evaluation is the biggest latency cost.
   return {

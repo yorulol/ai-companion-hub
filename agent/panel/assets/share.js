@@ -51,7 +51,7 @@ async function send(text) {
   const pending = line("assistant", "processing…");
   sendBtn.disabled = true;
   try {
-    const r = await api("/api/chat", { userText: text, mode: "general", scope: SCOPE });
+    const r = await api("/api/chat", { userText: text, mode: "share", scope: SCOPE });
     pending.querySelector(".content").innerHTML = render(r.reply || "No response.");
   } catch (e) {
     pending.querySelector(".content").textContent = `ERROR / ${e.message}`;
