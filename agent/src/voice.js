@@ -163,10 +163,29 @@ export async function joinVoiceChannel(channelIdOrName) {
 
   // Not self-muted / not deafened on purpose: Discord only streams other
   // people's audio to a client that is itself sending packets.
-  const connection = await client.voice.joinChannel(channel, {
-    selfMute: false,
-    selfDeaf: false,
-  });
+  // discord.js-selfbot-v13 often throws "Connection not established within 15
+  // seconds" even after the voice connection is actually live — swallow that
+  // specific error and pick the connection up from client.voice instead.
+  let connection = null;
+  try {
+    connection = await client.voice.joinChannel(channel, {
+      selfMute: false,
+      selfDeaf: false,
+    });
+  } catch (err) {
+    const msg = String(err?.message || "");
+    if (!/not established|timeout|timed out/i.test(msg)) throw err;
+    // Give the gateway a moment to settle, then adopt the live connection.
+    for (let i = 0; i < 10 && !connection; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      connection =
+        client.voice?.connection ||
+        (typeof client.voice?.connections?.get === "function" ? client.voice.connections.get(channel.guild?.id) : null) ||
+        (typeof client.voice?.connections?.first === "function" ? client.voice.connections.first() : null) ||
+        null;
+    }
+    if (!connection) throw err;
+  }
 
   current = {
     channelId: channel.id,
