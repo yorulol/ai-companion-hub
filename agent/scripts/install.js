@@ -765,16 +765,11 @@ async function setupModelsFolder() {
 // ─────────────────────── team share (LAN link for teammates) ───────────────
 async function setupTeamShare() {
   const cfg = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
-  const existing = cfg.match(/^TEAM_SHARE_TOKEN=(.*)$/m)?.[1]?.trim();
-  if (existing) { ok("team-share token already set (edit agent/.env to rotate)"); return; }
-  const token = randomBytes(24).toString("hex");
   await patchEnv({
-    TEAM_SHARE_ENABLED: cfg.match(/^TEAM_SHARE_ENABLED=(.*)$/m)?.[1]?.trim() || "false",
     TEAM_SHARE_PORT: cfg.match(/^TEAM_SHARE_PORT=(.*)$/m)?.[1]?.trim() || "8790",
     TEAM_SHARE_BIND: cfg.match(/^TEAM_SHARE_BIND=(.*)$/m)?.[1]?.trim() || "0.0.0.0",
-    TEAM_SHARE_TOKEN: token,
   });
-  ok("team-share token generated (set TEAM_SHARE_ENABLED=true to expose it)");
+  ok("team share ready — npm start prints your team link (chat + lookup only)");
   const port = 8790;
   if (process.platform === "win32") {
     info(`  open the port on Windows (run once, elevated):`);

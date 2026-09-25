@@ -8,9 +8,9 @@ const render = (t) => {
 };
 
 async function api(path, body) {
-  const res = await fetch(`${path}?token=${encodeURIComponent(TOKEN)}`, {
+  const res = await fetch(path, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-share-token": TOKEN },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body || {}),
   });
   const text = await res.text();
