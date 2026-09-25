@@ -1,13 +1,11 @@
 /**
- * Team-share server. A second, opt-in HTTP surface that lets teammates on
- * your LAN (or via a tunnel/port-forward) use ONLY the terminal chat and
- * the lookup tab, gated behind a shared token.
+ * Team-share server. A second HTTP surface that lets teammates on your LAN
+ * use ONLY the terminal chat and the lookup tab.
  *
  *  - Serves /share.html + assets from agent/panel/
  *  - Proxies exactly two endpoints to the main agent service:
  *      POST /api/chat      → conversation
  *      POST /api/lookup    → identity lookup (protected-row redaction stays on)
- *  - Every request needs ?token=... in the URL or X-Share-Token header.
  *  - Naive per-IP rate limit (60 requests/minute).
  *  - Everything else returns 404 — no owner/files/workspace/settings paths.
  */
@@ -43,11 +41,6 @@ function rateLimited(ip) {
   fresh.push(now);
   rateBuckets.set(ip, fresh);
   return fresh.length > RATE_LIMIT;
-}
-
-function tokenFrom(req) {
-  const url = new URL(req.url, "http://x");
-  return url.searchParams.get("token") || req.headers["x-share-token"] || "";
 }
 
 function json(res, code, body) {
