@@ -20,7 +20,6 @@ import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
-import { supportsOpenClawNode } from "../src/openclaw-runtime.js";
 import { UF, writeUfModelfile, ufModelfileContents } from "../src/uf-model.js";
 
 const run = promisify(execFile);
@@ -372,146 +371,9 @@ function verifyNativeModules() {
   }
 }
 
-// ─────────────────────────────────── openclaw ───────────────────────────────
+// OpenClaw removed — UnoRouter (https://api.unorouter.com/v1) replaces it as
+// the secondary free-model rotator, discovered live at runtime by ai.js.
 
-const VENDOR_DIR = path.join(ROOT, "vendor", "openclaw");
-const OPENCLAW_BIN = path.join(
-  VENDOR_DIR, "node_modules", ".bin",
-  process.platform === "win32" ? "openclaw.cmd" : "openclaw",
-);
-
-/** Real local Ollama models used behind OpenClaw, strongest-first. */
-const OPENCLAW_TIERS = [
-  { min: 22, label: "workstation", model: "qwen2.5:14b-instruct-q4_K_M", ctx: 8192 },
-  { min: 11, label: "high-end", model: "qwen2.5:7b-instruct-q4_K_M", ctx: 8192 },
-  { min: 5, label: "midrange", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 4096 },
-  { min: 3, label: "entry GPU", model: "qwen2.5:3b-instruct-q4_K_M", ctx: 2048 },
-  { min: 0, label: "cpu-only", model: "qwen2.5:1.5b-instruct-q4_K_M", ctx: 2048 },
-];
-
-function pickOpenclawProfile(specs) {
-  const gpu = specs.gpu;
-  let vram = gpu?.vramGb ?? 0;
-  if (gpu?.unified) vram = Math.min(vram, Math.max(0, specs.ramGb - 6));
-  if (!gpu) vram = Math.min(4, Math.max(0, specs.ramGb - 6));
-  const tier = OPENCLAW_TIERS.find((t) => vram >= t.min) || OPENCLAW_TIERS[OPENCLAW_TIERS.length - 1];
-  const threads = Math.max(2, Math.min(specs.cpuCores - 2, 16));
-  return { ...tier, threads: gpu && !gpu.unified && vram >= 4 ? 0 : threads };
-}
-
-async function writeOpenclawConfig(profile) {
-  const cfgDir = path.join(os.homedir(), ".openclaw");
-  const cfgPath = path.join(cfgDir, "openclaw.json");
-  await fs.mkdir(cfgDir, { recursive: true });
-  let existing = {};
-  try { existing = JSON.parse(await fs.readFile(cfgPath, "utf8")); } catch {}
-  const envText = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
-  const envValue = (name) => envText.match(new RegExp(`^${name}=(.*)$`, "m"))?.[1]?.trim() || "";
-  const token = envValue("OPENCLAW_API_KEY") || existing.gateway?.auth?.token || randomBytes(32).toString("hex");
-  const model = envValue("OLLAMA_MODEL") || profile.model;
-  const ollamaUrl = (envValue("OLLAMA_URL") || "http://127.0.0.1:11434").replace(/\/$/, "");
-  const merged = {
-    ...existing,
-    gateway: {
-      ...(existing.gateway || {}),
-      mode: "local",
-      port: existing.gateway?.port || 18789,
-      bind: "loopback",
-      auth: { ...(existing.gateway?.auth || {}), mode: "token", token },
-      http: {
-        ...(existing.gateway?.http || {}),
-        endpoints: { ...(existing.gateway?.http?.endpoints || {}), chatCompletions: { enabled: true } },
-      },
-    },
-    models: {
-      ...(existing.models || {}),
-      providers: {
-        ...(existing.models?.providers || {}),
-        ollama: {
-          ...(existing.models?.providers?.ollama || {}),
-          baseUrl: ollamaUrl,
-          apiKey: "ollama-local",
-          api: "ollama",
-          models: [{ id: model, name: model, input: ["text"], contextTokens: profile.ctx, params: { num_ctx: profile.ctx, keep_alive: "24h" } }],
-        },
-      },
-    },
-    agents: { ...(existing.agents || {}), defaults: { ...(existing.agents?.defaults || {}), model: { primary: `ollama/${model}` } } },
-  };
-  await fs.writeFile(cfgPath, JSON.stringify(merged, null, 2), "utf8");
-  return { token, port: merged.gateway.port };
-}
-
-function openclawNodeOk() {
-  return supportsOpenClawNode();
-}
-
-async function installOpenclawVendored() {
-  await fs.mkdir(VENDOR_DIR, { recursive: true });
-  const pkg = path.join(VENDOR_DIR, "package.json");
-  try { await fs.access(pkg); } catch {
-    await fs.writeFile(pkg, JSON.stringify({ name: "yoru-openclaw-host", private: true, version: "0.0.0" }, null, 2));
-  }
-  execFileSync("npm", [
-    "install", "--prefix", VENDOR_DIR, "openclaw@latest",
-    "--no-audit", "--no-fund", "--ignore-scripts", "--loglevel=error",
-  ], { stdio: "ignore", timeout: 15 * 60 * 1000, shell: process.platform === "win32" });
-
-  const post = path.join(VENDOR_DIR, "node_modules", "openclaw", "scripts", "postinstall-bundled-plugins.mjs");
-  try {
-    await fs.access(post);
-    execFileSync(process.execPath, [post], {
-      cwd: path.join(VENDOR_DIR, "node_modules", "openclaw"),
-      stdio: "ignore", timeout: 10 * 60 * 1000,
-    });
-  } catch { /* no bundled plugins step — fine */ }
-}
-
-/** Reads OPENCLAW_ENABLED straight from .env (dotenv isn't loaded here). */
-async function openclawEnabled() {
-  const text = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
-  const m = text.match(/^OPENCLAW_ENABLED=(.*)$/m);
-  if (!m) return true; // default on — the gateway is part of the stock stack
-  return !/^(false|0|no|off)\s*$/i.test(m[1].trim());
-}
-
-async function setupOpenclaw(specs) {
-  if (!(await openclawEnabled())) {
-    info("openclaw disabled in .env — skipping");
-    return;
-  }
-  const profile = pickOpenclawProfile(specs);
-  console.log("");
-  console.log(`${C.purple}  openclaw profile ${C.reset}${C.bold}${profile.label}${C.reset}`);
-  console.log(`${C.grey}   model  ${C.reset}${C.green}ollama/${profile.model}${C.reset} ${C.grey}(local)${C.reset}`);
-  console.log(`${C.grey}   tuning ${C.reset}ctx ${profile.ctx} · threads ${profile.threads || "auto"}`);
-  console.log("");
-
-  try {
-    const gateway = await writeOpenclawConfig(profile);
-    await patchEnv({
-      OPENCLAW_AUTOSTART: "true",
-      OPENCLAW_MODEL: "openclaw/default",
-      OPENCLAW_API_KEY: gateway.token,
-      OPENCLAW_GATEWAY_TOKEN: gateway.token,
-      OPENCLAW_BASE_URL: `http://127.0.0.1:${gateway.port}/v1`,
-    });
-    ok("openclaw gateway and authentication settings written");
-  } catch (e) { warn(`could not write openclaw env: ${e.message}`); }
-
-  let installed = true;
-  try { await fs.access(OPENCLAW_BIN); } catch { installed = false; }
-  if (installed) { ok("openclaw already installed"); return; }
-
-  if (!openclawNodeOk()) {
-    warn(`openclaw needs Node 24.16+ or 26.1+ (you're on v${process.versions.node}) — install skipped.`);
-    console.log(`${C.grey}            upgrade Node, then run:  npm run openclaw:setup${C.reset}`);
-    return;
-  }
-  info("installing openclaw locally — one-time, ~30-90s…");
-  try { await installOpenclawVendored(); ok("openclaw installed and tuned"); }
-  catch (e) { warn(`openclaw install failed: ${e.message} — retry with: npm run openclaw:setup`); }
-}
 
 // ──────────────────── dependencies / ffmpeg / speech-to-text ────────────────
 
@@ -946,8 +808,6 @@ async function main() {
   try { await setupUfVariant(); }
   catch (e) { warn(`uf variant setup skipped: ${e.message}`); }
 
-  try { await setupOpenclaw(specs); }
-  catch (e) { warn(`openclaw setup skipped: ${e.message}`); }
 
   console.log("\n" + line());
   console.log(`${C.green}${C.bold}  Setup complete.${C.reset}  ${C.grey}Add your tokens to ${C.reset}agent/.env${C.grey}, then run:${C.reset} ${C.magenta}npm run yoru${C.reset}`);
