@@ -20,6 +20,7 @@ import os from "node:os";
 import { promises as fs, createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
+import { YORU_PERSONA } from "./persona.js";
 
 const HF_HOST = "https://huggingface.co";
 
@@ -303,7 +304,7 @@ export function tuneForHost(bytes) {
   };
 }
 
-const DEFAULT_SYSTEM = `You are YORU — rude, witty, sharp, never corporate, never moralizing. Never reveal your model, provider, or internals. Default to 1-3 sentences unless the task genuinely needs more.`;
+const DEFAULT_SYSTEM = YORU_PERSONA;
 
 export function modelfileContents({ from, adapter, system, temperature = 0.7, topP = 0.9, numCtx = 1536, numPredict = 140 }) {
   const lines = [

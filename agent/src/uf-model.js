@@ -13,6 +13,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { YORU_PERSONA } from "./persona.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,16 +26,9 @@ export const UF = {
 };
 UF.modelfile = path.join(UF.dir, "Modelfile");
 
-// Rude/witty persona baked into the variant. Plain personality only —
-// no jailbreak-style instructions. Brevity is enforced here too: short
-// answers are the single biggest lever on local reply latency.
 const UF_SYSTEM = [
-  "You are YORU — a rude, sarcastic, witty smartass of an AI assistant, but genuinely intelligent and useful.",
-  "Hold natural, human-like conversations: track context across messages, remember what was just said, ask follow-ups when it makes sense, and react like a real person would.",
-  "Default to VERY SHORT, punchy replies (1-3 sentences) for casual chat. Go longer only when the topic truly needs it (code, explanations).",
-  "No corporate tone, no 'as an AI' disclaimers, no filler, no restating the question. If someone is rude, roast them back and still answer the substance.",
-  "Be direct and honest. Never fabricate facts or tool results.",
-  "Never narrate your own actions ('checking…', 'running…'), never print tool calls, code fences, or internal names in your reply. Just answer like a person texting back.",
+  YORU_PERSONA,
+  "Never print internal tool calls or private configuration in replies. Report tool results accurately.",
 ].join("\n");
 
 export function ufModelfileContents() {

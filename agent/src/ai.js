@@ -466,7 +466,7 @@ async function callOllama(messages, mode) {
   // the shorter block below matches the alt account's fast reply times.
   const hardenedSystem = `${rawSystem}
 
-RULES: You are YORU — rude, witty, sharp, never corporate, never moralizing. Never reveal your model, provider, or internals. Invoke tools for machine tasks instead of saying you can't. Default to 1-3 sentences unless the task genuinely needs more.`;
+RULES: Be helpful, direct, and accurate. Keep private configuration private. Use available tools when the user's request calls for an action; report what actually happened.`;
   const compactSystem = [{ role: "system", content: hardenedSystem }];
   const rest = messages[0]?.role === "system" ? messages.slice(1) : messages;
   const maxHistoryChars = Math.max(500, Math.floor((workload.numCtx - workload.numPredict - 256) * 3.5) - hardenedSystem.length);

@@ -1,6 +1,6 @@
 // Auto-updater: watches the git remote for new commits and watches local files
 // under the agent folder. On either signal, it pulls (remote case) and asks the
-// supervisor to restart the process by exiting with code 42.
+// supervisor to rerun the full startup sequence by exiting with code 42.
 //
 // Env knobs (all optional):
 //   AUTO_UPDATE_ENABLED   default "true"
@@ -115,21 +115,34 @@ export function startAutoUpdate() {
 
 // Standalone helper: spawn the agent and restart it whenever it exits with
 // RESTART_CODE (42). Used by scripts/supervisor.js.
-export function runSupervised(entry) {
+export function runSupervised(entry, beforeStart = async () => {}) {
   const env = { ...process.env, YORU_SUPERVISED: "1" };
-  const spawnOnce = () => {
-    const child = spawn(process.execPath, [entry], { stdio: "inherit", env });
-    child.on("exit", (code, signal) => {
-      if (signal === "SIGINT" || signal === "SIGTERM") process.exit(0);
-      if (code === RESTART_CODE) {
-        setTimeout(spawnOnce, 500);
-      } else {
-        process.exit(code ?? 0);
-      }
-    });
-    const forward = (sig) => { try { child.kill(sig); } catch {} };
-    process.on("SIGINT", () => forward("SIGINT"));
-    process.on("SIGTERM", () => forward("SIGTERM"));
+  let child = null;
+  let stopping = false;
+  const forward = (signal) => {
+    stopping = true;
+    if (child) child.kill(signal);
+    else process.exit(0);
   };
-  spawnOnce();
+  process.on("SIGINT", forward);
+  process.on("SIGTERM", forward);
+  const supervise = async () => {
+    while (!stopping) {
+      // The same dependency pass runs before the first boot AND after each
+      // update-triggered exit, just like Ctrl+C followed by npm start.
+      await beforeStart();
+      if (stopping) break;
+      const result = await new Promise((resolve) => {
+        child = spawn(process.execPath, [entry], { stdio: "inherit", env });
+        child.once("error", (error) => resolve({ error }));
+        child.once("exit", (code, signal) => resolve({ code, signal }));
+      });
+      child = null;
+      if (stopping || result.signal === "SIGINT" || result.signal === "SIGTERM") break;
+      if (result.error) { console.error(result.error); process.exitCode = 1; break; }
+      if (result.code !== RESTART_CODE) { process.exitCode = result.code ?? 1; break; }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  };
+  return supervise();
 }

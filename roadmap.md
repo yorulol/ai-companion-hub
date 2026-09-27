@@ -1,5 +1,7 @@
 # Roadmap
 
+- [x] Make GitHub/local update restarts rerun the complete `npm start` startup sequence (including dependency updates).
+- [x] Replace Yoru's old persona everywhere with the merged Nous Research assistant/engineer persona while preserving custom personas.
 - [x] Merge chat + owner panels into ONE panel on ONE localhost port (hub.html on 8788; chat/owner/workspace embedded), full redesign (black/white glossy glass, cursor-following particles, animated dropdowns, glossy buttons, dropdowns layered above content)
 - [x] Provider services (Ollama :11434, OpenClaw :18789, OpenRouter) reachable from the new panel (Services dropdown)
 - [x] Panels auto-owner: loopback requests trusted in server.js; owner gate auto-unlocks; only alt account / Discord bot verify owner ID
