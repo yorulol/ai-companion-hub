@@ -91,7 +91,7 @@ is missing:
 3. `groq`
 4. `openai`
 5. `anthropic`
-6. `openclaw`
+6. `unorouter` — rotates every free model UnoRouter exposes, rescanned every 30s
 7. `ollama` (local, always the last-resort backup)
 
 YORU tries at most ten active free OpenRouter models per message before falling
