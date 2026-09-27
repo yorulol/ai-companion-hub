@@ -160,8 +160,8 @@ const ROUTES = {
   },
 
   "GET /api/providers": async () => {
-    const list = ["openrouter", "unorouter", "ollama", "openai", "anthropic", "groq"];
-    const KEY_REQUIRED = { openrouter: true, unorouter: false, openai: true, anthropic: true, groq: true, ollama: false };
+    const list = ["openrouter", "ollama", "openai", "anthropic", "groq"];
+    const KEY_REQUIRED = { openrouter: true, openai: true, anthropic: true, groq: true, ollama: false };
     return {
       preferred: config.providers.preferred,
       providers: list.map((name) => ({
