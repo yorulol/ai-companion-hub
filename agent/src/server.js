@@ -225,7 +225,6 @@ const ROUTES = {
         openaiEnabled: config.providers.openai.enabled,
         anthropicEnabled: config.providers.anthropic.enabled,
         groqEnabled: config.providers.groq.enabled,
-        unorouterEnabled: config.providers.unorouter.enabled,
       },
       computer: {
         enabled: config.computer.enabled,
