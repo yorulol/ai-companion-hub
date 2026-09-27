@@ -128,10 +128,9 @@ setInterval(health, 15000);
 /* ---------- provider popover ---------- */
 const pill = document.getElementById("pillProvider");
 const pop = document.getElementById("providerPop");
-const PLABEL = { openrouter: "OpenRouter", unorouter: "UnoRouter", ollama: "Ollama", openai: "OpenAI", anthropic: "Anthropic", groq: "Groq" };
+const PLABEL = { openrouter: "OpenRouter", ollama: "Ollama", openai: "OpenAI", anthropic: "Anthropic", groq: "Groq" };
 const PNOTE = {
   openrouter: "Rotates every free model automatically.",
-  unorouter: "Rotates every free UnoRouter model, rescans every 30s. Key optional.",
   ollama: "Local models — no API key needed.",
 };
 
