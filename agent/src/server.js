@@ -245,7 +245,6 @@ const ROUTES = {
       openaiEnabled: "openai",
       anthropicEnabled: "anthropic",
       groqEnabled: "groq",
-      unorouterEnabled: "unorouter",
     };
     for (const [key, name] of Object.entries(map)) {
       if (typeof provider[key] === "boolean") {
