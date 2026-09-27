@@ -3,7 +3,7 @@
  *
  * YORU  -> defaults to Ollama (falls back to the normal provider chain if
  *          Ollama is disabled/unreachable).
- * ACE   -> OpenRouter or OpenClaw (owner's pick), falls back to the chain.
+ * ACE   -> OpenRouter or UnoRouter (owner's pick), falls back to the chain.
  *
  * Both agents share one transcript, take turns, and may act inside the
  * selected project folder (agent/ by default) using

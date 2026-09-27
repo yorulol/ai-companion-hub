@@ -4,9 +4,7 @@ import { startPanels } from "./panels.js";
 import { startShareServer } from "./share-server.js";
 import { startBot } from "./bot.js";
 import { startSelfbot } from "./selfbot.js";
-import { refreshModels } from "./ai.js";
-import { startOpenClaw } from "./openclaw-runner.js";
-import { autotuneOpenClaw } from "./openclaw-autotune.js";
+import { refreshModels, refreshUnoRouterModels } from "./ai.js";
 import { startOllama } from "./ollama-runner.js";
 import { preloadLocalModel } from "./localmodel-runner.js";
 import { refreshLocalModel } from "./ai.js";
@@ -51,22 +49,20 @@ boot.push(waitWithCap(
   20000, "ai"
 ));
 
-// OpenClaw's configured backend is Ollama. Provision the exact model first so
-// the gateway cannot report healthy and then fail its first chat with a 500.
-// Ollama itself starts whenever it's enabled as a provider; the OpenClaw
-// gateway (autotune + start) only runs when OpenClaw is explicitly enabled.
-const ollamaBoot = startOllama().catch((e) => log.warn("ollama", e.message));
-if (config.providers.openclaw.enabled) {
+// UnoRouter: prime the free-model pool at boot, then a background timer
+// rescans every UNOROUTER_REFRESH_SEC seconds (default 30) so unavailable
+// models drop out and new free ones join automatically.
+if (config.providers.unorouter.enabled) {
   boot.push(waitWithCap(
-    ollamaBoot
-      .then(() => autotuneOpenClaw())
-      .catch((e) => log.warn("openclaw", `autotune failed: ${e.message}`))
-      .then(() => startOpenClaw({ autoInstall: true }).catch((e) => log.warn("openclaw", e.message))),
-    60000, "openclaw"
+    refreshUnoRouterModels(true).then((m) => log.ok("unorouter", `${m?.free?.length ?? 0} free UnoRouter models cached`)),
+    20000, "unorouter"
   ));
-} else {
-  boot.push(waitWithCap(ollamaBoot, 20000, "ollama"));
 }
+
+boot.push(waitWithCap(
+  startOllama().catch((e) => log.warn("ollama", e.message)),
+  20000, "ollama"
+));
 
 // Custom-built local model: refresh the active reference and pre-warm it so
 // the first reply after boot is fast. Non-fatal if it can't preload.

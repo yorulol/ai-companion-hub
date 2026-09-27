@@ -642,7 +642,7 @@ export async function ask({ messages, mode = "general", only = null }) {
   if (only) tryProvider(only);
   else {
     tryProvider(P.preferred);
-    ["openrouter", "groq", "openai", "anthropic", "openclaw", "ollama"].forEach(tryProvider);
+    ["openrouter", "unorouter", "groq", "openai", "anthropic", "ollama"].forEach(tryProvider);
   }
 
   const errors = [];
@@ -716,44 +716,55 @@ export async function ask({ messages, mode = "general", only = null }) {
         const reply = await callAnthropic(cfg.model, full);
         return { reply, provider: "anthropic", model: cfg.model };
       }
-      if (name === "openclaw") {
-        const otherEnabled = ["openrouter", "groq", "openai", "anthropic", "ollama"].some((n) => P[n]?.enabled && (n === "ollama" || !!P[n].key));
-        if (openclawDownUntil > Date.now() && otherEnabled) continue;
-        try {
-          const model = resolveOpenClawModel(cfg);
-          const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", model, full);
-          openclawDownUntil = 0;
-          return { reply, provider: "openclaw", model };
-        } catch (err) {
-          const msg = String(err.message || "");
-          const status = Number((msg.match(/ (\d{3}): /) || [])[1] || 0);
-          const unreachable = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
-          if (unreachable || status === 404) {
-            try {
-              const { ensureOpenClaw, getOpenClawFailure, invalidateOpenClawBase } = await import("./openclaw-runner.js");
-              if (status === 404) invalidateOpenClawBase();
-              const ready = await ensureOpenClaw();
-              if (ready) {
-                const model = resolveOpenClawModel(cfg);
-                const reply = await callOpenAIStyle(cfg.base, cfg.key || "openclaw", model, full);
-                openclawDownUntil = 0;
-                return { reply, provider: "openclaw", model };
-              }
-              const reason = getOpenClawFailure();
-              errors.push(`openclaw: ${reason || "gateway not ready"} (run \`npm run openclaw:status\`) — falling back`);
-            } catch {}
-            openclawDownUntil = Date.now() + 30 * 1000;
-            if (!errors.some((error) => error.startsWith("openclaw:"))) {
-              errors.push("openclaw: gateway startup check failed (run `npm run openclaw:status`) — falling back");
-            }
-            continue;
-          }
-          // 500 / 4xx from the gateway itself: model missing or upstream broken.
-          // Park briefly so we fall straight through to Ollama on the next turn.
-          openclawDownUntil = Date.now() + 60 * 1000;
-          errors.push(`openclaw: ${msg.slice(0, 200)}`);
+      if (name === "unorouter") {
+        if (unoDownUntil > Date.now()) continue;
+        await refreshUnoRouterModels();
+        const uniquePool = [...new Set(unoFree)];
+        if (!uniquePool.length) {
+          errors.push("unorouter: no free models currently listed");
+          unoDownUntil = Date.now() + 30 * 1000;
           continue;
         }
+        const offset = uniquePool.length ? unoCursor % uniquePool.length : 0;
+        const pool = [...uniquePool.slice(offset), ...uniquePool.slice(0, offset)];
+        const tried = new Set();
+        let attemptedAny = false;
+        for (const model of pool) {
+          if (tried.size >= cfg.maxAttempts) break;
+          if (tried.has(model) || isUnoParked(model)) continue;
+          tried.add(model);
+          attemptedAny = true;
+          unoCursor = uniquePool.length ? (unoCursor + 1) % uniquePool.length : 0;
+          try {
+            const reply = await callUnoRouter(model, full);
+            unoDownUntil = 0;
+            return { reply, provider: "unorouter", model };
+          } catch (err) {
+            const status = err.status || 0;
+            parkUno(model, status);
+            replaceUnoModel(model);
+            console.warn(`[ai] unorouter ${model} → ${status || "?"} - replaced from reserve, trying next`);
+          }
+        }
+        if (!attemptedAny) {
+          await refreshUnoRouterModels(true);
+          const fresh = unoFree.filter((m) => !tried.has(m) && !isUnoParked(m)).slice(0, cfg.maxAttempts);
+          for (const model of fresh) {
+            try {
+              const reply = await callUnoRouter(model, full);
+              unoDownUntil = 0;
+              return { reply, provider: "unorouter", model };
+            } catch (err) {
+              const status = err.status || 0;
+              parkUno(model, status);
+              replaceUnoModel(model);
+              console.warn(`[ai] unorouter ${model} → ${status || "?"} - replaced from reserve, trying next`);
+            }
+          }
+        }
+        unoDownUntil = Date.now() + 60 * 1000;
+        errors.push(`unorouter: ${tried.size || "all"} free models unavailable`);
+        continue;
       }
       if (name === "ollama") {
         return await callOllama(full, mode);
@@ -777,7 +788,10 @@ export async function providerStatus() {
     openai: P.openai.enabled && !!P.openai.key,
     anthropic: P.anthropic.enabled && !!P.anthropic.key,
     groq: P.groq.enabled && !!P.groq.key,
-    openclaw: P.openclaw.enabled,
+    unorouter: P.unorouter.enabled,
     freeModels: freeModels.length,
+    unoFreeModels: unoFree.length,
   };
 }
+
+export const knownUnoRouterModels = () => ({ free: unoFree, reserve: unoReserve, total: unoCatalogue.length });
