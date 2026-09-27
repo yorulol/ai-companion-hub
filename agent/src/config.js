@@ -205,7 +205,6 @@ const KEY_ENV = {
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   groq: "GROQ_API_KEY",
-  unorouter: "UNOROUTER_API_KEY",
 };
 
 /** Update a provider's API key (persisted to .env). */
