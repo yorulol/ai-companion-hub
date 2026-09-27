@@ -19,26 +19,51 @@ async function tryRun(cmd, args, timeout = 6000) {
   } catch { return false; }
 }
 
-/** Returns { opened: bool, via: string|null } — never throws. */
+async function runOut(cmd, args, timeout = 6000) {
+  try {
+    const { stdout } = await run(cmd, args, { timeout, windowsHide: true });
+    return stdout || "";
+  } catch { return null; }
+}
+
+/** Detect whether the OS firewall is actually active. */
+async function firewallActive() {
+  if (process.platform === "linux") {
+    const ufw = await runOut("ufw", ["status"]);
+    if (ufw && /Status:\s*active/i.test(ufw)) return "ufw";
+    const fwd = await runOut("firewall-cmd", ["--state"]);
+    if (fwd && /running/i.test(fwd)) return "firewalld";
+    const nft = await runOut("nft", ["list", "ruleset"]);
+    if (nft && /chain\s+input/i.test(nft)) return "nftables";
+    return null;
+  }
+  if (process.platform === "win32") {
+    const out = await runOut("netsh", ["advfirewall", "show", "allprofiles", "state"]);
+    if (out && /State\s+ON/i.test(out)) return "netsh";
+    return null;
+  }
+  return null;
+}
+
+/** Returns { opened, via, skipped } — never throws. skipped=true means no firewall to open. */
 export async function openSharePort(port) {
   try {
+    const active = await firewallActive();
+    if (!active) return { opened: false, via: null, skipped: true };
+
     if (process.platform === "linux") {
-      // ufw (Debian/Ubuntu/Parrot/Kali default)
-      if (await tryRun("sudo", ["-n", "ufw", "allow", `${port}/tcp`])) {
+      if (active === "ufw" && await tryRun("sudo", ["-n", "ufw", "allow", `${port}/tcp`])) {
         return { opened: true, via: "ufw" };
       }
-      // firewalld (Fedora/RHEL/CentOS)
-      if (await tryRun("sudo", ["-n", "firewall-cmd", `--add-port=${port}/tcp`])) {
+      if (active === "firewalld" && await tryRun("sudo", ["-n", "firewall-cmd", `--add-port=${port}/tcp`])) {
         return { opened: true, via: "firewalld" };
       }
-      // iptables raw fallback
       if (await tryRun("sudo", ["-n", "iptables", "-I", "INPUT", "-p", "tcp", "--dport", String(port), "-j", "ACCEPT"])) {
         return { opened: true, via: "iptables" };
       }
       return { opened: false, via: null };
     }
     if (process.platform === "win32") {
-      // netsh needs an elevated shell; try anyway — it's harmless if it fails.
       const args = [
         "advfirewall", "firewall", "add", "rule",
         `name=${RULE_NAME}`,
@@ -49,8 +74,7 @@ export async function openSharePort(port) {
       return { opened: false, via: null };
     }
     if (process.platform === "darwin") {
-      // macOS pf rules can't be added atomically from CLI without root; skip.
-      return { opened: false, via: null };
+      return { opened: false, via: null, skipped: true };
     }
   } catch { /* swallow */ }
   return { opened: false, via: null };

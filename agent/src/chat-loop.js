@@ -67,6 +67,9 @@ function safeToolResult(call, result, isOwner) {
 
 function explicitlyRequested(call, text) {
   const value = String(text || "").toLowerCase();
+  // Desktop/system/shell tools: for the owner we let the model decide when to
+  // use them — any request that sounds like a computer action counts.
+  const ownerActionRe = /\b(?:open|launch|start|run|execute|kill|close|install|uninstall|update|upgrade|download|clone|browse|navigate|go to|visit|search|play|pause|type|press|click|move|screenshot|capture|shutdown|reboot|restart|lock|log ?out|volume|brightness|wifi|network|bluetooth|process|task|service|systemctl|apt|pacman|winget|choco|pip|npm|git|curl|wget|ping|nmap|ssh|scp)\b|https?:\/\/|www\.|\.com|\.net|\.org|\.io|\.dev/i;
   const patterns = {
     system_info: /\b(?:system|computer|machine|hardware|pc)\s+(?:info|specs?|details?)\b/,
     list_dir: /\b(?:list|show|open)\b.*\b(?:folder|directory|files?)\b/,
@@ -80,7 +83,13 @@ function explicitlyRequested(call, text) {
     lockdown_status: /\blockdown\b.*\bstatus\b|\bis lockdown\b/,
     lookup: /\b(?:lookup|look up|search|find)\b/,
     list_lookups: /\b(?:list|show)\b.*\blookups?\b/,
-    shell: /\b(?:run|execute)\b.*\b(?:shell|terminal|command)\b/,
+    shell: ownerActionRe,
+    open_url: ownerActionRe,
+    open_app: ownerActionRe,
+    type_text: ownerActionRe,
+    key_press: ownerActionRe,
+    mouse_click: ownerActionRe,
+    screenshot: /\b(?:screenshot|screen ?shot|capture|snap)\b/,
     web_vuln_scan: /\b(?:vuln(?:erability)?|sqli|xss|cve|bug\s*bount|pentest|pen[- ]?test|scan)\b.*\b(?:https?:\/\/|\.com|\.net|\.org|\.io|site|url|domain|target)\b|\bscan\b\s+https?:\/\//i,
     web_vuln_verify: /\b(?:verify|re[- ]?verify|confirm)\b.*\b(?:scan|vuln|finding|last)\b/i,
     web_vuln_report: /\b(?:draft|generate|write|regen(?:erate)?)\b.*\breport/i,
@@ -92,7 +101,9 @@ function explicitlyRequested(call, text) {
 function toolInstructionsFor(text, isOwner) {
   const value = String(text || "");
   const publicLookup = /\b(?:lookup|look up|search|find)\b/i.test(value);
-  const ownerAction = /\b(?:system|computer|machine|hardware|pc)\s+(?:info|specs?|details?)\b|\b(?:list|read|write|create|save|move|rename|remove|delete|open)\b.*\b(?:file|folder|directory)\b|\b(?:malware|virus)\s+scan\b|\b(?:lockdown|killswitch|jumpstart)\b|\b(?:run|execute)\b.*\b(?:shell|terminal|command)\b|\b(?:vuln(?:erability)?|sqli|xss|cve|bug\s*bount|pentest|pen[- ]?test|scan)\b.*\b(?:https?:\/\/|\.com|\.net|\.org|\.io|site|url|domain|target)\b/i.test(value);
+  // Owner gets the full tool spec on any message that even smells like an
+  // action — the model decides which tool fits (open_url, open_app, shell…).
+  const ownerAction = /\b(?:open|launch|start|run|execute|kill|close|install|uninstall|update|upgrade|download|clone|browse|navigate|go to|visit|play|type|press|click|screenshot|shutdown|reboot|restart|lock|systemctl|apt|pacman|winget|choco|pip|npm|git|curl|wget|ssh|list|read|write|create|save|move|rename|remove|delete|scan|lockdown|killswitch|jumpstart|system|computer|machine|hardware|pc|file|folder|directory)\b|https?:\/\/|www\.|\.com|\.net|\.org|\.io|\.dev/i.test(value);
   if (isOwner && (publicLookup || ownerAction)) return toolSpecFor(true);
   if (publicLookup) return toolSpecFor(false);
   return "No tool is needed for this message. Have a normal conversation and never output tool syntax.";

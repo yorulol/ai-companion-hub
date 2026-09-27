@@ -160,11 +160,12 @@ export async function startShareServer() {
       log.ok("share", `team link: ${url}`);
       if (ips.length > 1) log.dim("share", `also on: ${ips.slice(1).map((ip) => `http://${ip}:${share.port}/`).join(", ")}`);
 
-      // 1) Auto-open the LAN port (best-effort, no admin prompts).
+      // 1) Auto-open the LAN port (best-effort, no admin prompts). Stay silent
+      //    when no active firewall was detected — nothing to open, nothing to say.
       try {
         const fw = await openSharePort(share.port);
         if (fw.opened) log.ok("share", `firewall port opened via ${fw.via}`);
-        else log.dim("share", `firewall auto-open skipped — if teammates can't connect: ${firewallHint(share.port)}`);
+        else if (!fw.skipped) log.dim("share", `firewall closed — if teammates can't connect: ${firewallHint(share.port)}`);
       } catch { /* never block startup */ }
 
       // 2) Bring up a temporary Tor onion so teammates still get in when the
