@@ -631,10 +631,6 @@ export async function providerStatus() {
     openai: P.openai.enabled && !!P.openai.key,
     anthropic: P.anthropic.enabled && !!P.anthropic.key,
     groq: P.groq.enabled && !!P.groq.key,
-    unorouter: P.unorouter.enabled,
     freeModels: freeModels.length,
-    unoFreeModels: unoFree.length,
   };
 }
-
-export const knownUnoRouterModels = () => ({ free: unoFree, reserve: unoReserve, total: unoCatalogue.length });
