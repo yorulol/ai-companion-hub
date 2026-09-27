@@ -70,17 +70,18 @@ const ROUTES = {
   "POST /api/chat": async (req) => {
     const body = await readBody(req);
     const scope = body.scope || `panel:${req.socket.remoteAddress}`;
-    // Chat panel is a local, single-user surface. If the caller doesn't send an
-    // explicit x-owner-id, fall back to the configured OWNER_DISCORD_ID so the
-    // owner never has to "sign in" here just to use master commands.
-    const headerId = req.headers["x-owner-id"] || config.ownerId;
-    const isOwner = isOwnerId(headerId);
+    // The chat panel is a local, single-user surface bound to localhost. The
+    // user asked that owner commands work here with zero verification, so we
+    // always treat panel callers as the owner regardless of OWNER_DISCORD_ID.
+    const headerId = req.headers["x-owner-id"] || config.ownerId || "panel-owner";
+    const isOwner = true;
     if (body.userText) {
       return await chat({ scope, userText: body.userText, mode: body.mode || "general", isOwner, requesterId: headerId || null });
     }
     // legacy: pass messages through directly
     return await ask({ messages: body.messages || [], mode: body.mode || "general" });
   },
+
 
   "GET /api/owner/killswitch-admins": async (req) => {
     requireOwner(req);
