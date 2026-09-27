@@ -108,11 +108,15 @@ export const config = {
       model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
       base: "https://api.groq.com/openai/v1",
     },
-    openclaw: {
-      enabled: bool(process.env.OPENCLAW_ENABLED, false),
-      key: process.env.OPENCLAW_API_KEY || "",
-      model: process.env.OPENCLAW_MODEL || "openclaw/default",
-      base: (process.env.OPENCLAW_BASE_URL || "http://127.0.0.1:18789/v1").replace(/\/$/, ""),
+    unorouter: {
+      enabled: bool(process.env.UNOROUTER_ENABLED, true),
+      key: process.env.UNOROUTER_API_KEY || "",
+      base: (process.env.UNOROUTER_BASE_URL || "https://api.unorouter.com/v1").replace(/\/$/, ""),
+      siteUrl: process.env.UNOROUTER_SITE_URL || "http://localhost:8787",
+      appName: process.env.UNOROUTER_APP_NAME || "YORU Agent",
+      // How often to rescan UnoRouter for new free models (seconds).
+      refreshSec: integer(process.env.UNOROUTER_REFRESH_SEC, 30, 10, 3600),
+      maxAttempts: integer(process.env.UNOROUTER_MAX_ATTEMPTS, 10, 1, 15),
     },
   },
 
