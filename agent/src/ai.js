@@ -535,7 +535,7 @@ export async function ask({ messages, mode = "general", only = null }) {
   if (only) tryProvider(only);
   else {
     tryProvider(P.preferred);
-    ["openrouter", "unorouter", "groq", "openai", "anthropic", "ollama"].forEach(tryProvider);
+    ["openrouter", "groq", "openai", "anthropic", "ollama"].forEach(tryProvider);
   }
 
   const errors = [];
