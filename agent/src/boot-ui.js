@@ -93,7 +93,6 @@ function providerRows() {
     ["openai", `${stripAnsi(on(p.openai.enabled))}  ${stripAnsi(key(!!p.openai.key))}`],
     ["anthropic", `${stripAnsi(on(p.anthropic.enabled))}  ${stripAnsi(key(!!p.anthropic.key))}`],
     ["groq", `${stripAnsi(on(p.groq.enabled))}  ${stripAnsi(key(!!p.groq.key))}`],
-    ["unorouter", `${stripAnsi(on(p.unorouter.enabled))}  ${stripAnsi(key(!!p.unorouter.key))}  ${p.unorouter.base}`],
   ];
 }
 
