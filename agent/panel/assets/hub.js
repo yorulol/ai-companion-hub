@@ -37,7 +37,6 @@ document.querySelectorAll(".tab-group > summary").forEach((s) =>
 /* ---------- services ---------- */
 const SERVICE_URLS = {
   ollama: "http://localhost:11434",
-  unorouter: "https://api.unorouter.com",
   openrouter: "https://openrouter.ai",
 };
 document.querySelectorAll("[data-service]").forEach((b) =>

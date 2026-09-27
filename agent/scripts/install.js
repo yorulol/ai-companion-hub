@@ -371,8 +371,6 @@ function verifyNativeModules() {
   }
 }
 
-// OpenClaw removed — UnoRouter (https://api.unorouter.com/v1) replaces it as
-// the secondary free-model rotator, discovered live at runtime by ai.js.
 
 
 // ──────────────────── dependencies / ffmpeg / speech-to-text ────────────────

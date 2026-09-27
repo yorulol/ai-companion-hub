@@ -8,7 +8,7 @@
  *       served at /chat (index.html) and /owner (owner.html) because the hub
  *       embeds them, and they work standalone too.
  *   - WorkSpace    (default 8790) -> agent/panel/workspace.html
- *       Multi-agent panel where YORU (Ollama) and ACE (OpenRouter/UnoRouter)
+ *       Multi-agent panel where YORU (Ollama) and ACE (OpenRouter)
  *       collaborate. Also embedded inside the main panel.
  *
  * Every /api/* call is proxied to the same-origin agent service on PORT.

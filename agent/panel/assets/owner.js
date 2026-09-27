@@ -177,7 +177,7 @@ async function loadSettings() {
   document.getElementById("preferred").value = p.preferred || "openrouter";
   const checks = document.getElementById("providerChecks");
   const list = [
-    ["openrouterEnabled", "OpenRouter"], ["unorouterEnabled", "UnoRouter"],
+    ["openrouterEnabled", "OpenRouter"],
     ["ollamaEnabled", "Ollama"], ["groqEnabled", "Groq"],
     ["openaiEnabled", "OpenAI"], ["anthropicEnabled", "Anthropic"],
   ];
