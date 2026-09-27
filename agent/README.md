@@ -71,7 +71,7 @@ native modules if the Node version differs from the one that built them.
 
 | Piece            | What it does                                                   |
 | ---------------- | -------------------------------------------------------------- |
-| **AI router**    | OpenRouter (every free model, rotates on failure) → Groq → OpenAI → Anthropic → OpenClaw → Ollama. Every provider toggled by `_ENABLED` in `.env`. |
+| **AI router**    | OpenRouter (every free model, rotates on failure) → UnoRouter (every free model, rescanned every 30s) → Groq → OpenAI → Anthropic → Ollama. Every provider toggled by `_ENABLED` in `.env`. |
 | **Discord bot**  | 250+ built-in commands, per-server prefix + admin/mod role gating, custom commands, auto-responder, welcome/goodbye, reaction roles. |
 | **Selfbot**      | Alt-account ping responder + guild listing. AGAINST DISCORD ToS — use an alt.  |
 | **Computer tools** | System info, file create/read/move/delete, malware scan, encrypt-lockdown with decryption key. |
