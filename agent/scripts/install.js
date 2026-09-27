@@ -652,7 +652,10 @@ async function ensureSystemPackages() {
     if (!has("curl")) needs.push("curl");
     // tor: powers the temporary .onion fallback for the team share link.
     if (!has("tor")) needs.push("tor");
-    if (!needs.length) { ok("system packages present (sqlite3, build-essential, curl, tor)"); return; }
+    // xdotool + scrot: desktop control (typing/keys/window focus) and screenshots.
+    if (!has("xdotool")) needs.push("xdotool");
+    if (!has("scrot")) needs.push("scrot");
+    if (!needs.length) { ok("system packages present (sqlite3, build-essential, curl, tor, xdotool, scrot)"); return; }
     info(`installing system packages: ${needs.join(", ")}`);
     const mgrs = [
       ["sudo", ["-n", "apt-get", "install", "-y", ...needs]],
