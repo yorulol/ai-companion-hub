@@ -14,10 +14,7 @@
     "yoru": "node scripts/supervisor.js",
     "start": "node scripts/supervisor.js",
     "start:once": "node src/index.js",
-    "dev": "node --watch src/index.js",
-    "openclaw:setup": "node scripts/openclaw-setup.js",
-    "openclaw:start": "node -e \"import('./src/openclaw-runner.js').then(m => m.startOpenClaw({ force: true, autoInstall: true }))\"",
-    "openclaw:status": "node scripts/openclaw-status.js"
+    "dev": "node --watch src/index.js"
   },
   "engines": {
     "node": ">=20"

@@ -402,7 +402,7 @@ add({ name: "providers", category: "info", description: "Show which AI providers
         { name: "OpenAI", value: status(s.openai), inline: true },
         { name: "Anthropic", value: status(s.anthropic), inline: true },
         { name: "Groq", value: status(s.groq), inline: true },
-        { name: "OpenClaw", value: status(s.openclaw), inline: true },
+        { name: "UnoRouter", value: `${status(s.unorouter)} · ${s.unoFreeModels || 0} free models`, inline: true },
       ],
     })] });
   } });

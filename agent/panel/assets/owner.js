@@ -177,9 +177,9 @@ async function loadSettings() {
   document.getElementById("preferred").value = p.preferred || "openrouter";
   const checks = document.getElementById("providerChecks");
   const list = [
-    ["openrouterEnabled", "OpenRouter"], ["ollamaEnabled", "Ollama"],
-    ["groqEnabled", "Groq"], ["openaiEnabled", "OpenAI"], ["anthropicEnabled", "Anthropic"],
-    ["openclawEnabled", "OpenClaw"],
+    ["openrouterEnabled", "OpenRouter"], ["unorouterEnabled", "UnoRouter"],
+    ["ollamaEnabled", "Ollama"], ["groqEnabled", "Groq"],
+    ["openaiEnabled", "OpenAI"], ["anthropicEnabled", "Anthropic"],
   ];
   checks.innerHTML = list.map(([k, label]) =>
     `<label><input type="checkbox" data-key="${k}" ${p[k] ? "checked" : ""}/> ${label}</label>`,
