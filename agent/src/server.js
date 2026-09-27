@@ -160,8 +160,8 @@ const ROUTES = {
   },
 
   "GET /api/providers": async () => {
-    const list = ["openrouter", "unorouter", "ollama", "openai", "anthropic", "groq"];
-    const KEY_REQUIRED = { openrouter: true, unorouter: false, openai: true, anthropic: true, groq: true, ollama: false };
+    const list = ["openrouter", "ollama", "openai", "anthropic", "groq"];
+    const KEY_REQUIRED = { openrouter: true, openai: true, anthropic: true, groq: true, ollama: false };
     return {
       preferred: config.providers.preferred,
       providers: list.map((name) => ({
@@ -225,7 +225,6 @@ const ROUTES = {
         openaiEnabled: config.providers.openai.enabled,
         anthropicEnabled: config.providers.anthropic.enabled,
         groqEnabled: config.providers.groq.enabled,
-        unorouterEnabled: config.providers.unorouter.enabled,
       },
       computer: {
         enabled: config.computer.enabled,
@@ -246,7 +245,6 @@ const ROUTES = {
       openaiEnabled: "openai",
       anthropicEnabled: "anthropic",
       groqEnabled: "groq",
-      unorouterEnabled: "unorouter",
     };
     for (const [key, name] of Object.entries(map)) {
       if (typeof provider[key] === "boolean") {
@@ -405,7 +403,7 @@ const ROUTES = {
     return { items: listReactionRoles(id) };
   },
 
-  // ---- WorkSpace (multi-agent: YORU on Ollama + ACE on OpenRouter/UnoRouter) ----
+  // ---- WorkSpace (multi-agent: YORU on Ollama + ACE on OpenRouter) ----
   "GET /api/workspace/info": async () => workspaceInfo(),
   "POST /api/workspace/run": async (req) => {
     const b = await readBody(req);

@@ -371,8 +371,6 @@ function verifyNativeModules() {
   }
 }
 
-// OpenClaw removed — UnoRouter (https://api.unorouter.com/v1) replaces it as
-// the secondary free-model rotator, discovered live at runtime by ai.js.
 
 
 // ──────────────────── dependencies / ffmpeg / speech-to-text ────────────────
@@ -732,6 +730,14 @@ async function main() {
 
   checkNode();
   await ensureDependencies();
+  // Auto-update any dependencies with newer versions inside their semver range.
+  // Skipped silently in the postinstall phase — npm is already mid-install then.
+  if (process.env.npm_lifecycle_event !== "postinstall") {
+    try {
+      const { updateDependencies } = await import("./update-deps.js");
+      await updateDependencies();
+    } catch (e) { warn(`dependency update check skipped: ${e.message}`); }
+  }
   verifyNativeModules();
 
 

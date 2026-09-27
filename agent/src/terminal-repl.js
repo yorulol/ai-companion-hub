@@ -80,7 +80,6 @@ function detectProviders() {
   const pr = config.providers || {};
   if (pr.openrouter?.enabled && pr.openrouter?.key) enabled.push("openrouter");
   if (pr.ollama?.enabled) enabled.push("ollama");
-  if (pr.unorouter?.enabled) enabled.push("unorouter");
   return enabled;
 }
 

@@ -124,113 +124,6 @@ const isParked = (id) => {
 
 export const knownModels = () => ({ free: freeModels, reserve: reserveModels, coding: codingModels, total: catalogueModels.length });
 
-/* ─────────── UnoRouter free-model rotator (mirrors OpenRouter behaviour) ─────────── */
-let unoFree = [];
-let unoReserve = [];
-let unoCatalogue = [];
-let unoCursor = 0;
-let unoDownUntil = 0;
-let unoLastFetch = 0;
-let unoRefreshPromise = null;
-const unoCooldown = new Map();
-const isUnoParked = (id) => {
-  const until = unoCooldown.get(id);
-  if (!until) return false;
-  if (Date.now() >= until) { unoCooldown.delete(id); return false; }
-  return true;
-};
-const parkUno = (id, status) => {
-  const ms = COOLDOWN_MS[status] ?? 5 * 60 * 1000;
-  unoCooldown.set(id, Date.now() + ms);
-};
-
-function rebuildUnoPool(ids) {
-  const available = ids.filter((id) => !isUnoParked(id));
-  const priorityBuckets = [...new Set(available.map(rank))].sort((a, b) => a - b);
-  const rotated = priorityBuckets.flatMap((bucket) => shuffled(available.filter((id) => rank(id) === bucket)));
-  unoFree = rotated.slice(0, ACTIVE_POOL_SIZE);
-  unoReserve = rotated.slice(ACTIVE_POOL_SIZE);
-  unoCursor = 0;
-}
-function replaceUnoModel(failed) {
-  const idx = unoFree.indexOf(failed);
-  if (idx === -1) return;
-  const nextIdx = unoReserve.findIndex((id) => !isUnoParked(id));
-  if (nextIdx === -1) unoFree.splice(idx, 1);
-  else {
-    const [replacement] = unoReserve.splice(nextIdx, 1);
-    unoFree.splice(idx, 1, replacement);
-  }
-}
-
-/** Poll UnoRouter every UNOROUTER_REFRESH_SEC (default 30s) for the live free-model list. */
-export async function refreshUnoRouterModels(force = false) {
-  const p = config.providers.unorouter;
-  if (!p.enabled) return { free: [] };
-  const refreshMs = p.refreshSec * 1000;
-  if (!force && Date.now() - unoLastFetch < refreshMs && unoFree.length) return { free: unoFree };
-  if (unoRefreshPromise) return unoRefreshPromise;
-  unoRefreshPromise = (async () => {
-    try {
-      const res = await fetch(`${p.base}/models`, {
-        headers: p.key ? { Authorization: `Bearer ${p.key}` } : {},
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!res.ok) throw new Error(`models ${res.status}`);
-      const body = await res.json();
-      const rows = body?.data || body?.models || [];
-      const ids = rows
-        .filter((m) => {
-          const id = String(m.id || m.name || "");
-          const pr = m.pricing || {};
-          const promptCost = Number(pr.prompt ?? pr.input ?? 0);
-          const completionCost = Number(pr.completion ?? pr.output ?? 0);
-          const flaggedFree = m.free === true || m.tier === "free" || /\bfree\b/i.test(id) || id.endsWith(":free");
-          return flaggedFree || (promptCost === 0 && completionCost === 0);
-        })
-        .map((m) => String(m.id || m.name))
-        .filter(Boolean);
-      unoCatalogue = [...new Set(ids)].sort((a, b) => rank(a) - rank(b));
-      const live = new Set(unoCatalogue);
-      for (const model of unoCooldown.keys()) if (!live.has(model)) unoCooldown.delete(model);
-      rebuildUnoPool(unoCatalogue);
-      unoLastFetch = Date.now();
-      console.log(`[ai] UnoRouter pool rotated: ${unoFree.length} active, ${unoReserve.length} reserve, ${unoCatalogue.length} free total`);
-    } catch (err) {
-      console.warn("[ai] could not refresh UnoRouter models:", err.message);
-    }
-    return { free: unoFree };
-  })().finally(() => { unoRefreshPromise = null; });
-  return unoRefreshPromise;
-}
-// Background 30-second rescan so removed listings disappear and new free
-// models enter rotation without waiting for the next chat request.
-setInterval(() => refreshUnoRouterModels(true).catch(() => {}),
-  Math.max(10, config.providers.unorouter.refreshSec) * 1000).unref?.();
-
-async function callUnoRouter(model, messages) {
-  const p = config.providers.unorouter;
-  const res = await fetch(`${p.base}/chat/completions`, {
-    method: "POST",
-    headers: {
-      ...(p.key ? { Authorization: `Bearer ${p.key}` } : {}),
-      "content-type": "application/json",
-      "HTTP-Referer": p.siteUrl,
-      "X-Title": p.appName,
-    },
-    body: JSON.stringify({ model, messages, temperature: 0.7 }),
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    const err = new Error(`UnoRouter ${res.status}: ${detail.slice(0, 200)}`);
-    err.status = res.status;
-    throw err;
-  }
-  const body = await res.json();
-  const text = body?.choices?.[0]?.message?.content?.trim();
-  if (!text) throw new Error("Empty response");
-  return text;
-}
 
 export async function ollamaModels() {
   const p = config.providers.ollama;
@@ -642,7 +535,7 @@ export async function ask({ messages, mode = "general", only = null }) {
   if (only) tryProvider(only);
   else {
     tryProvider(P.preferred);
-    ["openrouter", "unorouter", "groq", "openai", "anthropic", "ollama"].forEach(tryProvider);
+    ["openrouter", "groq", "openai", "anthropic", "ollama"].forEach(tryProvider);
   }
 
   const errors = [];
@@ -716,56 +609,6 @@ export async function ask({ messages, mode = "general", only = null }) {
         const reply = await callAnthropic(cfg.model, full);
         return { reply, provider: "anthropic", model: cfg.model };
       }
-      if (name === "unorouter") {
-        if (unoDownUntil > Date.now()) continue;
-        await refreshUnoRouterModels();
-        const uniquePool = [...new Set(unoFree)];
-        if (!uniquePool.length) {
-          errors.push("unorouter: no free models currently listed");
-          unoDownUntil = Date.now() + 30 * 1000;
-          continue;
-        }
-        const offset = uniquePool.length ? unoCursor % uniquePool.length : 0;
-        const pool = [...uniquePool.slice(offset), ...uniquePool.slice(0, offset)];
-        const tried = new Set();
-        let attemptedAny = false;
-        for (const model of pool) {
-          if (tried.size >= cfg.maxAttempts) break;
-          if (tried.has(model) || isUnoParked(model)) continue;
-          tried.add(model);
-          attemptedAny = true;
-          unoCursor = uniquePool.length ? (unoCursor + 1) % uniquePool.length : 0;
-          try {
-            const reply = await callUnoRouter(model, full);
-            unoDownUntil = 0;
-            return { reply, provider: "unorouter", model };
-          } catch (err) {
-            const status = err.status || 0;
-            parkUno(model, status);
-            replaceUnoModel(model);
-            console.warn(`[ai] unorouter ${model} → ${status || "?"} - replaced from reserve, trying next`);
-          }
-        }
-        if (!attemptedAny) {
-          await refreshUnoRouterModels(true);
-          const fresh = unoFree.filter((m) => !tried.has(m) && !isUnoParked(m)).slice(0, cfg.maxAttempts);
-          for (const model of fresh) {
-            try {
-              const reply = await callUnoRouter(model, full);
-              unoDownUntil = 0;
-              return { reply, provider: "unorouter", model };
-            } catch (err) {
-              const status = err.status || 0;
-              parkUno(model, status);
-              replaceUnoModel(model);
-              console.warn(`[ai] unorouter ${model} → ${status || "?"} - replaced from reserve, trying next`);
-            }
-          }
-        }
-        unoDownUntil = Date.now() + 60 * 1000;
-        errors.push(`unorouter: ${tried.size || "all"} free models unavailable`);
-        continue;
-      }
       if (name === "ollama") {
         return await callOllama(full, mode);
       }
@@ -788,10 +631,6 @@ export async function providerStatus() {
     openai: P.openai.enabled && !!P.openai.key,
     anthropic: P.anthropic.enabled && !!P.anthropic.key,
     groq: P.groq.enabled && !!P.groq.key,
-    unorouter: P.unorouter.enabled,
     freeModels: freeModels.length,
-    unoFreeModels: unoFree.length,
   };
 }
-
-export const knownUnoRouterModels = () => ({ free: unoFree, reserve: unoReserve, total: unoCatalogue.length });
