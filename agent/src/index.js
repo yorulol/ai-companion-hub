@@ -49,15 +49,6 @@ boot.push(waitWithCap(
   20000, "ai"
 ));
 
-// UnoRouter: prime the free-model pool at boot, then a background timer
-// rescans every UNOROUTER_REFRESH_SEC seconds (default 30) so unavailable
-// models drop out and new free ones join automatically.
-if (config.providers.unorouter.enabled) {
-  boot.push(waitWithCap(
-    refreshUnoRouterModels(true).then((m) => log.ok("unorouter", `${m?.free?.length ?? 0} free UnoRouter models cached`)),
-    20000, "unorouter"
-  ));
-}
 
 boot.push(waitWithCap(
   startOllama().catch((e) => log.warn("ollama", e.message)),
