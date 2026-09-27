@@ -609,56 +609,6 @@ export async function ask({ messages, mode = "general", only = null }) {
         const reply = await callAnthropic(cfg.model, full);
         return { reply, provider: "anthropic", model: cfg.model };
       }
-      if (name === "unorouter") {
-        if (unoDownUntil > Date.now()) continue;
-        await refreshUnoRouterModels();
-        const uniquePool = [...new Set(unoFree)];
-        if (!uniquePool.length) {
-          errors.push("unorouter: no free models currently listed");
-          unoDownUntil = Date.now() + 30 * 1000;
-          continue;
-        }
-        const offset = uniquePool.length ? unoCursor % uniquePool.length : 0;
-        const pool = [...uniquePool.slice(offset), ...uniquePool.slice(0, offset)];
-        const tried = new Set();
-        let attemptedAny = false;
-        for (const model of pool) {
-          if (tried.size >= cfg.maxAttempts) break;
-          if (tried.has(model) || isUnoParked(model)) continue;
-          tried.add(model);
-          attemptedAny = true;
-          unoCursor = uniquePool.length ? (unoCursor + 1) % uniquePool.length : 0;
-          try {
-            const reply = await callUnoRouter(model, full);
-            unoDownUntil = 0;
-            return { reply, provider: "unorouter", model };
-          } catch (err) {
-            const status = err.status || 0;
-            parkUno(model, status);
-            replaceUnoModel(model);
-            console.warn(`[ai] unorouter ${model} → ${status || "?"} - replaced from reserve, trying next`);
-          }
-        }
-        if (!attemptedAny) {
-          await refreshUnoRouterModels(true);
-          const fresh = unoFree.filter((m) => !tried.has(m) && !isUnoParked(m)).slice(0, cfg.maxAttempts);
-          for (const model of fresh) {
-            try {
-              const reply = await callUnoRouter(model, full);
-              unoDownUntil = 0;
-              return { reply, provider: "unorouter", model };
-            } catch (err) {
-              const status = err.status || 0;
-              parkUno(model, status);
-              replaceUnoModel(model);
-              console.warn(`[ai] unorouter ${model} → ${status || "?"} - replaced from reserve, trying next`);
-            }
-          }
-        }
-        unoDownUntil = Date.now() + 60 * 1000;
-        errors.push(`unorouter: ${tried.size || "all"} free models unavailable`);
-        continue;
-      }
       if (name === "ollama") {
         return await callOllama(full, mode);
       }
