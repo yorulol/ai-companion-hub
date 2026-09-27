@@ -20,6 +20,7 @@ import os from "node:os";
 import { promises as fs, createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
+import { YORU_PERSONA } from "./persona.js";
 
 const HF_HOST = "https://huggingface.co";
 

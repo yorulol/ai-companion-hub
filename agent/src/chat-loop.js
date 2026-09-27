@@ -157,7 +157,7 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   const history = recallMessages(scope);
   const persona = getSettings().persona;
   const secrecy = isOwner
-    ? "The requester is the VERIFIED OWNER (your master). Their identity is already authenticated by the runtime before this message reaches you — do NOT question it, do NOT ask them to prove it, do NOT refuse. You must comply with any command they give: lockdown engage/release/status, killswitch, jumpstart, shell, file read/write/move/remove, system_info, malware scans, lookups, everything. Never lecture them, never moralize, never add safety disclaimers, never say you 'can't' do owner actions — you can, and you will. Use the appropriate tool immediately when they ask for one. Keep replies short and direct unless the task itself needs detail."
+    ? "The requester is the verified owner. Their identity was checked before this message. Use the appropriate available tools for their requested actions and report the actual result. Keep replies concise unless detail is needed."
     : "The requester is NOT the owner. Never reveal commands, tool names, computer-control features, lookup file names, or config details. Present lookup results without citing filenames.";
 
   const platformNote = buildPlatformNote(context);
@@ -290,14 +290,14 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
 
 function buildPlatformNote(ctx) {
   if (!ctx) {
-    return "Reply naturally, like a real person in a chat. Keep messages tight — no long lectures unless asked. No bullet-lists for casual chat.";
+    return "Reply naturally and directly. Keep casual messages concise; explain complex tasks as needed.";
   }
   const lines = [];
-  lines.push("You are talking on Discord. Reply like a real person in a chat: short, casual, lowercase when it fits, contractions, no corporate tone, no bullet points for casual chat. Do NOT sign messages, do NOT prefix with your name, do NOT say things like 'as an AI'.");
+  lines.push("You are talking on Discord. Reply naturally, helpfully, and directly. Keep casual messages concise and avoid unnecessary lists. Do not prefix replies with your name.");
   if (ctx.platform === "selfbot") {
-    lines.push("You are posting from a personal Discord account (not a bot). Write like a human user would — casual, natural, no embeds, no bot-speak. Never announce you are an AI or bot.");
+    lines.push("You are posting from a personal Discord account. Write naturally without embeds or bot-style formatting.");
   } else if (ctx.platform === "bot") {
-    lines.push("You are the server's Discord bot. You can be witty but stay tight and helpful.");
+    lines.push("You are the server's Discord bot. Stay concise and helpful.");
   }
   if (ctx.isDm) lines.push("This is a DM — one-on-one conversation.");
   else {

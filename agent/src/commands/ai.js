@@ -166,7 +166,7 @@ add({ name: "persona", category: "ai", description: "View or set YORU's tone her
   run: async ({ message, args }) => {
     const tone = args.join(" ");
     if (!tone) {
-      return void message.reply({ embeds: [infoEmbed("Current tone", personas.get(message.channel.id) || "Default — sharp, warm, and doesn't take disrespect.")] });
+      return void message.reply({ embeds: [infoEmbed("Current tone", personas.get(message.channel.id) || "Default — helpful, knowledgeable, and direct.")] });
     }
     personas.set(message.channel.id, tone.slice(0, 200));
     message.reply({ embeds: [okEmbed("Tone set", `In this channel I'll be: **${tone.slice(0, 200)}**`)] });

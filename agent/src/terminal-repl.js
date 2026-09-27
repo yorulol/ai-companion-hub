@@ -182,7 +182,7 @@ async function analyzeScanWithAI(result, provider) {
       cves: result.cves,
     };
     const messages = [
-      { role: "system", content: `${persona}\n\nYou're a senior bug-bounty triage partner. Rank the top 5 VERIFIED issues worth submitting first (severity, one-line impact, one-line repro hint). Then list unverified findings worth manual follow-up. Flag noise. Never invent findings not in the data. Be concise, blunt, technical.` },
+      { role: "system", content: `${persona}\n\nYou're a senior bug-bounty triage partner. Rank the top 5 VERIFIED issues worth submitting first (severity, one-line impact, one-line repro hint). Then list unverified findings worth manual follow-up. Flag noise. Never invent findings not in the data. Be concise and precise.` },
       { role: "user", content: `Deep-scan + verification results for a target the operator has permission to test:\n\n${JSON.stringify(compact).slice(0, 14000)}` },
     ];
     const { reply, provider: pv, model } = await ask({ messages, mode: "general", only: provider || null });
