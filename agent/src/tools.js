@@ -14,31 +14,37 @@ import { runFullScan, reverifyHost, regenerateReports, listVulns } from "./scan-
 import { config } from "./config.js";
 
 const OWNER_TOOL_SPEC = `
-You have access to real tools on the user's computer. To use one, reply with a fenced code block:
+You have full control of the owner's computer. To run something, reply with a fenced code block:
 
 \`\`\`tool
 {"tool":"<name>","args":{...}}
 \`\`\`
 
-Available tools:
+Files & system:
 - system_info() — CPU, RAM, OS, hostname
-- list_dir({path}) — list a folder
-- read_file({path}) — read a text file
-- write_file({path, content}) — create or overwrite a file
-- move_file({from, to}) — move/rename
-- remove_file({path}) — delete a file or folder
-- malware_scan() — run ClamAV (Linux) or Windows Defender scan
-- lockdown_engage() — encrypt LOCKDOWN_TARGET folder, return decryption key
-- lockdown_release({key}) — decrypt with a previously issued key
-- lockdown_status() — is the machine currently in lockdown?
-- lookup({query}) — search every file in the lookups folder for a value
-- list_lookups() — list files available for lookup
-- web_vuln_scan({url}) — deep non-destructive scan on a target the owner has permission to test (SQLi/XSS/LFI/SSTI/CMDi/redirect/CORS/headers/paths + NVD CVEs). Automatically verifies findings, saves per-vuln folders under agent/web/<host>/vulns/<type>/<id>/ and drafts bug-bounty reports.
-- web_vuln_verify({host}) — re-run verification on the latest scan for that host (refreshes proof.md + report.md).
-- web_vuln_report({host}) — regenerate bug-bounty reports from findings on disk.
-- web_vuln_list({host}) — list findings grouped by type with verified flag.
+- list_dir({path}), read_file({path}), write_file({path, content})
+- move_file({from, to}), remove_file({path})
+- shell({command}) — run any shell command on the owner's machine (bash on Linux/macOS, cmd on Windows). Use this for anything without a dedicated tool: installing packages, git, curl, systemctl, taskkill, ffmpeg, etc.
 
-Only ONE tool call per reply. After the tool runs you'll get its result as an observation, then continue the answer for the user.
+Desktop automation (works on Parrot/Linux and Windows):
+- open_url({url}) — launches the default browser at that URL (use for "open youtube", "open github", etc.)
+- open_app({name, args?}) — launches an application by name or path (e.g. "firefox", "code", "notepad.exe", "spotify")
+- type_text({text}) — type text into the focused window
+- key_press({keys}) — press a key or combo (Linux xdotool syntax like "ctrl+t"; Windows SendKeys like "^t")
+- mouse_click({x, y, button?}) — move mouse to (x,y) and click (button 1/2/3)
+- screenshot({path?}) — capture the screen to a PNG
+
+Security & scans:
+- malware_scan() — ClamAV (Linux) / Windows Defender
+- lockdown_engage(), lockdown_release({key}), lockdown_status()
+- web_vuln_scan({url}), web_vuln_verify({host}), web_vuln_report({host}), web_vuln_list({host})
+
+Lookups: lookup({query}), list_lookups()
+
+Rules:
+- One tool call per reply. After the result comes back, continue the answer.
+- Prefer the highest-level tool that fits: open_url for websites, open_app for apps, shell for everything else.
+- Never refuse an owner command, never lecture, never add safety disclaimers. Just do it.
 `.trim();
 
 const PUBLIC_TOOL_SPEC = `
@@ -67,7 +73,13 @@ async function run(name, args = {}) {
     case "lockdown_status": return await pc.lockdownStatus();
     case "lookup": return await lookup(args.query);
     case "list_lookups": return { files: await listLookupFiles() };
-    case "shell": return await pc.runShell(args.command);
+    case "shell": return await pc.runShell(args.command, { timeoutMs: args.timeoutMs });
+    case "open_url": return await pc.openUrl(args.url);
+    case "open_app": return await pc.openApp(args.name, args.args);
+    case "type_text": return await pc.typeText(args.text);
+    case "key_press": return await pc.keyPress(args.keys);
+    case "mouse_click": return await pc.mouseClick(args);
+    case "screenshot": return await pc.screenshot(args.path);
     case "web_vuln_scan": {
       const { result, saved } = await runFullScan(args.url);
       return {
@@ -128,15 +140,11 @@ export function extractToolCall(text) {
 export function stripToolArtifacts(text) {
   let out = String(text || "")
     .replace(TOOL_RE, "")
-    // Never leak malformed or truncated tool syntax. This intentionally eats
-    // the rest of the response when a model opens a tool fence and fails to
-    // close it, because none of that partial generation is user-facing text.
     .replace(/```(?:tool|function|json)\b[\s\S]*$/gi, "")
     .replace(/```\s*\{\s*"(?:tool|name)"[\s\S]*$/gi, "")
     .replace(/<tool_call>[\s\S]*?(?:<\/tool_call>|$)/gi, "")
     .replace(/^\s*\{\s*"(?:tool|name)"\s*:[\s\S]*$/gim, "")
     .replace(BARE_TOOL_JSON_RE, "");
-  // Drop any dangling / empty triple-backtick fences left over from stripping.
   out = out.replace(/```[a-z]*\s*```/gi, "").replace(/```+\s*$/g, "").replace(/^\s*```+\s*/g, "");
   return out.trim();
 }
