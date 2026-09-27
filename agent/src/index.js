@@ -4,7 +4,7 @@ import { startPanels } from "./panels.js";
 import { startShareServer } from "./share-server.js";
 import { startBot } from "./bot.js";
 import { startSelfbot } from "./selfbot.js";
-import { refreshModels, refreshUnoRouterModels } from "./ai.js";
+import { refreshModels } from "./ai.js";
 import { startOllama } from "./ollama-runner.js";
 import { preloadLocalModel } from "./localmodel-runner.js";
 import { refreshLocalModel } from "./ai.js";
