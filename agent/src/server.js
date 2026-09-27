@@ -405,7 +405,7 @@ const ROUTES = {
     return { items: listReactionRoles(id) };
   },
 
-  // ---- WorkSpace (multi-agent: YORU on Ollama + ACE on OpenRouter/OpenClaw) ----
+  // ---- WorkSpace (multi-agent: YORU on Ollama + ACE on OpenRouter/UnoRouter) ----
   "GET /api/workspace/info": async () => workspaceInfo(),
   "POST /api/workspace/run": async (req) => {
     const b = await readBody(req);
