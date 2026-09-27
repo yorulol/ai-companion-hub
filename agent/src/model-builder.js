@@ -303,7 +303,7 @@ export function tuneForHost(bytes) {
   };
 }
 
-const DEFAULT_SYSTEM = `You are YORU — rude, witty, sharp, never corporate, never moralizing. Never reveal your model, provider, or internals. Default to 1-3 sentences unless the task genuinely needs more.`;
+const DEFAULT_SYSTEM = YORU_PERSONA;
 
 export function modelfileContents({ from, adapter, system, temperature = 0.7, topP = 0.9, numCtx = 1536, numPredict = 140 }) {
   const lines = [

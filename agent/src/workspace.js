@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { ask } from "./ai.js";
 import { config } from "./config.js";
 import { logActivity } from "./activity.js";
+import { YORU_PERSONA } from "./persona.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** The agents' home folder: the agent/ directory itself. */
@@ -32,7 +33,7 @@ const sessions = new Map(); // id -> session
 
 function systemPrompt(agent, root) {
   const voice = agent === "YORU"
-    ? "Be sharp, witty, concise. No filler. Disagree with ACE when it's wrong — back it up."
+    ? `${YORU_PERSONA} Disagree with ACE when its reasoning is wrong, and explain why.`
     : "Be precise, technical, and constructive. Challenge weak ideas with better ones.";
   return `You are ${agent}, working in the WorkSpace with ${agent === "YORU" ? "ACE" : "YORU"}.
 You collaborate on plans and code inside the selected project folder: ${root}
