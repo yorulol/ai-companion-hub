@@ -128,11 +128,11 @@ setInterval(health, 15000);
 /* ---------- provider popover ---------- */
 const pill = document.getElementById("pillProvider");
 const pop = document.getElementById("providerPop");
-const PLABEL = { openrouter: "OpenRouter", ollama: "Ollama", openai: "OpenAI", anthropic: "Anthropic", groq: "Groq", openclaw: "OpenClaw" };
+const PLABEL = { openrouter: "OpenRouter", unorouter: "UnoRouter", ollama: "Ollama", openai: "OpenAI", anthropic: "Anthropic", groq: "Groq" };
 const PNOTE = {
   openrouter: "Rotates every free model automatically.",
+  unorouter: "Rotates every free UnoRouter model, rescans every 30s. Key optional.",
   ollama: "Local models — no API key needed.",
-  openclaw: "Self-hosted (github.com/openclaw/openclaw). Key optional.",
 };
 
 async function renderProviders() {
@@ -159,13 +159,13 @@ async function renderProviders() {
             ${p.keyRequired ? `<span class="muted" style="font-size:.7em;color:${p.hasKey?"#4ade80":"#fbbf24"}">${p.hasKey?"key set":"no key"}</span>` : ""}
           </label>
           ${PNOTE[p.name] ? `<div class="muted" style="font-size:.75em;margin-top:4px">${esc(PNOTE[p.name])}</div>` : ""}
-          ${(p.keyRequired || p.name === "openclaw") ? `
+          ${(p.keyRequired || p.name === "unorouter") ? `
             <div style="display:flex;gap:4px;margin-top:6px">
-              <input type="password" data-key="${p.name}" placeholder="${p.hasKey?"•••••••• (replace)":"Paste API key"}" style="flex:1;padding:4px 6px;font-size:.8em;background:var(--bg-2,#111);color:inherit;border:1px solid var(--border,#333);border-radius:6px"/>
+              <input type="password" data-key="${p.name}" placeholder="${p.hasKey?"•••••••• (replace)":"Paste API key (optional)"}" style="flex:1;padding:4px 6px;font-size:.8em;background:var(--bg-2,#111);color:inherit;border:1px solid var(--border,#333);border-radius:6px"/>
               <button class="ghost sm" data-savekey="${p.name}">Save</button>
             </div>` : ""}
         </div>`).join("")}
-      <div class="muted" style="font-size:.75em;margin-top:8px">Changes write to <code>agent/.env</code>. OpenClaw is a self-hosted OSS server — leave the key blank unless your instance requires one.</div>`;
+      <div class="muted" style="font-size:.75em;margin-top:8px">Changes write to <code>agent/.env</code>. UnoRouter uses free models with a 30-second refresh — the API key is optional.</div>`;
     pop.querySelector("#prefSel").addEventListener("change", (e) => save({ preferred: e.target.value }));
     pop.querySelectorAll("input[data-name]").forEach(cb => cb.addEventListener("change", () =>
       save({ providers: { [cb.dataset.name]: { enabled: cb.checked } } }, cb)));
@@ -316,7 +316,7 @@ async function saveCodeFile() {
 async function runCodeAudit() {
   const out = document.getElementById("codeAuditOut");
   if (!CODE_PATH) return toast("Open a folder first.");
-  out.innerHTML = `<div class="muted">Auditing with OpenClaw…</div>`;
+  out.innerHTML = `<div class="muted">Auditing…</div>`;
   try {
     const r = await api("/api/owner/code-audit", { method: "POST", body: { path: CODE_PATH } });
     out.innerHTML = r.reports.length
