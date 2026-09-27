@@ -190,12 +190,105 @@ export async function lockdownStatus() {
 }
 
 // ---- Generic shell ----
+// Owner-gated at the tool layer (tools.js executeTool). No env flag needed.
 
-export async function runShell(command, { timeoutMs = 20_000 } = {}) {
+export async function runShell(command, { timeoutMs = 30_000 } = {}) {
   assertEnabled();
-  if (!config.computer.unrestricted) {
-    throw new Error("Shell execution requires COMPUTER_CONTROL_UNRESTRICTED=true");
-  }
-  const { stdout, stderr } = await exec(command, { timeout: timeoutMs, maxBuffer: 2_000_000 });
+  const { stdout, stderr } = await exec(command, { timeout: timeoutMs, maxBuffer: 4_000_000, shell: true });
   return { stdout: stdout.slice(-8000), stderr: stderr.slice(-4000) };
+}
+
+// ---- Desktop automation (open apps, URLs, control input) ----
+
+function detachedSpawn(cmd, args, opts = {}) {
+  const child = spawn(cmd, args, { detached: true, stdio: "ignore", ...opts });
+  child.unref();
+  return child.pid;
+}
+
+/** Open a URL in the system default browser. Works on Linux/Windows/macOS. */
+export async function openUrl(url) {
+  assertEnabled();
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = "https://" + url;
+  if (config.os.isWindows) detachedSpawn("cmd", ["/c", "start", "", url], { windowsHide: true });
+  else if (process.platform === "darwin") detachedSpawn("open", [url]);
+  else detachedSpawn("xdg-open", [url]);
+  return { opened: url };
+}
+
+/** Launch an application by name/path. On Linux tries direct exec then gtk-launch; on Windows uses `start`. */
+export async function openApp(name, args = []) {
+  assertEnabled();
+  if (!name) throw new Error("openApp: name is required");
+  const argv = Array.isArray(args) ? args : String(args).split(/\s+/).filter(Boolean);
+  if (config.os.isWindows) {
+    detachedSpawn("cmd", ["/c", "start", "", name, ...argv], { windowsHide: true });
+    return { launched: name, via: "start" };
+  }
+  if (process.platform === "darwin") {
+    detachedSpawn("open", ["-a", name, ...(argv.length ? ["--args", ...argv] : [])]);
+    return { launched: name, via: "open" };
+  }
+  // Linux: try the binary directly first; fall back to gtk-launch (desktop entry).
+  try {
+    detachedSpawn(name, argv);
+    return { launched: name, via: "exec" };
+  } catch {
+    detachedSpawn("gtk-launch", [name.replace(/\.desktop$/, "")]);
+    return { launched: name, via: "gtk-launch" };
+  }
+}
+
+/** Type text into the currently focused window. */
+export async function typeText(text) {
+  assertEnabled();
+  const s = String(text ?? "");
+  if (config.os.isWindows) {
+    const escaped = s.replace(/'/g, "''");
+    await exec(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')"`, { timeout: 10_000 });
+  } else {
+    await exec(`xdotool type --delay 15 -- ${JSON.stringify(s)}`, { timeout: 10_000 });
+  }
+  return { typed: s.length };
+}
+
+/** Press a key or key combo. Linux: xdotool syntax ("ctrl+t"). Windows: SendKeys ("^t"). */
+export async function keyPress(keys) {
+  assertEnabled();
+  if (!keys) throw new Error("keyPress: keys required");
+  if (config.os.isWindows) {
+    await exec(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${String(keys).replace(/'/g, "''")}')"`, { timeout: 8_000 });
+  } else {
+    await exec(`xdotool key ${JSON.stringify(String(keys))}`, { timeout: 8_000 });
+  }
+  return { pressed: keys };
+}
+
+/** Move mouse to (x,y) and click. button: 1 left, 2 middle, 3 right. */
+export async function mouseClick({ x, y, button = 1 } = {}) {
+  assertEnabled();
+  if (config.os.isWindows) {
+    const ps = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x|0}, ${y|0}); Add-Type -MemberDefinition '[DllImport(\\"user32.dll\\")] public static extern void mouse_event(int f,int dx,int dy,int d,int e);' -Name U -Namespace W; [W.U]::mouse_event(0x02,0,0,0,0); [W.U]::mouse_event(0x04,0,0,0,0)`;
+    await exec(`powershell -NoProfile -Command "${ps}"`, { timeout: 8_000 });
+  } else {
+    await exec(`xdotool mousemove ${x|0} ${y|0} click ${button|0}`, { timeout: 8_000 });
+  }
+  return { clicked: { x, y, button } };
+}
+
+/** Capture a screenshot to a file and return its path. */
+export async function screenshot(destPath) {
+  assertEnabled();
+  const out = destPath || path.join(os.tmpdir(), `yoru-screen-${Date.now()}.png`);
+  await fs.mkdir(path.dirname(out), { recursive: true });
+  if (config.os.isWindows) {
+    const ps = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height; $g=[System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $bmp.Save('${out.replace(/'/g, "''")}')`;
+    await exec(`powershell -NoProfile -Command "${ps}"`, { timeout: 10_000 });
+  } else {
+    // Try scrot, then gnome-screenshot, then import (ImageMagick).
+    try { await exec(`scrot -o ${JSON.stringify(out)}`, { timeout: 8_000 }); }
+    catch { try { await exec(`gnome-screenshot -f ${JSON.stringify(out)}`, { timeout: 8_000 }); }
+      catch { await exec(`import -window root ${JSON.stringify(out)}`, { timeout: 8_000 }); } }
+  }
+  return { path: out };
 }
