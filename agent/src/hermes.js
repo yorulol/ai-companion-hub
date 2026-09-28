@@ -63,10 +63,11 @@ export function pickHermesModel(override) {
 
 /** Tuning hints derived from the picked tier — used by the Ollama runner. */
 export function hermesTuning(tier) {
-  if (tier === "large") return { numCtx: 4096, numPredict: 220, latencyBudgetMs: 20000 };
-  if (tier === "medium") return { numCtx: 2560, numPredict: 180, latencyBudgetMs: 10000 };
-  // Small tier tuned for lightning-fast replies on 6 GB GPUs (RTX 1660 Ti class).
-  return { numCtx: 1536, numPredict: 140, latencyBudgetMs: 6000 };
+  if (tier === "large") return { numCtx: 4096, numPredict: 1024, latencyBudgetMs: 30000 };
+  if (tier === "medium") return { numCtx: 2560, numPredict: 768, latencyBudgetMs: 20000 };
+  // Small tier tuned for fast replies on 6 GB GPUs (RTX 1660 Ti class),
+  // but with enough headroom that long answers aren't cut off mid-message.
+  return { numCtx: 2048, numPredict: 512, latencyBudgetMs: 12000 };
 }
 
 export function hermesStatusLine(config) {
