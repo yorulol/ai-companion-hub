@@ -11,6 +11,7 @@
 import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
 import { runFullScan, reverifyHost, regenerateReports, listVulns } from "./scan-run.js";
+import { pentestFile } from "./file-pentest.js";
 import { config } from "./config.js";
 
 const OWNER_TOOL_SPEC = `
