@@ -174,16 +174,17 @@ async function loadSettings() {
   SETTINGS = await api("/api/owner/settings");
   document.getElementById("ownerPrefix").value = SETTINGS.discord?.ownerPrefix || "!";
   const p = SETTINGS.provider || {};
-  document.getElementById("preferred").value = p.preferred || "openrouter";
+  document.getElementById("preferred").value = p.preferred || "hermes";
   const checks = document.getElementById("providerChecks");
   const list = [
-    ["openrouterEnabled", "OpenRouter"],
-    ["ollamaEnabled", "Ollama"], ["groqEnabled", "Groq"],
-    ["openaiEnabled", "OpenAI"], ["anthropicEnabled", "Anthropic"],
+    ["hermesEnabled", "Hermes (Nous, hardware-aware)"],
+    ["ollamaEnabled", "Ollama (local runtime)"],
   ];
   checks.innerHTML = list.map(([k, label]) =>
     `<label><input type="checkbox" data-key="${k}" ${p[k] ? "checked" : ""}/> ${label}</label>`,
   ).join("");
+  const hm = document.getElementById("hermesModel");
+  if (hm) hm.value = p.hermesModel || "";
   refreshModels();
 }
 async function saveOwnerPrefix() {
@@ -196,7 +197,9 @@ async function saveProviders() {
     provider: { preferred: document.getElementById("preferred").value },
   };
   document.querySelectorAll("#providerChecks input").forEach((i) => { patch.provider[i.dataset.key] = i.checked; });
-  try { await api("/api/owner/settings", { method: "POST", body: patch }); toast("Saved. Restart the agent to apply key changes."); }
+  const hm = document.getElementById("hermesModel");
+  if (hm) patch.provider.hermesModel = hm.value.trim();
+  try { await api("/api/owner/settings", { method: "POST", body: patch }); toast("Saved."); }
   catch (err) { toast(err.message); }
 }
 async function refreshModels() {
@@ -204,9 +207,10 @@ async function refreshModels() {
   out.textContent = "Loading…";
   try {
     const m = await api("/api/models", { owner: false });
+    const ollama = m.ollama || [];
     out.innerHTML = `
-      <div><strong>${m.free.length}</strong> free OpenRouter models · <strong>${m.coding.length}</strong> coding-tuned · <strong>${m.ollama.length}</strong> local Ollama</div>
-      <div style="margin-top:8px">${m.free.slice(0, 40).map((n) => `<span class="tag">${esc(n)}</span>`).join("")}</div>`;
+      <div><strong>${ollama.length}</strong> local Ollama models</div>
+      <div style="margin-top:8px">${ollama.slice(0, 40).map((n) => `<span class="tag">${esc(n)}</span>`).join("")}</div>`;
   } catch (err) { out.textContent = err.message; }
 }
 

@@ -100,7 +100,7 @@ function printReply({ reply, provider, model, elapsed }) {
 function detectProviders() {
   const enabled = [];
   const pr = config.providers || {};
-  if (pr.openrouter?.enabled && pr.openrouter?.key) enabled.push("openrouter");
+  if (pr.hermes?.enabled) enabled.push("hermes");
   if (pr.ollama?.enabled) enabled.push("ollama");
   return enabled;
 }

@@ -86,14 +86,11 @@ function box(title, rows, accent = C.g5) {
 function providerRows() {
   const p = config.providers;
   const on = (b) => (b ? paint(C.green, "● online") : paint(C.grey, "○ off"));
-  const key = (b) => (b ? paint(C.greenSoft, "· key set") : paint(C.yellow, "· no key"));
+  const hermesLabel = p.hermes.enabled ? (p.hermes.model || "auto-tier") : "off";
   return [
     ["preferred", p.preferred, C.pink],
-    ["openrouter", `${stripAnsi(on(p.openrouter.enabled))}  ${stripAnsi(key(!!p.openrouter.key))}`],
+    ["hermes", `${stripAnsi(on(p.hermes.enabled))}  ${hermesLabel}`],
     ["ollama", `${stripAnsi(on(p.ollama.enabled))}  ${p.ollama.url}`],
-    ["openai", `${stripAnsi(on(p.openai.enabled))}  ${stripAnsi(key(!!p.openai.key))}`],
-    ["anthropic", `${stripAnsi(on(p.anthropic.enabled))}  ${stripAnsi(key(!!p.anthropic.key))}`],
-    ["groq", `${stripAnsi(on(p.groq.enabled))}  ${stripAnsi(key(!!p.groq.key))}`],
   ];
 }
 

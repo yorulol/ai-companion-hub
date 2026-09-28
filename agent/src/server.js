@@ -161,15 +161,14 @@ const ROUTES = {
   },
 
   "GET /api/providers": async () => {
-    const list = ["openrouter", "ollama", "openai", "anthropic", "groq"];
-    const KEY_REQUIRED = { openrouter: true, openai: true, anthropic: true, groq: true, ollama: false };
+    const list = ["hermes", "ollama"];
     return {
       preferred: config.providers.preferred,
       providers: list.map((name) => ({
         name,
         enabled: !!config.providers[name].enabled,
-        hasKey: !!config.providers[name].key,
-        keyRequired: KEY_REQUIRED[name],
+        hasKey: false,
+        keyRequired: false,
         model: config.providers[name].model || null,
       })),
     };
@@ -221,11 +220,9 @@ const ROUTES = {
       provider: {
         ...s.provider,
         preferred: config.providers.preferred,
-        openrouterEnabled: config.providers.openrouter.enabled,
+        hermesEnabled: config.providers.hermes.enabled,
+        hermesModel: config.providers.hermes.model || "",
         ollamaEnabled: config.providers.ollama.enabled,
-        openaiEnabled: config.providers.openai.enabled,
-        anthropicEnabled: config.providers.anthropic.enabled,
-        groqEnabled: config.providers.groq.enabled,
       },
       computer: {
         enabled: config.computer.enabled,
@@ -240,17 +237,17 @@ const ROUTES = {
     requireOwner(req);
     const body = await readBody(req);
     const provider = body.provider || {};
-    const map = {
-      openrouterEnabled: "openrouter",
-      ollamaEnabled: "ollama",
-      openaiEnabled: "openai",
-      anthropicEnabled: "anthropic",
-      groqEnabled: "groq",
-    };
+    const map = { hermesEnabled: "hermes", ollamaEnabled: "ollama" };
     for (const [key, name] of Object.entries(map)) {
       if (typeof provider[key] === "boolean") {
         await setProviderEnabled(name, provider[key]);
       }
+    }
+    if (typeof provider.hermesModel === "string") {
+      const { setHermesModel } = await import("./config.js");
+      const { refreshHermesChoice } = await import("./ai.js");
+      await setHermesModel(provider.hermesModel);
+      refreshHermesChoice();
     }
     if (provider.preferred) await setPreferredProvider(provider.preferred);
     delete body.provider;
@@ -404,7 +401,7 @@ const ROUTES = {
     return { items: listReactionRoles(id) };
   },
 
-  // ---- WorkSpace (multi-agent: YORU on Ollama + ACE on OpenRouter) ----
+  // ---- WorkSpace (multi-agent: YORU on Hermes + ACE on Ollama) ----
   "GET /api/workspace/info": async () => workspaceInfo(),
   "POST /api/workspace/run": async (req) => {
     const b = await readBody(req);

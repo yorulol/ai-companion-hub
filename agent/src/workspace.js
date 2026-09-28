@@ -1,13 +1,11 @@
 /**
  * WorkSpace — multi-agent collaboration.
  *
- * YORU  -> defaults to Ollama (falls back to the normal provider chain if
- *          Ollama is disabled/unreachable).
- * ACE   -> OpenRouter (owner's pick), falls back to the chain.
+ * YORU  -> defaults to Hermes (local Nous Research tier auto-picked for the host).
+ * ACE   -> Ollama (owner's pick), falls back to the chain.
  *
  * Both agents share one transcript, take turns, and may act inside the
- * selected project folder (agent/ by default) using
- * fenced tool blocks:
+ * selected project folder (agent/ by default) using fenced tool blocks:
  *
  *   ```tool
  *   {"tool":"ws_write","args":{"path":"src/foo.js","content":"..."}}
@@ -157,7 +155,7 @@ async function agentTurn({ agent, system, provider, transcript, task, root }) {
   return { reply, provider: out.provider, model: out.model, tool: toolNote };
 }
 
-export function startWorkspaceSession({ task, rounds = 4, aceProvider = "openrouter", root = WORKSPACE_HOME }) {
+export function startWorkspaceSession({ task, rounds = 4, aceProvider = "ollama", root = WORKSPACE_HOME }) {
   if (!task || typeof task !== "string") throw new Error("Task is required.");
   rounds = Math.min(12, Math.max(1, Number(rounds) || 4));
   const selectedRoot = normalizeRoot(root);
@@ -185,7 +183,7 @@ export function startWorkspaceSession({ task, rounds = 4, aceProvider = "openrou
           const out = await agentTurn({
             agent: who,
             system: systemPrompt(who, selectedRoot),
-            provider: who === "YORU" ? "ollama" : aceProvider,
+            provider: who === "YORU" ? "hermes" : aceProvider,
             transcript,
             task,
             root: selectedRoot,

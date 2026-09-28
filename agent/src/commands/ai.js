@@ -237,11 +237,8 @@ add({ name: "provider", category: "ai", description: "AI provider health.", usag
       description: `Preferred: **${s.preferred}**`,
       color: COLORS.info,
       fields: [
-        { name: "OpenRouter", value: `${dot(s.openrouter)}\n${s.freeModels || 0} free models`, inline: true },
+        { name: "Hermes", value: `${dot(s.hermes)}\n${s.hermesLabel || "auto-tier"}`, inline: true },
         { name: "Ollama", value: dot(s.ollama), inline: true },
-        { name: "Groq", value: dot(s.groq), inline: true },
-        { name: "OpenAI", value: dot(s.openai), inline: true },
-        { name: "Anthropic", value: dot(s.anthropic), inline: true },
       ],
     })] });
   }});

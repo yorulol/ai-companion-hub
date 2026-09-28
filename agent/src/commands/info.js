@@ -388,20 +388,19 @@ add({ name: "about", category: "info", description: "Learn about YORU.", usage: 
   } });
 
 // ================= AI PROVIDER STATUS =================
-add({ name: "providers", category: "info", description: "Show which AI providers are online and how many OpenRouter free models are loaded.", usage: "providers", permission: "everyone", aliases: ["aistatus", "models"],
+add({ name: "providers", category: "info", description: "Show which local AI providers are online and which Hermes tier is loaded.", usage: "providers", permission: "everyone", aliases: ["aistatus", "models"],
   run: async ({ message }) => {
     const { providerStatus } = await import("../ai.js");
     const s = await providerStatus();
     const status = (ok) => ok ? "🟢 online" : "🔴 offline";
+    const hw = s.hardware || {};
     message.reply({ embeds: [embed({
       title: "🧠 AI provider status",
       fields: [
         { name: "Preferred", value: s.preferred || "—", inline: true },
-        { name: "OpenRouter", value: `${status(s.openrouter)} · ${s.freeModels} free models`, inline: true },
+        { name: "Hermes", value: `${status(s.hermes)} · ${s.hermesLabel || "auto"}`, inline: true },
         { name: "Ollama", value: status(s.ollama), inline: true },
-        { name: "OpenAI", value: status(s.openai), inline: true },
-        { name: "Anthropic", value: status(s.anthropic), inline: true },
-        { name: "Groq", value: status(s.groq), inline: true },
+        { name: "Hardware", value: `${hw.cpuCount || "?"}c CPU · ${hw.ramGb || "?"} GB RAM · ${hw.hasGpu ? `${hw.vramGb} GB VRAM` : "no GPU"}`, inline: false },
       ],
     })] });
   } });

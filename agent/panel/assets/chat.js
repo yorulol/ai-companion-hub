@@ -128,10 +128,10 @@ setInterval(health, 15000);
 /* ---------- provider popover ---------- */
 const pill = document.getElementById("pillProvider");
 const pop = document.getElementById("providerPop");
-const PLABEL = { openrouter: "OpenRouter", ollama: "Ollama", openai: "OpenAI", anthropic: "Anthropic", groq: "Groq" };
+const PLABEL = { hermes: "Hermes (Nous)", ollama: "Ollama" };
 const PNOTE = {
-  openrouter: "Rotates every free model automatically.",
-  ollama: "Local models — no API key needed.",
+  hermes: "Nous Research Hermes-3 · hardware-tier auto-picked for your machine.",
+  ollama: "Local Ollama runtime — no API key needed.",
 };
 
 async function renderProviders() {
