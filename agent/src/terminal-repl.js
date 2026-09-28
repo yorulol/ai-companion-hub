@@ -26,6 +26,7 @@ import { getSettings } from "./db.js";
 import { config, setLocalModel } from "./config.js";
 import { spinner } from "./boot-ui.js";
 import { listBuiltModels, buildModel, deleteBuiltModel } from "./model-builder.js";
+import { pentestFile, PENTEST_DIR } from "./file-pentest.js";
 
 const SCOPE = "terminal:local";
 
