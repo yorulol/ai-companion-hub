@@ -401,7 +401,7 @@ const ROUTES = {
     return { items: listReactionRoles(id) };
   },
 
-  // ---- WorkSpace (multi-agent: YORU on Ollama + ACE on OpenRouter) ----
+  // ---- WorkSpace (multi-agent: YORU on Hermes + ACE on Ollama) ----
   "GET /api/workspace/info": async () => workspaceInfo(),
   "POST /api/workspace/run": async (req) => {
     const b = await readBody(req);
