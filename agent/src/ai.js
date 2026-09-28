@@ -187,7 +187,10 @@ function ollamaWorkload(messages, mode) {
   // Short casual prompts ("hi", "how are you") get a snappier cap so the
   // model wraps up in ~2s instead of rambling to the full budget.
   const shortPrompt = latest.length <= 80;
-  const casualCtx = shortPrompt ? Math.min(numCtxBase, 768) : numCtxBase;
+  // Never let the ctx cap drop below what the request actually needs —
+  // system prompt + tools + history can exceed a small cap and Ollama 400s.
+  const estTokens = Math.ceil(chars / 3.5) + 256;
+  const casualCtx = Math.max(shortPrompt ? Math.min(numCtxBase, 768) : numCtxBase, estTokens);
   const casualCap = shortPrompt ? Math.min(numPredictBase, 128) : numPredictBase;
   const casualBudget = shortPrompt ? Math.min(latencyBudget, 3500) : latencyBudget;
   return {
@@ -265,6 +268,21 @@ async function ollamaChatText(url, model, messages, numKeep, workload) {
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
+      // Context overflow: grow the window to fit the request and retry once.
+      if (res.status === 400 && /context size/i.test(detail)) {
+        const m = detail.match(/\((\d+) tokens\)/);
+        const needed = m ? parseInt(m[1], 10) : 0;
+        if (needed > 0 && needed > workload.numCtx) {
+          workload.numCtx = needed + workload.numPredict + 128;
+          console.log(`[ollama] ctx too small — retrying with num_ctx=${workload.numCtx}`);
+          res = await ollamaChatRequest(url, model, payload, numKeep, workload, attempts[i]);
+          if (res.ok) {
+            const body2 = await res.json().catch(() => null);
+            const text2 = ollamaText(body2);
+            if (text2) return { text: text2, body: body2 };
+          }
+        }
+      }
       throw new Error(`Ollama ${res.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`);
     }
     const body = await res.json().catch(() => null);
