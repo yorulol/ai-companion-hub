@@ -156,16 +156,16 @@
           <div class="grid two">
             <div class="field"><label>Preferred provider</label>
               <select id="preferred">
-                <option value="openrouter">OpenRouter (free models)</option>
+                <option value="hermes">Hermes (Nous, auto-tier)</option>
                 <option value="ollama">Ollama (local)</option>
-                <option value="groq">Groq</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
               </select>
             </div>
             <div class="field"><label>Enabled providers</label>
               <div class="checks" id="providerChecks"></div>
             </div>
+          </div>
+          <div class="field" style="margin-top:10px"><label>Hermes model override (blank = auto-pick for hardware)</label>
+            <input id="hermesModel" placeholder="e.g. hermes3:8b"/>
           </div>
           <button class="primary" id="saveProviders">Save routing</button>
           <div id="providersOut" class="muted" style="margin-top:10px"></div>
