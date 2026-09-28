@@ -184,15 +184,21 @@ function ollamaWorkload(messages, mode) {
       latencyBudgetMs: latencyBudget,
     };
   }
+  // Short casual prompts ("hi", "how are you") get a snappier cap so the
+  // model wraps up in ~2s instead of rambling to the full budget.
+  const shortPrompt = latest.length <= 80;
+  const casualCtx = shortPrompt ? Math.min(numCtxBase, 768) : numCtxBase;
+  const casualCap = shortPrompt ? Math.min(numPredictBase, 128) : numPredictBase;
+  const casualBudget = shortPrompt ? Math.min(latencyBudget, 3500) : latencyBudget;
   return {
     name: hermes ? "hermes-fast" : "gpu-fast",
     model: fastModel,
     temp: 0.55,
     numGpu: p.numGpu,
     numThread: p.numThread,
-    numCtx: numCtxBase,
-    numPredict: budgetPredict(fastModel, numPredictBase, latencyBudget),
-    latencyBudgetMs: latencyBudget,
+    numCtx: casualCtx,
+    numPredict: budgetPredict(fastModel, casualCap, casualBudget),
+    latencyBudgetMs: casualBudget,
   };
 }
 
