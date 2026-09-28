@@ -472,6 +472,7 @@ export function startTerminalRepl() {
 
   let pinnedProvider = null;
   let awaitingScanUrl = false;
+  let awaitingPentestPath = false;
 
   rl.prompt();
 
