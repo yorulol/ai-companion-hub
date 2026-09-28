@@ -100,8 +100,10 @@ function budgetPredict(model, ceiling, latencyBudgetMs) {
   const budgetMs = latencyBudgetMs || p.latencyBudgetMs;
   const budgetSec = Math.max(1, budgetMs / 1000);
   const rate = OLLAMA_RATES.get(model) || OLLAMA_RATES.get(p.model) || 22;
-  const fit = Math.floor(rate * budgetSec * 0.65);
-  return Math.max(p.minPredict, Math.min(ceiling, fit));
+  // Allow the full measured rate over the budget window — the old 0.65 factor
+  // clipped long replies mid-message. Floor at 384 so answers never truncate.
+  const fit = Math.floor(rate * budgetSec);
+  return Math.max(Math.max(p.minPredict, 384), Math.min(ceiling, fit));
 }
 
 let ACTIVE_LOCAL = null;
