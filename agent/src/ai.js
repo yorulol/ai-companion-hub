@@ -100,10 +100,11 @@ function budgetPredict(model, ceiling, latencyBudgetMs) {
   const budgetMs = latencyBudgetMs || p.latencyBudgetMs;
   const budgetSec = Math.max(1, budgetMs / 1000);
   const rate = OLLAMA_RATES.get(model) || OLLAMA_RATES.get(p.model) || 22;
-  // Allow the full measured rate over the budget window — the old 0.65 factor
-  // clipped long replies mid-message. Floor at 384 so answers never truncate.
+  // Cap at the smaller of the workload ceiling and what the model can
+  // actually produce inside the latency budget. The floor is minPredict so
+  // short conversational prompts aren't padded to hundreds of tokens.
   const fit = Math.floor(rate * budgetSec);
-  return Math.max(Math.max(p.minPredict, 384), Math.min(ceiling, fit));
+  return Math.max(p.minPredict, Math.min(ceiling, fit));
 }
 
 let ACTIVE_LOCAL = null;
@@ -183,15 +184,21 @@ function ollamaWorkload(messages, mode) {
       latencyBudgetMs: latencyBudget,
     };
   }
+  // Short casual prompts ("hi", "how are you") get a snappier cap so the
+  // model wraps up in ~2s instead of rambling to the full budget.
+  const shortPrompt = latest.length <= 80;
+  const casualCtx = shortPrompt ? Math.min(numCtxBase, 768) : numCtxBase;
+  const casualCap = shortPrompt ? Math.min(numPredictBase, 128) : numPredictBase;
+  const casualBudget = shortPrompt ? Math.min(latencyBudget, 3500) : latencyBudget;
   return {
     name: hermes ? "hermes-fast" : "gpu-fast",
     model: fastModel,
     temp: 0.55,
     numGpu: p.numGpu,
     numThread: p.numThread,
-    numCtx: numCtxBase,
-    numPredict: budgetPredict(fastModel, numPredictBase, latencyBudget),
-    latencyBudgetMs: latencyBudget,
+    numCtx: casualCtx,
+    numPredict: budgetPredict(fastModel, casualCap, casualBudget),
+    latencyBudgetMs: casualBudget,
   };
 }
 
