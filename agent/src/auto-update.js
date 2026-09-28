@@ -14,7 +14,6 @@ import { watch, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./boot-ui.js";
-import { sendUpdateNotice } from "./update-notices.js";
 
 const RESTART_CODE = 42;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -38,7 +37,7 @@ async function scheduleRestart(reason) {
   if (restarting) return;
   restarting = true;
   await Promise.race([
-    sendUpdateNotice("Yoru is processing an update. I'll let you know when I'm back online."),
+    import("./update-notices.js").then(({ sendUpdateNotice }) => sendUpdateNotice("Yoru is processing an update. I'll let you know when I'm back online.")).catch((error) => log.warn("auto-update", `notice failed: ${error.message}`)),
     new Promise((resolve) => setTimeout(resolve, 4000)),
   ]);
   log.ok("auto-update", `${reason} — restarting…`);

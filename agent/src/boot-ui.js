@@ -166,9 +166,12 @@ export function spinner(label, color = C.purpleBright, { elapsed = false } = {})
   };
   render();
   const t = setInterval(render, 90);
+  let stopped = false;
   return {
     update: (text) => { current = text; },
     stop: (final) => {
+      if (stopped) return;
+      stopped = true;
       clearInterval(t);
       readline.clearLine(process.stdout, 0);
       readline.cursorTo(process.stdout, 0);
