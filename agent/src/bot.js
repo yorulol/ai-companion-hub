@@ -8,7 +8,7 @@ import {
   listReactionRoles,
 } from "./db.js";
 import { chat } from "./chat-loop.js";
-import { errEmbed, warnEmbed, okEmbed, embed } from "./ui.js";
+import { errEmbed, warnEmbed, okEmbed, embed, COLORS } from "./ui.js";
 import { logActivity } from "./activity.js";
 import { checkMessage as automodMessage, checkJoin as automodJoin, getAutomod } from "./automod.js";
 import { newToken as newVerifyToken, verifyUrl } from "./verify.js";
