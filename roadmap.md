@@ -16,3 +16,4 @@
 - [x] Add Trusted Admin controls for killswitch and voice access
 - [x] Make agent-only source distribution easy without breaking Lovable project sync
 - [x] Validate local Node agent syntax and panel flows
+- [x] Make Discord `/lookup` a globally registered, owner-only user-installed command usable without the bot joining each server

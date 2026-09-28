@@ -1,12 +1,10 @@
 /**
- * Discord slash commands. Mirrors the prefix commands: /lookup runs the exact
- * same lookups-folder search as !lookup and enforces the same per-server
- * permission rules. Registered per-guild so the command is available instantly
- * (global registration can take up to an hour to propagate).
+ * Discord slash commands. /lookup is registered globally as both a guild- and
+ * user-installed command, allowing the owner to use it wherever Discord permits
+ * user apps even when the bot itself is not a member of that server.
  */
 import { Events, ComponentType } from "discord.js";
-import { getGuild } from "./db.js";
-import { canRun } from "./permissions.js";
+import { isOwnerId } from "./config.js";
 import { errEmbed, warnEmbed, infoEmbed, listPages, button, row } from "./ui.js";
 import { logActivity } from "./activity.js";
 import { lookup as searchLookups } from "./lookups.js";
@@ -14,7 +12,7 @@ import { lookup as searchLookups } from "./lookups.js";
 const SLASH_COMMANDS = [
   {
     name: "lookup",
-    description: "Search the lookups folder.",
+    description: "Search authorized lookup records.",
     options: [
       {
         name: "query",
@@ -23,40 +21,41 @@ const SLASH_COMMANDS = [
         required: true,
       },
     ],
-    dm_permission: false,
+    // Discord API values: GuildInstall (0), UserInstall (1).
+    integration_types: [0, 1],
+    // Guild (0), Bot DM (1), private/group DM (2).
+    contexts: [0, 1, 2],
   },
 ];
 
-async function registerForGuild(guild) {
+async function registerCommands(client) {
   try {
-    await guild.commands.set(SLASH_COMMANDS);
+    await client.application.commands.set(SLASH_COMMANDS);
+    console.log("[slash] global /lookup registered for guild and user installs");
+
+    // Remove the old guild-scoped copy so it cannot shadow the global command.
+    await Promise.allSettled(
+      client.guilds.cache.map((guild) => guild.commands.set([])),
+    );
+
+    const installUrl = `https://discord.com/oauth2/authorize?client_id=${client.application.id}&integration_type=1&scope=applications.commands`;
+    console.log(`[slash] install Yoru to your Discord account: ${installUrl}`);
   } catch (err) {
-    console.warn(`[slash] register failed in ${guild.name}: ${err.message}`);
+    console.error(`[slash] global registration failed: ${err.message}`);
   }
 }
 
 /** Hook slash registration + interaction handling onto a bot client. */
 export function attachSlash(client) {
-  client.on(Events.ClientReady, () => {
-    for (const guild of client.guilds.cache.values()) registerForGuild(guild);
-  });
-
-  // Instant availability in servers the bot joins later.
-  client.on(Events.GuildCreate, (guild) => registerForGuild(guild));
+  client.on(Events.ClientReady, () => registerCommands(client));
 
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
       if (!interaction.isChatInputCommand()) return;
       if (interaction.commandName !== "lookup") return;
-      if (!interaction.inGuild() || !interaction.guild) {
-        return void interaction.reply({ embeds: [errEmbed("Servers only", "Lookup runs inside a server.")], ephemeral: true }).catch(() => {});
-      }
-
-      const guildCfg = getGuild(interaction.guildId, interaction.guild.name);
-      const member = interaction.member;
-      if (!canRun(member, guildCfg, "mod")) {
+      if (!isOwnerId(interaction.user.id)) {
         return void interaction.reply({
-          embeds: [errEmbed("Not allowed", "`lookup` needs **mod** permission.")],
+          embeds: [errEmbed("Owner only", "This command is locked to Yoru's configured owner.")],
           ephemeral: true,
         }).catch(() => {});
       }
@@ -67,7 +66,10 @@ export function attachSlash(client) {
       }
 
       await interaction.deferReply().catch(() => {});
-      logActivity("bot", `${interaction.user.tag} ran /lookup`, { guild: interaction.guild.name });
+      logActivity("bot", `${interaction.user.tag} ran /lookup`, {
+        location: interaction.guild?.name || "direct message",
+        installation: interaction.authorizingIntegrationOwners?.has("1") ? "user" : "guild",
+      });
 
       try {
         const out = await searchLookups(q);
@@ -85,9 +87,9 @@ export function attachSlash(client) {
           }
         }
         if (!totalHits) {
-          return void interaction.editReply({ embeds: [warnEmbed("No matches", `Nothing for \`${q}\` across ${out.files} files.`)] }).catch(() => {});
+          return void interaction.editReply({ embeds: [warnEmbed("No matches", `Nothing found for \`${q}\`.`)] }).catch(() => {});
         }
-        const pages = listPages(rows, { title: `🔎 ${q} · ${totalHits} hit(s) across ${out.files} files`, perPage: 12 });
+        const pages = listPages(rows, { title: `🔎 ${q} · ${totalHits} result(s)`, perPage: 12 });
         await paginateInteraction(interaction, pages, { userId: interaction.user.id });
       } catch (err) {
         await interaction.editReply({ embeds: [errEmbed("Lookup failed", String(err.message))] }).catch(() => {});
