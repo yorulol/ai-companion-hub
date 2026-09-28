@@ -37,7 +37,6 @@ document.querySelectorAll(".tab-group > summary").forEach((s) =>
 /* ---------- services ---------- */
 const SERVICE_URLS = {
   ollama: "http://localhost:11434",
-  openrouter: "https://openrouter.ai",
 };
 document.querySelectorAll("[data-service]").forEach((b) =>
   b.addEventListener("click", () => window.open(SERVICE_URLS[b.dataset.service], "_blank", "noopener")),
