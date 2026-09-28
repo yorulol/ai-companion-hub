@@ -155,7 +155,7 @@ async function agentTurn({ agent, system, provider, transcript, task, root }) {
   return { reply, provider: out.provider, model: out.model, tool: toolNote };
 }
 
-export function startWorkspaceSession({ task, rounds = 4, aceProvider = "openrouter", root = WORKSPACE_HOME }) {
+export function startWorkspaceSession({ task, rounds = 4, aceProvider = "ollama", root = WORKSPACE_HOME }) {
   if (!task || typeof task !== "string") throw new Error("Task is required.");
   rounds = Math.min(12, Math.max(1, Number(rounds) || 4));
   const selectedRoot = normalizeRoot(root);
