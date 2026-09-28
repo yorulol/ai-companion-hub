@@ -371,6 +371,7 @@ function help() {
     console.log(`    ${p(C.cyan, "/verify <host>")}    re-verify the latest scan for that host`);
     console.log(`    ${p(C.cyan, "/report <host>")}    regenerate reports from current findings`);
     console.log(`    ${p(C.cyan, "/vulns <host>")}     list findings grouped by type (verified flag)`);
+    console.log(`    ${p(C.cyan, "/pentest <path>")}   static security analysis of any file → agent/file-pentest/`);
     console.log(`    ${p(C.cyan, "/models")}           list custom-built local models`);
     console.log(`    ${p(C.cyan, "/build <src> [n]")}  build a custom model from an HF folder or .gguf`);
     console.log(`    ${p(C.cyan, "/use <name>")}       switch chat to a built local model`);
