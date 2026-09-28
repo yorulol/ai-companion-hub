@@ -45,7 +45,53 @@ export async function startBot() {
 
   client.on(Events.MessageCreate, async (message) => {
     try {
-      if (message.author.bot || !message.guild) return;
+      if (message.author.bot) return;
+      const isDm = !message.guild;
+
+      // DMs: always chat, no ping needed. Servers: only when mentioned.
+      const mentioned = !isDm && message.mentions.has(client.user);
+      if (isDm || mentioned) {
+        const guildCfg = isDm ? null : getGuild(message.guild.id, message.guild.name);
+        if (!isDm && !guildCfg.aiReplies) return;
+        const selfRe = new RegExp(`<@!?${client.user.id}>`, "g");
+        const text = message.content.replace(selfRe, "").trim();
+        if (!text) return;
+
+        // Typing embed — edited in place once the reply is ready.
+        const typingMsg = await message.reply({
+          embeds: [embed({ description: "✍️ Yoru is typing…", color: COLORS.info, footer: "YORU", timestamp: false })],
+        }).catch(() => null);
+        message.channel.sendTyping().catch(() => {});
+        const started = Date.now();
+
+        const isOwner = isOwnerId(message.author.id);
+        const mentionedUsers = [];
+        for (const [, u] of message.mentions.users) {
+          if (u.id === client.user.id) continue;
+          mentionedUsers.push({ id: u.id, tag: u.username });
+        }
+        const { reply } = await chat({
+          scope: `${isDm ? "d" : "g"}:${message.channel.id}:${message.author.id}`,
+          userText: text,
+          isOwner,
+          context: {
+            platform: "bot",
+            isDm,
+            guildName: message.guild?.name || null,
+            channelName: message.channel?.name || null,
+            authorTag: message.author.username,
+            authorId: message.author.id,
+            selfId: client.user.id,
+            mentioned: mentionedUsers,
+          },
+        });
+        const secs = ((Date.now() - started) / 1000).toFixed(1);
+        const out = embed({ description: reply.slice(0, 4090), footer: `YORU · ${secs}s` });
+        if (typingMsg) return void typingMsg.edit({ embeds: [out] }).catch(() => {});
+        return void message.reply({ embeds: [out] }).catch(() => {});
+      }
+
+      if (isDm) return;
       // auto-mod runs first; if it deleted the message, stop.
       if (await automodMessage(message)) return;
       const guildCfg = getGuild(message.guild.id, message.guild.name);
@@ -63,37 +109,6 @@ export async function startBot() {
       }
       // XP
       addXp(message.guild.id, message.author.id, 3);
-
-      // AI reply when mentioned
-      if (message.mentions.has(client.user) && guildCfg.aiReplies) {
-        const selfRe = new RegExp(`<@!?${client.user.id}>`, "g");
-        const text = message.content.replace(selfRe, "").trim();
-        if (text) {
-          await message.channel.sendTyping();
-          const isOwner = isOwnerId(message.author.id);
-          const mentioned = [];
-          for (const [, u] of message.mentions.users) {
-            if (u.id === client.user.id) continue;
-            mentioned.push({ id: u.id, tag: u.username });
-          }
-          const { reply } = await chat({
-            scope: `g:${message.channel.id}:${message.author.id}`,
-            userText: text,
-            isOwner,
-            context: {
-              platform: "bot",
-              isDm: false,
-              guildName: message.guild.name,
-              channelName: message.channel?.name || null,
-              authorTag: message.author.username,
-              authorId: message.author.id,
-              selfId: client.user.id,
-              mentioned,
-            },
-          });
-          return void message.reply(reply.slice(0, 1990));
-        }
-      }
 
       const ownerPrefix = config.discord.ownerPrefix;
       const matchedPrefix = message.content.startsWith(ownerPrefix) ? ownerPrefix
