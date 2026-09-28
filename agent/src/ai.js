@@ -268,6 +268,21 @@ async function ollamaChatText(url, model, messages, numKeep, workload) {
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
+      // Context overflow: grow the window to fit the request and retry once.
+      if (res.status === 400 && /context size/i.test(detail)) {
+        const m = detail.match(/\((\d+) tokens\)/);
+        const needed = m ? parseInt(m[1], 10) : 0;
+        if (needed > 0 && needed > workload.numCtx) {
+          workload.numCtx = needed + workload.numPredict + 128;
+          console.log(`[ollama] ctx too small — retrying with num_ctx=${workload.numCtx}`);
+          res = await ollamaChatRequest(url, model, payload, numKeep, workload, attempts[i]);
+          if (res.ok) {
+            const body2 = await res.json().catch(() => null);
+            const text2 = ollamaText(body2);
+            if (text2) return { text: text2, body: body2 };
+          }
+        }
+      }
       throw new Error(`Ollama ${res.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`);
     }
     const body = await res.json().catch(() => null);
