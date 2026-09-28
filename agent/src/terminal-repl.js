@@ -67,12 +67,34 @@ function severityColor(sev) {
   return C.grey;
 }
 
-function printReply({ reply, provider, model }) {
-  console.log("");
-  console.log(p(C.pink + C.bold, "  YORU ") + p(C.grey, `(${provider || "?"}/${model || "?"})`));
-  const wrapped = reply.split("\n").map((l) => "  " + l).join("\n");
-  console.log(p(C.white, wrapped));
-  console.log("");
+function printReply({ reply, provider, model, elapsed }) {
+  const width = Math.max(30, Math.min(88, (process.stdout.columns || 80) - 6));
+  console.log();
+  console.log(`  ${p(C.green, "➜")} ${p(C.pink + C.bold, "YORU")} ${p(C.grey, `· ${provider || "?"} / ${model || "?"}`)}${elapsed == null ? "" : p(C.cyanDim, `  ·  ${elapsed.toFixed(1)}s`)}`);
+  console.log(`  ${line("─", width, C.greyDim)}`);
+  let code = false;
+  for (const raw of String(reply || "(no response)").replace(/\r\n/g, "\n").split("\n")) {
+    if (/^\s*```/.test(raw)) {
+      code = !code;
+      console.log(`  ${p(C.greyDim, "│")} ${p(C.cyanDim, raw.trim())}`);
+      continue;
+    }
+    const heading = /^\s*#{1,4}\s+/.test(raw);
+    const text = heading ? raw.replace(/^\s*#{1,4}\s+/, "") : raw;
+    const color = code ? C.cyan : heading ? C.pinkSoft + C.bold : C.white;
+    if (!text) { console.log(`  ${p(C.greyDim, "│")}`); continue; }
+    if (code) { console.log(`  ${p(C.greyDim, "│")} ${p(color, text)}`); continue; }
+    const indent = /^\s*(?:[-*•]|\d+[.)])\s+/.test(text) ? "  " : "";
+    let lineText = "";
+    for (const word of text.trim().split(/\s+/)) {
+      if (lineText && `${lineText} ${word}`.length > width - 4 - indent.length) {
+        console.log(`  ${p(C.greyDim, "│")} ${p(color, indent + lineText)}`);
+        lineText = word;
+      } else lineText += (lineText ? " " : "") + word;
+    }
+    console.log(`  ${p(C.greyDim, "│")} ${p(color, indent + lineText)}`);
+  }
+  console.log(`  ${line("─", width, C.greyDim)}\n`);
 }
 
 function detectProviders() {
@@ -378,7 +400,7 @@ export function startTerminalRepl() {
   }
   const rl = readline.createInterface({
     input: process.stdin, output: process.stdout,
-    prompt: gradient("you") + p(C.grey, " ❯ "),
+    prompt: p(C.green, "➜") + " " + p(C.cyan, "~") + " " + gradient("you") + p(C.grey, " ❯ "),
     terminal: true,
   });
 
@@ -459,14 +481,23 @@ export function startTerminalRepl() {
       }
       if (url && /^\S+$/.test(linein)) { await runScan(url, pinnedProvider); rl.prompt(); return; }
 
-      const res = await chat({
-        scope: SCOPE, userText: linein,
-        mode: /\b(code|refactor|debug|implement|function|class)\b/i.test(linein) ? "coding" : "general",
-        isOwner: true,
-        context: { platform: "terminal" },
-      });
-      printReply(res);
-      pinnedProvider = null;
+      rl.pause();
+      const started = Date.now();
+      const typing = spinner("YORU is typing", C.pink, { elapsed: true });
+      try {
+        const res = await chat({
+          scope: SCOPE, userText: linein,
+          mode: /\b(code|refactor|debug|implement|function|class)\b/i.test(linein) ? "coding" : "general",
+          isOwner: true,
+          context: { platform: "terminal" },
+        });
+        typing.stop();
+        printReply({ ...res, elapsed: (Date.now() - started) / 1000 });
+        pinnedProvider = null;
+      } finally {
+        typing.stop();
+        rl.resume();
+      }
     } catch (err) {
       console.log(p(C.red, `  error: ${err.message}`));
     }

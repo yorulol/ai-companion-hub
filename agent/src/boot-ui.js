@@ -3,6 +3,7 @@
  * Gradient banner, glossy boxes, colored status log.
  * No dependencies.
  */
+import readline from "node:readline";
 import { config } from "./config.js";
 
 const C = {
@@ -151,20 +152,29 @@ export const log = {
 
 /* ---------- reusable spinner for long-running work ---------- */
 const SPINNER = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];
-export function spinner(label, color = C.purpleBright) {
+export function spinner(label, color = C.purpleBright, { elapsed = false } = {}) {
   if (!process.stdout.isTTY) {
     return { update: () => {}, stop: () => {} };
   }
-  let i = 0, current = label, running = true;
+  let i = 0, current = label;
+  const started = Date.now();
   const render = () => {
-    process.stdout.write(`\r${paint(color, SPINNER[i = (i + 1) % SPINNER.length])} ${paint(C.pink, current)}${" ".repeat(20)}\r`);
+    readline.clearLine(process.stdout, 0);
+    readline.cursorTo(process.stdout, 0);
+    const seconds = Math.floor((Date.now() - started) / 1000);
+    process.stdout.write(`${paint(color, SPINNER[i = (i + 1) % SPINNER.length])} ${paint(C.pink, current)}${elapsed ? paint(C.grey, `  ·  ${seconds}s`) : ""}`);
   };
+  render();
   const t = setInterval(render, 90);
+  let stopped = false;
   return {
     update: (text) => { current = text; },
     stop: (final) => {
-      running = false; clearInterval(t);
-      process.stdout.write("\r" + " ".repeat(process.stdout.columns || 80) + "\r");
+      if (stopped) return;
+      stopped = true;
+      clearInterval(t);
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
       if (final) console.log(final);
     },
   };
