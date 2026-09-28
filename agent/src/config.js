@@ -61,9 +61,12 @@ export const config = {
       numPredict: integer(process.env.OLLAMA_NUM_PREDICT, 140, 32, 8192),
       historyMessages: integer(process.env.OLLAMA_HISTORY_MESSAGES, 8, 2, 24),
       numBatch: integer(process.env.OLLAMA_NUM_BATCH, 512, 64, 4096),
+      // GPU-first: push every layer to VRAM. If the model + context exceed the
+      // 6 GB VRAM budget, Ollama automatically spills the overflow to system
+      // RAM/CPU (use_mmap stays on so the spill is paged, not crashed).
       numGpu: integer(process.env.OLLAMA_NUM_GPU, 999, 0, 999),
       numThread: integer(process.env.OLLAMA_NUM_THREAD, 0, 0, 64),
-      balancedGpuLayers: integer(process.env.OLLAMA_BALANCED_GPU_LAYERS, 24, 0, 999),
+      balancedGpuLayers: integer(process.env.OLLAMA_BALANCED_GPU_LAYERS, 999, 0, 999),
       latencyBudgetMs: integer(process.env.OLLAMA_LATENCY_BUDGET_MS, 7000, 1000, 120000),
       minPredict: integer(process.env.OLLAMA_MIN_PREDICT, 64, 16, 2048),
       uf: {
