@@ -183,7 +183,7 @@ export function startWorkspaceSession({ task, rounds = 4, aceProvider = "ollama"
           const out = await agentTurn({
             agent: who,
             system: systemPrompt(who, selectedRoot),
-            provider: who === "YORU" ? "ollama" : aceProvider,
+            provider: who === "YORU" ? "hermes" : aceProvider,
             transcript,
             task,
             root: selectedRoot,
