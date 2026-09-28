@@ -187,7 +187,10 @@ function ollamaWorkload(messages, mode) {
   // Short casual prompts ("hi", "how are you") get a snappier cap so the
   // model wraps up in ~2s instead of rambling to the full budget.
   const shortPrompt = latest.length <= 80;
-  const casualCtx = shortPrompt ? Math.min(numCtxBase, 768) : numCtxBase;
+  // Never let the ctx cap drop below what the request actually needs —
+  // system prompt + tools + history can exceed a small cap and Ollama 400s.
+  const estTokens = Math.ceil(chars / 3.5) + 256;
+  const casualCtx = Math.max(shortPrompt ? Math.min(numCtxBase, 768) : numCtxBase, estTokens);
   const casualCap = shortPrompt ? Math.min(numPredictBase, 128) : numPredictBase;
   const casualBudget = shortPrompt ? Math.min(latencyBudget, 3500) : latencyBudget;
   return {
