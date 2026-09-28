@@ -9,6 +9,7 @@
  * Ollama chat model with the auto-selected Hermes tier.
  */
 import os from "node:os";
+import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 
 // Ollama library tags for Hermes 3 (official Nous Research uploads).
@@ -36,7 +37,52 @@ function trySmi(bin) {
   return null;
 }
 
-/** Best-effort GPU detection: nvidia-smi on PATH, then common Windows/Linux install paths. */
+/** AMD detection via rocm-smi (Linux/Windows ROCm installs). */
+function tryRocmSmi(bin) {
+  try {
+    const r = spawnSync(bin, ["--showproductname", "--showmeminfo", "vram", "--csv"], { encoding: "utf8", timeout: 5000 });
+    if (r.status !== 0 || !r.stdout) return null;
+    const gpus = [];
+    let cur = null;
+    for (const ln of r.stdout.split(/\r?\n/)) {
+      const cols = ln.split(",").map((s) => s.trim());
+      if (/card series|card model|GPU/i.test(cols[1] || "") && cols[2]) cur = { name: cols[2], vramMib: 0 };
+      const memMatch = ln.match(/(\d+)\s*$/);
+      if (/Total Memory|VRAM Total/i.test(ln) && memMatch) {
+        const mib = Math.round(Number(memMatch[1]) / (1024 * 1024));
+        if (cur) { cur.vramMib = mib; gpus.push(cur); cur = null; }
+        else gpus.push({ name: "AMD GPU", vramMib: mib });
+      }
+    }
+    const valid = gpus.filter((g) => g.vramMib > 0);
+    return valid.length ? valid : null;
+  } catch {}
+  return null;
+}
+
+/** AMD detection via sysfs on Linux (vendor 0x1002), reading mem_info_vram_total. */
+function trySysfsAmd() {
+  try {
+    const base = "/sys/class/drm";
+    if (!fs.existsSync(base)) return null;
+    const gpus = [];
+    for (const entry of fs.readdirSync(base)) {
+      if (!/^card\d+$/.test(entry)) continue;
+      const dev = `${base}/${entry}/device`;
+      try {
+        const vendor = fs.readFileSync(`${dev}/vendor`, "utf8").trim();
+        if (vendor !== "0x1002") continue;
+        const bytes = Number(fs.readFileSync(`${dev}/mem_info_vram_total`, "utf8").trim());
+        if (bytes > 0) gpus.push({ name: "AMD GPU (sysfs)", vramMib: Math.round(bytes / (1024 * 1024)) });
+      } catch {}
+    }
+    return gpus.length ? gpus : null;
+  } catch {}
+  return null;
+}
+
+/** Best-effort GPU detection: NVIDIA via nvidia-smi (PATH + common install paths),
+ *  AMD via rocm-smi or Linux sysfs, then a Windows PowerShell CIM fallback. */
 function detectGpu() {
   if (CACHED_GPU) return CACHED_GPU;
   const candidates = ["nvidia-smi"];
@@ -56,7 +102,27 @@ function detectGpu() {
       return CACHED_GPU;
     }
   }
-  // Windows fallback: WMIC / PowerShell CIM query for adapter RAM.
+  // AMD: rocm-smi first, then Linux sysfs.
+  const rocmBins = process.platform === "win32"
+    ? ["C:\\Program Files\\AMD\\ROCm\\bin\\rocm-smi.exe", "rocm-smi"]
+    : ["rocm-smi", "/opt/rocm/bin/rocm-smi", "/usr/bin/rocm-smi"];
+  for (const bin of rocmBins) {
+    const gpus = tryRocmSmi(bin);
+    if (gpus) {
+      const vramGb = Math.round((gpus.reduce((a, g) => a + g.vramMib, 0) / 1024) * 10) / 10;
+      CACHED_GPU = { gpus, vramGb, source: bin, name: gpus[0]?.name || "AMD GPU" };
+      return CACHED_GPU;
+    }
+  }
+  if (process.platform !== "win32") {
+    const gpus = trySysfsAmd();
+    if (gpus) {
+      const vramGb = Math.round((gpus.reduce((a, g) => a + g.vramMib, 0) / 1024) * 10) / 10;
+      CACHED_GPU = { gpus, vramGb, source: "sysfs:/sys/class/drm", name: gpus[0].name };
+      return CACHED_GPU;
+    }
+  }
+  // Windows fallback: PowerShell CIM query for adapter RAM (NVIDIA or AMD).
   if (process.platform === "win32") {
     try {
       const r = spawnSync("powershell.exe", [
@@ -67,7 +133,7 @@ function detectGpu() {
         const raw = JSON.parse(r.stdout);
         const arr = Array.isArray(raw) ? raw : [raw];
         const gpus = arr.map((g) => ({ name: g.Name, vramMib: Math.round((Number(g.AdapterRAM) || 0) / (1024 * 1024)) }))
-          .filter((g) => g.name && /nvidia|geforce|rtx|gtx|quadro|tesla/i.test(g.name) && g.vramMib > 0);
+          .filter((g) => g.name && /nvidia|geforce|rtx|gtx|quadro|tesla|amd|radeon|\brx\s?\d/i.test(g.name) && g.vramMib > 0);
         if (gpus.length) {
           const vramGb = Math.round((gpus.reduce((a, g) => a + g.vramMib, 0) / 1024) * 10) / 10;
           CACHED_GPU = { gpus, vramGb, source: "powershell:Win32_VideoController", name: gpus[0].name };

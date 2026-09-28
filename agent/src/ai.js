@@ -116,6 +116,16 @@ export async function refreshLocalModel() {
   return ACTIVE_LOCAL;
 }
 
+/** Log detected hardware once per boot, tagging which provider consumes it. */
+let HW_LOGGED_FOR = null;
+function logHardwareOnce(tag) {
+  if (HW_LOGGED_FOR === tag) return;
+  HW_LOGGED_FOR = tag;
+  const hw = detectHardware();
+  const gpu = hw.hasGpu ? `${hw.gpuName || "GPU"} · ${hw.vramGb} GB VRAM` : "no GPU";
+  console.log(`[${tag}] hardware: ${hw.cpuCount}x ${hw.cpuModel} · ${hw.ramGb} GB RAM · ${gpu}`);
+}
+
 /** Cached Hermes model choice, refreshed when the toggle or override changes. */
 let HERMES_CHOICE = null;
 function resolveHermesChoice() {
@@ -124,14 +134,15 @@ function resolveHermesChoice() {
   if (!HERMES_CHOICE || HERMES_CHOICE.override !== h.model) {
     const picked = pickHermesModel(h.model);
     HERMES_CHOICE = { ...picked, override: h.model, tuning: hermesTuning(picked.tier) };
-    const hw = detectHardware();
-    console.log(`[hermes] hardware: ${hw.cpuCount}x ${hw.cpuModel} · ${hw.ramGb} GB RAM · ${hw.hasGpu ? `${hw.vramGb} GB VRAM` : "no GPU"} → ${picked.label}`);
+    logHardwareOnce("hermes");
+    console.log(`[hermes] tier: ${picked.label}`);
   }
   return HERMES_CHOICE;
 }
 
 function ollamaWorkload(messages, mode) {
   const p = config.providers.ollama;
+  logHardwareOnce("ollama");
   const latest = [...messages].reverse().find((message) => message.role === "user")?.content || "";
   const chars = messages.reduce((sum, message) => sum + String(message.content || "").length, 0);
   const complex = mode === "coding" || (COMPLEX_REQUEST_RE.test(latest) && latest.length > 240) || latest.length > 1200;
