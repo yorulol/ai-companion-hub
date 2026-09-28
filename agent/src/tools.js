@@ -39,6 +39,7 @@ Security & scans:
 - malware_scan() — ClamAV (Linux) / Windows Defender
 - lockdown_engage(), lockdown_release({key}), lockdown_status()
 - web_vuln_scan({url}), web_vuln_verify({host}), web_vuln_report({host}), web_vuln_list({host})
+- file_pentest({path}) — deep static security analysis of any file (PE-aware for .exe/.dll). Returns risk score, hashes, entropy, PE headers, flagged imports, script sinks, IOCs, secrets. Saves a full bundle under agent/file-pentest/.
 
 Lookups: lookup({query}), list_lookups()
 
