@@ -216,10 +216,11 @@ async function analyzeScanWithAI(result, provider) {
 }
 
 const URL_RE = /(https?:\/\/[^\s]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/\S*)?)/i;
-const SCAN_INTENT_RE = /\b(vuln(?:erability)?|sqli|xss|cve|bug\s*bount|pentest|pen[- ]?test|scan|audit|security\s+(?:check|test))\b/i;
+const SCAN_INTENT_RE = /\b(vuln(?:erability)?|sqli|xss|cve|bug\s*bount|scan|audit|security\s+(?:check|test))\b/i;
 const VERIFY_INTENT_RE = /\b(verify|re[- ]?verify|confirm)\b.*\b(scan|vuln|finding|last)\b/i;
 const REPORT_INTENT_RE = /\b(draft|generate|write|regen(?:erate)?)\b.*\breport/i;
 const LIST_INTENT_RE = /\b(what(?:'s| is)\s+(?:vulnerable|exploitable)|show|list)\b.*\b(vuln|finding|exploit)/i;
+const PENTEST_INTENT_RE = /\b(pen[- ]?test|pentest|analy[sz]e|inspect|audit)\b.*\b(file|exe|binary|dll|script|py|sh|apk)\b/i;
 
 function extractUrl(text) {
   const m = URL_RE.exec(text || "");
