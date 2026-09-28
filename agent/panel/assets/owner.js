@@ -174,16 +174,17 @@ async function loadSettings() {
   SETTINGS = await api("/api/owner/settings");
   document.getElementById("ownerPrefix").value = SETTINGS.discord?.ownerPrefix || "!";
   const p = SETTINGS.provider || {};
-  document.getElementById("preferred").value = p.preferred || "openrouter";
+  document.getElementById("preferred").value = p.preferred || "hermes";
   const checks = document.getElementById("providerChecks");
   const list = [
-    ["openrouterEnabled", "OpenRouter"],
-    ["ollamaEnabled", "Ollama"], ["groqEnabled", "Groq"],
-    ["openaiEnabled", "OpenAI"], ["anthropicEnabled", "Anthropic"],
+    ["hermesEnabled", "Hermes (Nous, hardware-aware)"],
+    ["ollamaEnabled", "Ollama (local runtime)"],
   ];
   checks.innerHTML = list.map(([k, label]) =>
     `<label><input type="checkbox" data-key="${k}" ${p[k] ? "checked" : ""}/> ${label}</label>`,
   ).join("");
+  const hm = document.getElementById("hermesModel");
+  if (hm) hm.value = p.hermesModel || "";
   refreshModels();
 }
 async function saveOwnerPrefix() {
