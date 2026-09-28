@@ -30,12 +30,19 @@ const SLASH_COMMANDS = [
 
 async function registerCommands(client) {
   try {
-    await client.application.commands.set(SLASH_COMMANDS);
+    const existingGlobal = await client.application.commands.fetch();
+    const currentLookup = existingGlobal.find((command) => command.name === "lookup");
+    if (currentLookup) await currentLookup.edit(SLASH_COMMANDS[0]);
+    else await client.application.commands.create(SLASH_COMMANDS[0]);
     console.log("[slash] global /lookup registered for guild and user installs");
 
     // Remove the old guild-scoped copy so it cannot shadow the global command.
     await Promise.allSettled(
-      client.guilds.cache.map((guild) => guild.commands.set([])),
+      client.guilds.cache.map(async (guild) => {
+        const commands = await guild.commands.fetch();
+        const oldLookup = commands.find((command) => command.name === "lookup");
+        if (oldLookup) await oldLookup.delete();
+      }),
     );
 
     const installUrl = `https://discord.com/oauth2/authorize?client_id=${client.application.id}&integration_type=1&scope=applications.commands`;
@@ -68,7 +75,7 @@ export function attachSlash(client) {
       await interaction.deferReply().catch(() => {});
       logActivity("bot", `${interaction.user.tag} ran /lookup`, {
         location: interaction.guild?.name || "direct message",
-        installation: interaction.authorizingIntegrationOwners?.has("1") ? "user" : "guild",
+        installation: interaction.guildId ? "server context" : "direct context",
       });
 
       try {
