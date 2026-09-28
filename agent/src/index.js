@@ -100,7 +100,7 @@ process.on("SIGINT", () => {
 terminalUp = true;
 if (process.env.YORU_UPDATE_RESTART === "1") {
   await Promise.race([
-    sendUpdateNotice("Yoru's update is complete. I'm back online."),
+    sendUpdateNotice("Yoru's update is complete. I'm back online.").catch((error) => log.warn("auto-update", `notice failed: ${error.message}`)),
     new Promise((resolve) => setTimeout(resolve, 4000)),
   ]);
 }

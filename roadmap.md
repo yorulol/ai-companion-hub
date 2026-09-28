@@ -1,7 +1,7 @@
 # Roadmap
 
-- [ ] Announce detected updates and completed restarts through active Discord bot/alt channels.
-- [ ] Show a terminal reply typing indicator with elapsed seconds and polish terminal chat output.
+- [x] Announce detected updates and completed restarts through active Discord bot/alt channels.
+- [x] Show a terminal reply typing indicator with elapsed seconds and polish terminal chat output.
 - [x] Make GitHub/local update restarts rerun the complete `npm start` startup sequence (including dependency updates).
 - [x] Replace Yoru's old persona everywhere with the merged Nous Research assistant/engineer persona while preserving custom personas.
 - [x] Merge chat + owner panels into ONE panel on ONE localhost port (hub.html on 8788; chat/owner/workspace embedded), full redesign (black/white glossy glass, cursor-following particles, animated dropdowns, glossy buttons, dropdowns layered above content)
