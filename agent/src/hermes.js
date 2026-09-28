@@ -19,17 +19,69 @@ export const HERMES_TIERS = {
 };
 
 let CACHED_HW = null;
+let CACHED_GPU = null;
 
-/** Best-effort GPU VRAM detection (NVIDIA via nvidia-smi). */
-function detectVramGb() {
+function trySmi(bin) {
   try {
-    const r = spawnSync("nvidia-smi", ["--query-gpu=memory.total", "--format=csv,noheader,nounits"], { encoding: "utf8", timeout: 3000 });
-    if (r.status === 0 && r.stdout) {
-      const mib = r.stdout.split(/\r?\n/).map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
-      if (mib.length) return Math.round((mib.reduce((a, b) => a + b, 0) / 1024) * 10) / 10;
+    const r = spawnSync(bin, ["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"], { encoding: "utf8", timeout: 5000 });
+    if (r.status === 0 && r.stdout && r.stdout.trim()) {
+      const lines = r.stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      const gpus = lines.map((ln) => {
+        const [name, mem] = ln.split(",").map((s) => s.trim());
+        return { name, vramMib: Number(mem) || 0 };
+      }).filter((g) => g.vramMib > 0);
+      if (gpus.length) return gpus;
     }
   } catch {}
-  return 0;
+  return null;
+}
+
+/** Best-effort GPU detection: nvidia-smi on PATH, then common Windows/Linux install paths. */
+function detectGpu() {
+  if (CACHED_GPU) return CACHED_GPU;
+  const candidates = ["nvidia-smi"];
+  if (process.platform === "win32") {
+    candidates.push(
+      "C:\\Windows\\System32\\nvidia-smi.exe",
+      "C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe",
+    );
+  } else {
+    candidates.push("/usr/bin/nvidia-smi", "/usr/local/bin/nvidia-smi");
+  }
+  for (const bin of candidates) {
+    const gpus = trySmi(bin);
+    if (gpus) {
+      const vramGb = Math.round((gpus.reduce((a, g) => a + g.vramMib, 0) / 1024) * 10) / 10;
+      CACHED_GPU = { gpus, vramGb, source: bin, name: gpus[0]?.name || "NVIDIA GPU" };
+      return CACHED_GPU;
+    }
+  }
+  // Windows fallback: WMIC / PowerShell CIM query for adapter RAM.
+  if (process.platform === "win32") {
+    try {
+      const r = spawnSync("powershell.exe", [
+        "-NoProfile", "-Command",
+        "Get-CimInstance Win32_VideoController | Select-Object -Property Name,AdapterRAM | ConvertTo-Json -Compress",
+      ], { encoding: "utf8", timeout: 6000 });
+      if (r.status === 0 && r.stdout) {
+        const raw = JSON.parse(r.stdout);
+        const arr = Array.isArray(raw) ? raw : [raw];
+        const gpus = arr.map((g) => ({ name: g.Name, vramMib: Math.round((Number(g.AdapterRAM) || 0) / (1024 * 1024)) }))
+          .filter((g) => g.name && /nvidia|geforce|rtx|gtx|quadro|tesla/i.test(g.name) && g.vramMib > 0);
+        if (gpus.length) {
+          const vramGb = Math.round((gpus.reduce((a, g) => a + g.vramMib, 0) / 1024) * 10) / 10;
+          CACHED_GPU = { gpus, vramGb, source: "powershell:Win32_VideoController", name: gpus[0].name };
+          return CACHED_GPU;
+        }
+      }
+    } catch {}
+  }
+  CACHED_GPU = { gpus: [], vramGb: 0, source: null, name: null };
+  return CACHED_GPU;
+}
+
+function detectVramGb() {
+  return detectGpu().vramGb;
 }
 
 export function detectHardware(force = false) {
