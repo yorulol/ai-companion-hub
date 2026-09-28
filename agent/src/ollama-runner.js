@@ -82,6 +82,20 @@ export async function startOllama() {
     return;
   }
 
+  // Show detected hardware at boot (same detection Hermes uses) so it's clear
+  // which GPU Ollama will offload to, even when Hermes is disabled.
+  try {
+    const { detectHardware } = await import("./hermes.js");
+    const hw = detectHardware();
+    const gpu = hw.hasGpu ? `${hw.gpuName || "GPU"} · ${hw.vramGb} GB VRAM` : "no GPU detected (CPU/RAM fallback)";
+    log.ok("ollama", `hardware: ${hw.cpuCount}x ${hw.cpuModel} · ${hw.ramGb} GB RAM · ${gpu}`);
+    if (hw.hasGpu) {
+      log.ok("ollama", `GPU-first offload: ${p.numGpu >= 999 ? "all layers" : `${p.numGpu} layers`} on GPU, overflow spills to RAM/CPU`);
+    } else {
+      log.warn("ollama", "no NVIDIA/AMD GPU found — check that nvidia-smi works in your terminal");
+    }
+  } catch { /* non-fatal */ }
+
   // If the user hasn't customised their model choice, snap to hardware-tuned defaults.
   // Migrate both the old shorthand and the previous 8B hardware default.
   if (["llama3.1", "llama3.1:8b-instruct-q4_K_M", "llama3.2:3b-instruct-q4_K_M", "llama3.2:1b-instruct-q4_K_M"].includes(p.model)) p.model = RECOMMENDED.general;
