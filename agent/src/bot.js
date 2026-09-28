@@ -34,6 +34,7 @@ export async function startBot() {
     ],
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
+  attachSlash(client);
 
   const readyPromise = new Promise((res) => client.once(Events.ClientReady, res));
   client.on(Events.ClientReady, () => {
