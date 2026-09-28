@@ -12,6 +12,7 @@ import { errEmbed, warnEmbed, okEmbed, embed, COLORS } from "./ui.js";
 import { logActivity } from "./activity.js";
 import { checkMessage as automodMessage, checkJoin as automodJoin, getAutomod } from "./automod.js";
 import { newToken as newVerifyToken, verifyUrl } from "./verify.js";
+import { attachSlash } from "./slash.js";
 
 let client = null;
 let running = false;
@@ -33,6 +34,7 @@ export async function startBot() {
     ],
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
+  attachSlash(client);
 
   const readyPromise = new Promise((res) => client.once(Events.ClientReady, res));
   client.on(Events.ClientReady, () => {
