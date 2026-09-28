@@ -1,13 +1,11 @@
 /**
  * WorkSpace — multi-agent collaboration.
  *
- * YORU  -> defaults to Ollama (falls back to the normal provider chain if
- *          Ollama is disabled/unreachable).
- * ACE   -> OpenRouter (owner's pick), falls back to the chain.
+ * YORU  -> defaults to Hermes (local Nous Research tier auto-picked for the host).
+ * ACE   -> Ollama (owner's pick), falls back to the chain.
  *
  * Both agents share one transcript, take turns, and may act inside the
- * selected project folder (agent/ by default) using
- * fenced tool blocks:
+ * selected project folder (agent/ by default) using fenced tool blocks:
  *
  *   ```tool
  *   {"tool":"ws_write","args":{"path":"src/foo.js","content":"..."}}
