@@ -64,8 +64,9 @@ export function pickHermesModel(override) {
 /** Tuning hints derived from the picked tier — used by the Ollama runner. */
 export function hermesTuning(tier) {
   if (tier === "large") return { numCtx: 4096, numPredict: 220, latencyBudgetMs: 20000 };
-  if (tier === "medium") return { numCtx: 3072, numPredict: 200, latencyBudgetMs: 12000 };
-  return { numCtx: 2048, numPredict: 160, latencyBudgetMs: 8000 };
+  if (tier === "medium") return { numCtx: 2560, numPredict: 180, latencyBudgetMs: 10000 };
+  // Small tier tuned for lightning-fast replies on 6 GB GPUs (RTX 1660 Ti class).
+  return { numCtx: 1536, numPredict: 140, latencyBudgetMs: 6000 };
 }
 
 export function hermesStatusLine(config) {
