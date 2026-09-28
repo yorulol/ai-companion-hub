@@ -14,6 +14,7 @@ import { watch, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./boot-ui.js";
+import { sendUpdateNotice } from "./update-notices.js";
 
 const RESTART_CODE = 42;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -32,10 +33,16 @@ function git(args, cwd) {
   return { code: r.status ?? 1, out: (r.stdout || "").trim(), err: (r.stderr || "").trim() };
 }
 
-function scheduleRestart(reason) {
+let restarting = false;
+async function scheduleRestart(reason) {
+  if (restarting) return;
+  restarting = true;
+  await Promise.race([
+    sendUpdateNotice("Yoru is processing an update. I'll let you know when I'm back online."),
+    new Promise((resolve) => setTimeout(resolve, 4000)),
+  ]);
   log.ok("auto-update", `${reason} — restarting…`);
-  // Give logs a moment to flush.
-  setTimeout(() => process.exit(RESTART_CODE), 400);
+  process.exit(RESTART_CODE);
 }
 
 function startGitPoller() {
@@ -63,7 +70,7 @@ function startGitPoller() {
         log.warn("auto-update", `git pull failed: ${pull.err || pull.out}`);
         return;
       }
-      scheduleRestart("repo updated");
+      await scheduleRestart("repo updated");
     } finally {
       busy = false;
     }
@@ -85,7 +92,7 @@ function startFileWatcher() {
   const bump = (file) => {
     if (timer) clearTimeout(timer);
     lastFile = file || lastFile;
-    timer = setTimeout(() => scheduleRestart(`local change detected (${path.basename(lastFile) || "file"})`), debounceMs);
+    timer = setTimeout(() => { void scheduleRestart(`local change detected (${path.basename(lastFile) || "file"})`); }, debounceMs);
   };
 
   try {
@@ -132,6 +139,7 @@ export function runSupervised(entry, beforeStart = async () => {}) {
       // update-triggered exit, just like Ctrl+C followed by npm start.
       await beforeStart();
       if (stopping) break;
+      // Only the replacement child announces completion, never a normal boot.
       const result = await new Promise((resolve) => {
         child = spawn(process.execPath, [entry], { stdio: "inherit", env });
         child.once("error", (error) => resolve({ error }));
@@ -141,6 +149,7 @@ export function runSupervised(entry, beforeStart = async () => {}) {
       if (stopping || result.signal === "SIGINT" || result.signal === "SIGTERM") break;
       if (result.error) { console.error(result.error); process.exitCode = 1; break; }
       if (result.code !== RESTART_CODE) { process.exitCode = result.code ?? 1; break; }
+      env.YORU_UPDATE_RESTART = "1";
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   };

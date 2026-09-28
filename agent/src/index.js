@@ -11,6 +11,7 @@ import { refreshLocalModel } from "./ai.js";
 import { bootUI, log } from "./boot-ui.js";
 import { startTerminalRepl } from "./terminal-repl.js";
 import { startAutoUpdate } from "./auto-update.js";
+import { sendUpdateNotice } from "./update-notices.js";
 
 await bootUI();
 
@@ -97,5 +98,11 @@ process.on("SIGINT", () => {
 // Terminal REPL — talk to YORU directly in the same terminal after `npm start`.
 // From here on, late-starting services stay silent so the prompt stays clean.
 terminalUp = true;
+if (process.env.YORU_UPDATE_RESTART === "1") {
+  await Promise.race([
+    sendUpdateNotice("Yoru's update is complete. I'm back online."),
+    new Promise((resolve) => setTimeout(resolve, 4000)),
+  ]);
+}
 startAutoUpdate();
 startTerminalRepl();
