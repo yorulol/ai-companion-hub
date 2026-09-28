@@ -161,15 +161,14 @@ const ROUTES = {
   },
 
   "GET /api/providers": async () => {
-    const list = ["openrouter", "ollama", "openai", "anthropic", "groq"];
-    const KEY_REQUIRED = { openrouter: true, openai: true, anthropic: true, groq: true, ollama: false };
+    const list = ["hermes", "ollama"];
     return {
       preferred: config.providers.preferred,
       providers: list.map((name) => ({
         name,
         enabled: !!config.providers[name].enabled,
-        hasKey: !!config.providers[name].key,
-        keyRequired: KEY_REQUIRED[name],
+        hasKey: false,
+        keyRequired: false,
         model: config.providers[name].model || null,
       })),
     };
