@@ -87,8 +87,18 @@ export async function startOllama() {
   if (["llama3.1", "llama3.1:8b-instruct-q4_K_M", "llama3.2:3b-instruct-q4_K_M", "llama3.2:1b-instruct-q4_K_M"].includes(p.model)) p.model = RECOMMENDED.general;
   if (p.codeModel === "qwen2.5-coder") p.codeModel = RECOMMENDED.coding;
 
+  // Resolve the Hermes tier now so we can pull + pre-warm it at boot.
+  let hermesModel = null;
+  if (config.providers.hermes?.enabled) {
+    try {
+      const { pickHermesModel } = await import("./hermes.js");
+      hermesModel = pickHermesModel(config.providers.hermes.model).model;
+    } catch { /* non-fatal */ }
+  }
+
   const installed = await listInstalled();
   const wanted = [p.model, p.reasoningModel, p.codeModel];
+  if (hermesModel) wanted.push(hermesModel);
   if (p.heretic?.enabled && p.heretic.model) wanted.push(p.heretic.model);
   const need = [...new Set(wanted)].filter((m) => !installed.includes(m));
 
@@ -105,25 +115,29 @@ export async function startOllama() {
     } catch (e) { log.warn("uf", `could not build ${p.uf.model}: ${e.message}`); }
   }
 
-  // Pre-warm the active chat model into VRAM so the first reply isn't slow.
-  // A cold load costs 10-30s — far past the latency budget.
-  const warmModel = p.uf?.enabled ? p.uf.model : p.model;
-  if (!need.includes(warmModel)) {
-    try {
-      await fetch(`${p.url}/api/chat`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          model: warmModel,
-          messages: [{ role: "user", content: "hi" }],
-          keep_alive: "24h",
-          options: { num_ctx: p.numCtx, num_predict: 1, num_gpu: p.numGpu, num_batch: p.numBatch },
-        }),
-        signal: AbortSignal.timeout(180_000),
-      });
-      log.ok("ollama", `${warmModel} pre-loaded into memory (target reply time ≤ ${Math.round(p.latencyBudgetMs / 1000)}s)`);
-    } catch { /* non-fatal */ }
+  // Pull any missing models NOW so pre-warm can actually load them.
+  for (const m of need) {
+    try { await pullModel(m); }
+    catch (e) { log.warn("ollama", `could not pull ${m}: ${e.message}`); }
   }
+
+  // Pre-warm the active chat model into VRAM so the first reply isn't slow.
+  // A cold load costs 10-30s — far past the latency budget. Hermes wins when on.
+  const warmModel = hermesModel || (p.uf?.enabled ? p.uf.model : p.model);
+  try {
+    await fetch(`${p.url}/api/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: warmModel,
+        messages: [{ role: "user", content: "hi" }],
+        keep_alive: "24h",
+        options: { num_ctx: p.numCtx, num_predict: 1, num_gpu: p.numGpu, num_batch: p.numBatch, f16_kv: true, use_mmap: true },
+      }),
+      signal: AbortSignal.timeout(300_000),
+    });
+    log.ok("ollama", `${warmModel} pre-loaded into memory (target reply time ≤ ${Math.round(p.latencyBudgetMs / 1000)}s)`);
+  } catch { /* non-fatal */ }
 
   if (!need.length) {
     log.ok("ollama", `ready (chat=${p.model}, reasoning=${p.reasoningModel}, code=${p.codeModel})`);
