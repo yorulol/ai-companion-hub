@@ -9,6 +9,7 @@
  * Ollama chat model with the auto-selected Hermes tier.
  */
 import os from "node:os";
+import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 
 // Ollama library tags for Hermes 3 (official Nous Research uploads).
@@ -62,7 +63,6 @@ function tryRocmSmi(bin) {
 /** AMD detection via sysfs on Linux (vendor 0x1002), reading mem_info_vram_total. */
 function trySysfsAmd() {
   try {
-    const fs = require("node:fs");
     const base = "/sys/class/drm";
     if (!fs.existsSync(base)) return null;
     const gpus = [];
