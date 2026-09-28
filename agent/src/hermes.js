@@ -131,5 +131,6 @@ export function hermesStatusLine(config) {
   if (!h?.enabled) return "off";
   const hw = detectHardware();
   const picked = pickHermesModel(h.model);
-  return `${picked.label} · ${hw.hasGpu ? `${hw.vramGb} GB VRAM` : `${hw.ramGb} GB RAM (CPU)`}`;
+  const gpuTag = hw.hasGpu ? `${hw.gpuName || "GPU"} · ${hw.vramGb} GB VRAM` : `${hw.ramGb} GB RAM (CPU only — no NVIDIA GPU detected)`;
+  return `${picked.label} · ${gpuTag}`;
 }
