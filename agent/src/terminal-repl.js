@@ -300,6 +300,70 @@ async function runList(host) {
   }
 }
 
+async function runPentest(filePath) {
+  if (!filePath) { console.log(p(C.red, "  need a file path — e.g. /pentest ~/Downloads/sample.exe")); return; }
+  const target = filePath.replace(/^["']|["']$/g, "");
+  console.log("");
+  console.log(line("═", 62, C.purple));
+  console.log(`${p(C.pink + C.bold, "  FILE PENTEST")} ${p(C.grey, "→")} ${p(C.cyan, target)}`);
+  console.log(p(C.grey, "  static analysis · hashes · entropy · PE headers · IOCs · secrets · script sinks"));
+  console.log(line("═", 62, C.purple));
+  const spin = spinner("analyzing file");
+  try {
+    const { outDir, reportFile, analysis: a } = await pentestFile(target);
+    spin.stop(p(C.greenSoft, `  ✓ analysis complete`));
+    const sevCol = severityColor(a.risk);
+    console.log("");
+    console.log(`  ${p(C.pink + C.bold, a.file.name)} ${p(C.grey, `${a.file.size.toLocaleString()} B · ${a.file.type}`)}`);
+    console.log(`  ${p(sevCol + C.bold, "risk " + a.risk.toUpperCase())} ${p(C.grey, `score ${a.score}`)}  entropy ${p(a.file.entropy > 7.5 ? C.red : C.white, a.file.entropy.toFixed(3))}${a.file.entropy > 7.5 ? p(C.red, "  ⚠ likely packed") : ""}`);
+    console.log(p(C.grey, `  sha256 ${a.hashes.sha256}`));
+    if (a.pe) {
+      console.log("");
+      console.log(p(C.blue + C.bold, "  PE headers"));
+      console.log(p(C.grey, `    ${a.pe.machine} · ${a.pe.subsystem} · compiled ${a.pe.compiledAt}`));
+      console.log(p(C.grey, `    signed=${a.pe.signed}  ASLR=${a.pe.aslr}  DEP=${a.pe.dep}  CFG=${a.pe.cfg}`));
+      console.log("");
+      console.log(p(C.blue + C.bold, "  sections"));
+      for (const s of a.pe.sections) {
+        const flag = s.entropy > 7.0 ? p(C.red, " ⚠") : "";
+        console.log(`    ${p(C.cyan, s.name.padEnd(9))} ${p(C.grey, `rsize=${String(s.rawSize).padStart(7)}  entropy=${s.entropy.toFixed(3)}`)}${flag}${s.executable ? p(C.yellow, "  X") : ""}${s.writable ? p(C.red, "W") : ""}`);
+      }
+      if (a.pe.flagged?.length) {
+        console.log("");
+        console.log(p(C.pink + C.bold, "  flagged imports"));
+        for (const cat of a.pe.flagged) {
+          console.log(`    ${p(C.red, "▸")} ${p(C.white + C.bold, cat.category)}`);
+          console.log(p(C.grey, `        ${cat.apis.slice(0, 10).join(", ")}${cat.apis.length > 10 ? ` … +${cat.apis.length - 10}` : ""}`));
+        }
+      }
+    }
+    if (a.script?.length) {
+      console.log("");
+      console.log(p(C.pink + C.bold, "  source sinks"));
+      for (const s of a.script) console.log(`    ${p(severityColor(s.severity), "▸")} [${s.severity}] ${p(C.white, s.name)} ${p(C.grey, `×${s.count}`)}`);
+    }
+    if (a.secrets?.length) {
+      console.log("");
+      console.log(p(C.pink + C.bold, "  possible secrets"));
+      for (const s of a.secrets) console.log(`    ${p(C.red, "▸")} ${p(C.white, s.type)} ${p(C.grey, `×${s.count}`)}`);
+    }
+    const iocCount = a.iocs.urls.length + a.iocs.ips.length + a.iocs.emails.length;
+    if (iocCount) {
+      console.log("");
+      console.log(p(C.pink + C.bold, "  IOCs") + p(C.grey, `  urls=${a.iocs.urls.length} ips=${a.iocs.ips.length} emails=${a.iocs.emails.length}`));
+      for (const u of a.iocs.urls.slice(0, 5)) console.log(p(C.grey, `    · ${u}`));
+    }
+    console.log("");
+    console.log(p(C.green + C.bold, "  saved"));
+    console.log(p(C.grey, `    folder ${outDir}`));
+    console.log(p(C.grey, `    report ${reportFile}`));
+    console.log("");
+  } catch (err) {
+    spin.stop();
+    console.log(p(C.red, `  pentest failed: ${err.message}`));
+  }
+}
+
 function help() {
   console.log("");
   console.log(p(C.pink + C.bold, "  commands"));
