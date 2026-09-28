@@ -334,3 +334,93 @@ add({ name: "use", category: "owner", description: "Switch chat to a built local
     await refreshLocalModel();
     message.reply({ embeds: [okEmbed("Chat model switched", `Now using \`${name}\` on every surface.`)] });
   })});
+
+// 22 — webscan <url> : run the full web vuln scan and attach the zipped bundle
+import { runFullScan } from "../scan-run.js";
+import { zipDir } from "../scan-zip.js";
+import { safeHost, hostDirFor } from "../scan-store.js";
+import { pentestFile, PENTEST_DIR } from "../file-pentest.js";
+import path from "node:path";
+import { promises as fsp } from "node:fs";
+import { AttachmentBuilder } from "discord.js";
+
+const DISCORD_MAX_UPLOAD = 24 * 1024 * 1024; // safe below the 25 MB bot cap
+
+function sevColor(risk) {
+  return { critical: COLORS.danger, high: COLORS.danger, medium: COLORS.warn, low: COLORS.info, info: COLORS.info }[risk] || COLORS.brand;
+}
+
+add({ name: "webscan", category: "owner", description: "Deep web vulnerability scan; posts summary + zip of the /web/<host> bundle.",
+  usage: "webscan <url>", permission: "owner",
+  run: guard(async ({ message, args }) => {
+    const target = args.join(" ").trim();
+    if (!target) return void message.reply({ embeds: [infoEmbed("Which URL?", "`webscan https://example.com` — only scan targets you have permission to test.")] });
+    const live = await message.channel.send({ embeds: [infoEmbed("🔎 Scanning…", `Target: \`${target}\`\nRunning crawl → probes → verification → report drafting.`)] });
+    const notes = [];
+    let lastEdit = 0;
+    try {
+      const { result, saved } = await runFullScan(target, { onNote: (n) => {
+        notes.push(n);
+        if (Date.now() - lastEdit > 3500) {
+          lastEdit = Date.now();
+          live.edit({ embeds: [infoEmbed("🔎 Scanning…", `Target: \`${target}\`\n\`\`\`\n${notes.slice(-6).join("\n")}\n\`\`\``)] }).catch(() => {});
+        }
+      }});
+      const s = result.summary?.bySeverity || {};
+      const fields = [
+        { name: "Verified", value: `${result.verifiedCount || 0} / ${result.findings?.length || 0}`, inline: true },
+        { name: "Crawl", value: `${result.crawl?.pages || 0} pages · ${result.crawl?.forms || 0} forms`, inline: true },
+        { name: "Baseline", value: `HTTP ${result.baseline?.status} · ${result.baseline?.timeMs}ms`, inline: true },
+        { name: "Findings", value: ["critical","high","medium","low","info"].map((k) => `${k}: ${s[k]||0}`).join(" · "), inline: false },
+      ];
+      const top = (result.findings || []).filter((f) => result.proofs?.[f.id]?.verified).slice(0, 8);
+      if (top.length) fields.push({ name: "Top verified", value: top.map((f) => `• **[${f.severity}]** ${f.title}${f.url ? `\n  \`${f.url}\`` : ""}`).join("\n").slice(0, 1024) });
+      await live.edit({ embeds: [embed({ title: `🛡️ Scan complete — ${result.target}`, color: (s.critical||s.high) ? COLORS.danger : (s.medium ? COLORS.warn : COLORS.ok), fields, footer: `saved to agent/web/${safeHost(target)}` })] });
+
+      // Zip and attach the whole per-host folder.
+      const zip = await zipDir(saved.hostDir, safeHost(target));
+      if (zip.size > DISCORD_MAX_UPLOAD) {
+        message.channel.send({ embeds: [warnEmbed("Bundle too large for Discord", `${(zip.size/1024/1024).toFixed(1)} MB > 24 MB cap.\nGrab it on disk:\n\`${zip.path}\``)] });
+      } else {
+        message.channel.send({ files: [new AttachmentBuilder(zip.path, { name: path.basename(zip.path) })] });
+      }
+    } catch (err) {
+      live.edit({ embeds: [errEmbed("Scan failed", String(err.message).slice(0, 1500))] }).catch(() => {});
+    }
+  })});
+
+// 23 — filepentest <path> : deep static analysis of any file (PE-aware for .exe)
+add({ name: "filepentest", category: "owner", description: "Static file security analysis (PE-aware for .exe). Bundles the report as a zip.",
+  usage: "filepentest <path>", permission: "owner",
+  run: guard(async ({ message, args }) => {
+    const p = args.join(" ").trim();
+    if (!p) return void message.reply({ embeds: [infoEmbed("Which file?", "`filepentest /home/you/sample.exe`")] });
+    const live = await message.channel.send({ embeds: [infoEmbed("🔬 Analyzing file…", `\`${p}\``)] });
+    try {
+      const { outDir, reportFile, analysis } = await pentestFile(p);
+      const a = analysis;
+      const flagged = (a.pe?.flagged || []).map((c) => c.category).join(", ") || "—";
+      await live.edit({ embeds: [embed({
+        title: `🔬 File pentest — ${a.file.name}`,
+        color: sevColor(a.risk),
+        fields: [
+          { name: "Risk", value: `**${a.risk.toUpperCase()}** (score ${a.score})`, inline: true },
+          { name: "Type", value: a.file.type, inline: true },
+          { name: "Entropy", value: `${a.file.entropy.toFixed(3)}${a.file.entropy > 7.5 ? " ⚠ packed" : ""}`, inline: true },
+          { name: "SHA-256", value: `\`${a.hashes.sha256}\``, inline: false },
+          { name: "Flagged API categories", value: flagged, inline: false },
+          { name: "IOCs", value: `URLs: ${a.iocs.urls.length} · IPs: ${a.iocs.ips.length} · Emails: ${a.iocs.emails.length}`, inline: true },
+          { name: "Secrets", value: String(a.secrets.length), inline: true },
+          { name: "Script sinks", value: String((a.script || []).length), inline: true },
+        ],
+        footer: `saved to ${outDir}`,
+      })] });
+      const report = await fsp.readFile(reportFile);
+      const attachments = [new AttachmentBuilder(report, { name: "report.md" })];
+      const zip = await zipDir(outDir, path.basename(outDir));
+      if (zip.size <= DISCORD_MAX_UPLOAD) attachments.push(new AttachmentBuilder(zip.path, { name: path.basename(zip.path) }));
+      message.channel.send({ files: attachments });
+    } catch (err) {
+      live.edit({ embeds: [errEmbed("Pentest failed", String(err.message).slice(0, 1500))] }).catch(() => {});
+    }
+  })});
