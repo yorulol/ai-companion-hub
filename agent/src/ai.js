@@ -142,6 +142,7 @@ function resolveHermesChoice() {
 
 function ollamaWorkload(messages, mode) {
   const p = config.providers.ollama;
+  logHardwareOnce("ollama");
   const latest = [...messages].reverse().find((message) => message.role === "user")?.content || "";
   const chars = messages.reduce((sum, message) => sum + String(message.content || "").length, 0);
   const complex = mode === "coding" || (COMPLEX_REQUEST_RE.test(latest) && latest.length > 240) || latest.length > 1200;
