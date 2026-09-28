@@ -522,8 +522,17 @@ export function startTerminalRepl() {
       if (linein === "/models") { await runListModels(); rl.prompt(); return; }
       if (linein.startsWith("/build")) { await runBuildModel(linein.slice(6).trim()); rl.prompt(); return; }
       if (linein.startsWith("/use")) { await runUseModel(linein.slice(4).trim()); rl.prompt(); return; }
+      if (linein.startsWith("/pentest")) {
+        const rest = linein.slice(8).trim();
+        if (!rest) { awaitingPentestPath = true; console.log(p(C.pink, "  which file? (paste an absolute path)")); rl.prompt(); return; }
+        await runPentest(rest); rl.prompt(); return;
+      }
 
-
+      if (awaitingPentestPath) {
+        awaitingPentestPath = false;
+        await runPentest(linein);
+        rl.prompt(); return;
+      }
 
       if (awaitingScanUrl) {
         awaitingScanUrl = false;
@@ -538,6 +547,12 @@ export function startTerminalRepl() {
       if (VERIFY_INTENT_RE.test(linein) && host) { await runReverify(host); rl.prompt(); return; }
       if (REPORT_INTENT_RE.test(linein) && host) { await runReport(host); rl.prompt(); return; }
       if (LIST_INTENT_RE.test(linein) && host) { await runList(host); rl.prompt(); return; }
+
+      if (PENTEST_INTENT_RE.test(linein)) {
+        awaitingPentestPath = true;
+        console.log(p(C.pink, "  sure — what's the file path? (paste it on the next line)"));
+        rl.prompt(); return;
+      }
 
       const intent = SCAN_INTENT_RE.test(linein);
       if (intent && url) { await runScan(url, pinnedProvider); rl.prompt(); return; }
