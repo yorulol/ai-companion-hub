@@ -12,3 +12,4 @@
 - Keep Yoru's baseline persona in `agent/src/persona.js` and import it for default chat, UF, and model-builder prompts, so all agent surfaces share the same identity while saved custom personas remain intact.
 - Run dependency checks inside the restart supervisor before every child boot, so update-triggered exits repeat the same startup preparation as `npm start`.
 - Send update lifecycle notices to configured Discord owners from the running agent before exit and after its replacement boots, so the supervisor stays independent of Discord dependencies.
+- Register owner-only portable Discord commands globally with User Install contexts, because guild-scoped commands cannot run where the bot is absent.
