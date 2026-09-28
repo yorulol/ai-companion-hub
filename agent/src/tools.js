@@ -108,6 +108,18 @@ async function run(name, args = {}) {
       return { host: args.host, reportFile: r.reportFile, savedTo: r.hostDir };
     }
     case "web_vuln_list": return await listVulns(args.host);
+    case "file_pentest": {
+      const r = await pentestFile(args.path);
+      const a = r.analysis;
+      return {
+        file: a.file, risk: a.risk, score: a.score, hashes: a.hashes,
+        pe: a.pe ? { machine: a.pe.machine, subsystem: a.pe.subsystem, signed: a.pe.signed, aslr: a.pe.aslr, dep: a.pe.dep,
+          sections: a.pe.sections.map((s) => ({ name: s.name, entropy: s.entropy, executable: s.executable, writable: s.writable })),
+          flagged: a.pe.flagged, importCount: a.pe.imports.length } : null,
+        scriptFindings: a.script, secretsFound: a.secrets, iocCounts: { urls: a.iocs.urls.length, ips: a.iocs.ips.length, emails: a.iocs.emails.length },
+        savedTo: r.outDir, reportFile: r.reportFile,
+      };
+    }
     default: throw new Error(`Unknown tool: ${name}`);
   }
 }
