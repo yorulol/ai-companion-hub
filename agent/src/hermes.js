@@ -86,17 +86,20 @@ function detectVramGb() {
 
 export function detectHardware(force = false) {
   if (CACHED_HW && !force) return CACHED_HW;
+  if (force) CACHED_GPU = null;
   const ramGb = Math.round((os.totalmem() / 1024 ** 3) * 10) / 10;
   const cpus = os.cpus() || [];
-  const vramGb = detectVramGb();
+  const gpu = detectGpu();
   CACHED_HW = {
     platform: process.platform,
     arch: process.arch,
     ramGb,
-    vramGb,
+    vramGb: gpu.vramGb,
+    gpuName: gpu.name,
+    gpuSource: gpu.source,
     cpuCount: cpus.length,
     cpuModel: cpus[0]?.model?.trim() || "unknown",
-    hasGpu: vramGb > 0,
+    hasGpu: gpu.vramGb > 0,
   };
   return CACHED_HW;
 }
