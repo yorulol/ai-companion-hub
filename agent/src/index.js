@@ -46,8 +46,13 @@ boot.push(waitWithCap(Promise.allSettled(startPanels()), 10000, "panel"));
 boot.push(waitWithCap(startShareServer().catch((e) => log.warn("share", e.message)), 10000, "share"));
 
 boot.push(waitWithCap(
-  refreshModels(true).then((models) => log.ok("ai", `${models?.free?.length ?? 0} free OpenRouter models cached`)),
-  20000, "ai"
+  (async () => {
+    const { refreshHermesChoice } = await import("./ai.js");
+    const choice = refreshHermesChoice();
+    if (choice) log.ok("ai", `hermes tier: ${choice.label}`);
+    else log.ok("ai", "hermes disabled");
+  })(),
+  10000, "ai"
 ));
 
 
