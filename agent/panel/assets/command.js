@@ -18,7 +18,7 @@ function showView(name) {
   if (name === "terminal") setTimeout(() => $("input").focus(), 50);
 }
 document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
-document.querySelectorAll("[data-svc]").forEach((b) => b.addEventListener("click", () => window.open({ollama:"http://localhost:11434",openrouter:"https://openrouter.ai"}[b.dataset.svc], "_blank", "noopener")));
+document.querySelectorAll("[data-svc]").forEach((b) => b.addEventListener("click", () => window.open({ollama:"http://localhost:11434"}[b.dataset.svc], "_blank", "noopener")));
 document.addEventListener("click", (e) => document.querySelectorAll("details[open]").forEach((d) => { if (!d.contains(e.target)) d.removeAttribute("open"); }));
 function updateClock(){const d=new Date();$("dateLine").textContent=d.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric"});$("clockLine").textContent=d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});}updateClock();setInterval(updateClock,1000);
 
