@@ -139,13 +139,5 @@ export async function startOllama() {
     log.ok("ollama", `${warmModel} pre-loaded into memory (target reply time ≤ ${Math.round(p.latencyBudgetMs / 1000)}s)`);
   } catch { /* non-fatal */ }
 
-  if (!need.length) {
-    log.ok("ollama", `ready (chat=${p.model}, reasoning=${p.reasoningModel}, code=${p.codeModel})`);
-    return;
-  }
-
-  for (const m of need) {
-    try { await pullModel(m); }
-    catch (e) { log.warn("ollama", `could not pull ${m}: ${e.message}`); }
-  }
+  log.ok("ollama", `ready (chat=${warmModel}, reasoning=${p.reasoningModel}, code=${p.codeModel})`);
 }
