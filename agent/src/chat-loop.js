@@ -5,6 +5,7 @@ import { getSettings, rememberMessage, recallMessages } from "./db.js";
 import { isDead, activateKillswitch, jumpstart, detectKillswitchIntent, canControlKillswitch } from "./killswitch.js";
 import { lookup as runLookup } from "./lookups.js";
 import { GPC_TRIGGER_RE, GPC_EXPERT_PROMPT, saveGpc } from "./gpc-expert.js";
+import { LONGFORM_REQUEST_RE } from "./ai.js";
 
 /**
  * Pull the actual search term out of a lookup request. Handles quoted strings,
@@ -315,10 +316,36 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
     }
   }
 
+  // Long-form continuation: when the user asked for a deep/long answer and
+  // the reply looks truncated (no closing punctuation, dangling fence, or it
+  // hit the token ceiling mid-thought), keep generating until it finishes.
+  if (!gpcRequested && LONGFORM_REQUEST_RE.test(userText) && finalReply) {
+    for (let cont = 0; cont < 3 && looksTruncated(finalReply); cont++) {
+      messages.push({ role: "assistant", content: finalReply });
+      messages.push({
+        role: "system",
+        content: "Your previous answer was cut off mid-thought. Continue from the EXACT character where you stopped — no repetition, no commentary, just the rest of the answer. Finish with a proper closing sentence.",
+      });
+      const { reply: more } = await ask({ messages, mode });
+      const cleaned = stripToolArtifacts(more);
+      if (!cleaned) break;
+      finalReply += cleaned.startsWith("\n") || finalReply.endsWith(" ") ? cleaned : " " + cleaned;
+    }
+  }
+
   if ((!finalReply || finalReply.length < 2) && lookupSummary) finalReply = lookupSummary;
   if (!finalReply) finalReply = "my bad—brain skipped. say that again?";
   rememberMessage(scope, "assistant", finalReply);
   return { reply: finalReply.trim(), provider, model, tools: toolTrace };
+}
+
+/** True when a reply looks cut off: dangling fence, or no terminal punctuation. */
+function looksTruncated(text) {
+  const s = String(text || "").trimEnd();
+  if (!s) return false;
+  if (!hasClosedGpcFence(s)) return true; // unclosed code fence
+  // Ends mid-sentence (no . ! ? ) ] ` or closing quote) → likely hit the cap.
+  return !/[.!?\)\]\}`"'*_:~|]$/.test(s);
 }
 
 /** True when the reply contains a ```gpc fence AND a later closing ``` fence. */

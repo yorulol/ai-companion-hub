@@ -36,6 +36,10 @@ const SYSTEM_DATA_REQUEST_RE = /\b(?:system|computer|machine|hardware|device|pc)
 const COMPUTER_TASK_RE = /\b(?:computer|pc|machine|laptop|desktop|env(?:ironment)?\s*(?:file|vars?|variables)?|\.env|files?|folders?|director(?:y|ies)|shell|terminal|commands?|access|control|operate|task|process(?:es)?|program|app(?:lication)?s?|install|uninstall|download|screenshot|browse|window)\b/i;
 const MODEL_DRIFT_RE = /(?:```\s*(?:tool|function)|<tool_call>|\{\s*"(?:tool|name)"\s*:|\b(?:as an ai(?: language)? model|system_info\s*(?:\(|\b)|lockdown_(?:engage|release)\s*\(|tool result for|available tools:|critical behavior rules)\b)/i;
 const COMPLEX_REQUEST_RE = /\b(?:analy[sz]e|debug|architecture|refactor|implement|compare|explain in detail|step[- ]by[- ]step|security|algorithm|write (?:a |the )?(?:code|function|class|program))\b/i;
+// Requests that clearly want a long answer: essays, guides, deep dives,
+// big lists, full explanations. These get a wide token budget and a longer
+// latency allowance instead of the snappy short-reply caps.
+export const LONGFORM_REQUEST_RE = /\b(?:essay|write (?:me )?a (?:story|guide|tutorial|article|report|summary of|breakdown)|in[- ]depth|in detail|detailed|thorough|comprehensive|full (?:explanation|guide|breakdown|walkthrough)|walk ?through|step[- ]by[- ]step|explain (?:everything|fully|how .+ works?)|teach me|list (?:all|every|\d+)|top \d+|\d+ (?:reasons|ways|tips|examples|ideas)|pros and cons|compare .+ (?:and|vs(?:\.|er)?) |long (?:answer|response|explanation)|everything (?:you know|about)|all about)\b/i;
 
 const FAKE_TOOL_BLOCK_RE = /```(?:tool|json|function)\b[\s\S]*?(?:```|$)/gi;
 const FAKE_TOOL_LINE_RE = /^\s*(?:\{[\s\S]*"(?:tool|name|args|arguments)"[\s\S]*|(?:checking|running|executing|calling|invoking|using|looking at)\s+(?:the\s+)?[a-z_]{3,}(?:\s+output)?(?:\s*\(|\s+tool|\s*$))\s*$/i;
@@ -173,6 +177,22 @@ function ollamaWorkload(messages, mode) {
     };
   }
 
+  // Long-form conversation: user explicitly wants a deep/long answer. Wide
+  // token budget + relaxed latency so it completes in one pass, but still
+  // GPU-first and rate-predicted so it stays as fast as the hardware allows.
+  if (mode !== "share" && LONGFORM_REQUEST_RE.test(latest)) {
+    const model = hermes?.model || p.reasoningModel || fastModel;
+    return {
+      name: hermes ? "hermes-longform" : "gpu-longform",
+      model,
+      temp: 0.5,
+      numGpu: p.numGpu,
+      numThread: p.numThread,
+      numCtx: Math.max(numCtxBase, 4096),
+      numPredict: 2048,
+      latencyBudgetMs: Math.max(latencyBudget, 90000),
+    };
+  }
 
   if (large) {
     const model = mode === "coding" ? p.codeModel : (hermes?.model || p.reasoningModel);
