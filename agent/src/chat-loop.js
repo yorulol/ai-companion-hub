@@ -316,6 +316,23 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
     }
   }
 
+  // Long-form continuation: when the user asked for a deep/long answer and
+  // the reply looks truncated (no closing punctuation, dangling fence, or it
+  // hit the token ceiling mid-thought), keep generating until it finishes.
+  if (!gpcRequested && LONGFORM_REQUEST_RE.test(userText) && finalReply) {
+    for (let cont = 0; cont < 3 && looksTruncated(finalReply); cont++) {
+      messages.push({ role: "assistant", content: finalReply });
+      messages.push({
+        role: "system",
+        content: "Your previous answer was cut off mid-thought. Continue from the EXACT character where you stopped — no repetition, no commentary, just the rest of the answer. Finish with a proper closing sentence.",
+      });
+      const { reply: more } = await ask({ messages, mode });
+      const cleaned = stripToolArtifacts(more);
+      if (!cleaned) break;
+      finalReply += cleaned.startsWith("\n") || finalReply.endsWith(" ") ? cleaned : " " + cleaned;
+    }
+  }
+
   if ((!finalReply || finalReply.length < 2) && lookupSummary) finalReply = lookupSummary;
   if (!finalReply) finalReply = "my bad—brain skipped. say that again?";
   rememberMessage(scope, "assistant", finalReply);
