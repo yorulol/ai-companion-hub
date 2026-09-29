@@ -287,10 +287,70 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   }
 
   finalReply = stripToolArtifacts(finalReply);
+
+  // GPC mode: continue generating until the fenced ```gpc block closes, then
+  // auto-save it to agent/gpc/ without waiting for the model to call the tool.
+  if (gpcRequested) {
+    for (let cont = 0; cont < 6 && !hasClosedGpcFence(finalReply); cont++) {
+      messages.push({ role: "assistant", content: finalReply });
+      messages.push({
+        role: "system",
+        content: "The GPC script above is incomplete — the ``` fence was never closed. Continue writing the script from the EXACT character where you stopped. Do not repeat any previous line. Do not add commentary. When the script is complete, close the fenced block with ``` on its own line.",
+      });
+      const { reply: more } = await ask({ messages, mode: "gpc" });
+      const cleaned = stripToolArtifacts(more);
+      if (!cleaned) break;
+      finalReply += cleaned.startsWith("\n") ? cleaned : "\n" + cleaned;
+    }
+    const script = extractGpcScript(finalReply);
+    if (script && /main\s*\{/.test(script)) {
+      try {
+        const filename = deriveGpcFilename(userText, script);
+        const saved = await saveGpc(filename, script);
+        toolTrace.push({ tool: "save_gpc", args: { filename, auto: true }, result: { ok: true, result: saved } });
+        finalReply += `\n\n_Saved to \`agent/gpc/${filename}\` (${saved.bytes} bytes)._`;
+      } catch (err) {
+        finalReply += `\n\n_Auto-save failed: ${err.message}._`;
+      }
+    }
+  }
+
   if ((!finalReply || finalReply.length < 2) && lookupSummary) finalReply = lookupSummary;
   if (!finalReply) finalReply = "my bad—brain skipped. say that again?";
   rememberMessage(scope, "assistant", finalReply);
   return { reply: finalReply.trim(), provider, model, tools: toolTrace };
+}
+
+/** True when the reply contains a ```gpc fence AND a later closing ``` fence. */
+function hasClosedGpcFence(text) {
+  const s = String(text || "");
+  const open = s.search(/```[a-zA-Z0-9_-]*\s*\n/);
+  if (open < 0) return true; // no code block at all — nothing to continue
+  const rest = s.slice(open + 3);
+  const nextFence = rest.search(/\n```\s*(?:\n|$)/);
+  return nextFence >= 0;
+}
+
+/** Pull the GPC source out of the assistant's fenced block. */
+function extractGpcScript(text) {
+  const s = String(text || "");
+  const m = s.match(/```(?:gpc|c|cpp)?\s*\n([\s\S]*?)\n```/i);
+  if (m) return m[1].trim();
+  // Unclosed fence fallback (shouldn't happen after continuation, but safe):
+  const open = s.match(/```(?:gpc|c|cpp)?\s*\n([\s\S]*)$/i);
+  return open ? open[1].trim() : "";
+}
+
+/** Turn "make me a rapid fire gpc" into "rapid_fire.gpc". */
+function deriveGpcFilename(userText, script) {
+  const header = script.match(/\/\/\s*title\s*[:\-]\s*(.+)/i)?.[1]
+    || userText.replace(/gpc|cronus(?:\s*zen)?|zen\s*studio|gamepack|script|file/gi, "").trim();
+  const slug = String(header || "yoru_script")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40) || "yoru_script";
+  return `${slug}.gpc`;
 }
 
 function buildPlatformNote(ctx) {
