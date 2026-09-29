@@ -177,6 +177,22 @@ function ollamaWorkload(messages, mode) {
     };
   }
 
+  // Long-form conversation: user explicitly wants a deep/long answer. Wide
+  // token budget + relaxed latency so it completes in one pass, but still
+  // GPU-first and rate-predicted so it stays as fast as the hardware allows.
+  if (mode !== "share" && LONGFORM_REQUEST_RE.test(latest)) {
+    const model = hermes?.model || p.reasoningModel || fastModel;
+    return {
+      name: hermes ? "hermes-longform" : "gpu-longform",
+      model,
+      temp: 0.5,
+      numGpu: p.numGpu,
+      numThread: p.numThread,
+      numCtx: Math.max(numCtxBase, 4096),
+      numPredict: 2048,
+      latencyBudgetMs: Math.max(latencyBudget, 90000),
+    };
+  }
 
   if (large) {
     const model = mode === "coding" ? p.codeModel : (hermes?.model || p.reasoningModel);
