@@ -339,6 +339,15 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
   return { reply: finalReply.trim(), provider, model, tools: toolTrace };
 }
 
+/** True when a reply looks cut off: dangling fence, or no terminal punctuation. */
+function looksTruncated(text) {
+  const s = String(text || "").trimEnd();
+  if (!s) return false;
+  if (!hasClosedGpcFence(s)) return true; // unclosed code fence
+  // Ends mid-sentence (no . ! ? ) ] ` or closing quote) → likely hit the cap.
+  return !/[.!?\)\]\}`"'*_:~|]$/.test(s);
+}
+
 /** True when the reply contains a ```gpc fence AND a later closing ``` fence. */
 function hasClosedGpcFence(text) {
   const s = String(text || "");
