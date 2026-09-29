@@ -175,8 +175,11 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
       ].join("\n")
     : "Do not discuss, suggest, or invoke lookups unless the latest message explicitly asks for one.";
 
+  const gpcRequested = GPC_TRIGGER_RE.test(userText);
+  if (gpcRequested) mode = "coding";
+  const gpcBlock = gpcRequested ? `\n\n${GPC_EXPERT_PROMPT}` : "";
   const messages = [
-    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolInstructionsFor(userText, isOwner)}` },
+    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolInstructionsFor(userText, isOwner)}${gpcBlock}` },
     ...history,
   ];
 
