@@ -8,6 +8,10 @@ import { isOwnerId } from "./config.js";
 import { errEmbed, warnEmbed, infoEmbed, listPages, button, row } from "./ui.js";
 import { logActivity } from "./activity.js";
 import { lookup as searchLookups } from "./lookups.js";
+import { chat } from "./chat-loop.js";
+
+// Discord API values: GuildInstall (0), UserInstall (1); Guild (0), Bot DM (1), private DM (2).
+const INSTALL = { integration_types: [0, 1], contexts: [0, 1, 2] };
 
 const SLASH_COMMANDS = [
   {
@@ -21,27 +25,41 @@ const SLASH_COMMANDS = [
         required: true,
       },
     ],
-    // Discord API values: GuildInstall (0), UserInstall (1).
-    integration_types: [0, 1],
-    // Guild (0), Bot DM (1), private/group DM (2).
-    contexts: [0, 1, 2],
+    ...INSTALL,
+  },
+  {
+    name: "ai",
+    description: "Chat with YORU.",
+    options: [
+      {
+        name: "message",
+        description: "What you want to say to YORU.",
+        type: 3,
+        required: true,
+      },
+    ],
+    ...INSTALL,
   },
 ];
 
 async function registerCommands(client) {
   try {
     const existingGlobal = await client.application.commands.fetch();
-    const currentLookup = existingGlobal.find((command) => command.name === "lookup");
-    if (currentLookup) await currentLookup.edit(SLASH_COMMANDS[0]);
-    else await client.application.commands.create(SLASH_COMMANDS[0]);
-    console.log("[slash] global /lookup registered for guild and user installs");
+    for (const def of SLASH_COMMANDS) {
+      const current = existingGlobal.find((command) => command.name === def.name);
+      if (current) await current.edit(def);
+      else await client.application.commands.create(def);
+    }
+    console.log(`[slash] global commands registered for guild and user installs: ${SLASH_COMMANDS.map((c) => `/${c.name}`).join(", ")}`);
 
-    // Remove the old guild-scoped copy so it cannot shadow the global command.
+    // Remove the old guild-scoped copies so they cannot shadow the global commands.
     await Promise.allSettled(
       client.guilds.cache.map(async (guild) => {
         const commands = await guild.commands.fetch();
-        const oldLookup = commands.find((command) => command.name === "lookup");
-        if (oldLookup) await oldLookup.delete();
+        for (const def of SLASH_COMMANDS) {
+          const old = commands.find((command) => command.name === def.name);
+          if (old) await old.delete();
+        }
       }),
     );
 
@@ -59,7 +77,7 @@ export function attachSlash(client) {
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
       if (!interaction.isChatInputCommand()) return;
-      if (interaction.commandName !== "lookup") return;
+      if (!SLASH_COMMANDS.some((c) => c.name === interaction.commandName)) return;
       if (!isOwnerId(interaction.user.id)) {
         return void interaction.reply({
           embeds: [errEmbed("Owner only", "This command is locked to Yoru's configured owner.")],
@@ -67,44 +85,89 @@ export function attachSlash(client) {
         }).catch(() => {});
       }
 
-      const q = (interaction.options.getString("query", true) || "").trim();
-      if (!q) {
-        return void interaction.reply({ embeds: [infoEmbed("Search for what?", "`/lookup someusername`")], ephemeral: true }).catch(() => {});
-      }
-
-      await interaction.deferReply().catch(() => {});
-      logActivity("bot", `${interaction.user.tag} ran /lookup`, {
-        location: interaction.guild?.name || "direct message",
-        installation: interaction.guildId ? "server context" : "direct context",
-      });
-
-      try {
-        const out = await searchLookups(q);
-        if (out.protected) {
-          return void interaction.editReply({ embeds: [warnEmbed("Protected", out.message || "That identity is whitelisted.")] }).catch(() => {});
-        }
-        const rows = [];
-        let totalHits = 0;
-        for (const m of out.matches || []) {
-          if (m.error) { rows.push(`⚠️ ${m.error}`); continue; }
-          for (const h of (m.hits || []).slice(0, 8)) {
-            totalHits++;
-            const body = h.row ? JSON.stringify(h.row) : (h.context || JSON.stringify(h));
-            rows.push(`> ${String(body).slice(0, 300)}`);
-          }
-        }
-        if (!totalHits) {
-          return void interaction.editReply({ embeds: [warnEmbed("No matches", `Nothing found for \`${q}\`.`)] }).catch(() => {});
-        }
-        const pages = listPages(rows, { title: `🔎 ${q} · ${totalHits} result(s)`, perPage: 12 });
-        await paginateInteraction(interaction, pages, { userId: interaction.user.id });
-      } catch (err) {
-        await interaction.editReply({ embeds: [errEmbed("Lookup failed", String(err.message))] }).catch(() => {});
-      }
+      if (interaction.commandName === "ai") return void handleAi(interaction);
+      if (interaction.commandName === "lookup") return void handleLookup(interaction);
     } catch (err) {
       console.error("[slash] interaction error", err);
     }
   });
+}
+
+async function handleAi(interaction) {
+  const text = (interaction.options.getString("message", true) || "").trim();
+  if (!text) {
+    return void interaction.reply({ embeds: [infoEmbed("Say something", "`/ai message:hello`")], ephemeral: true }).catch(() => {});
+  }
+
+  await interaction.deferReply().catch(() => {});
+  logActivity("bot", `${interaction.user.tag} ran /ai`, {
+    location: interaction.guild?.name || "direct message",
+  });
+
+  try {
+    const { reply, provider, model } = await chat({
+      scope: `s:${interaction.channelId}:${interaction.user.id}`,
+      userText: text,
+      isOwner: true,
+      context: {
+        platform: "bot",
+        isDm: !interaction.guild,
+        guildName: interaction.guild?.name || null,
+        channelName: interaction.channel?.name || null,
+        authorTag: interaction.user.username,
+        authorId: interaction.user.id,
+      },
+    });
+    const pages = listPages(
+      (() => {
+        const clean = String(reply || "(no response)");
+        const parts = [];
+        for (let i = 0; i < clean.length; i += 1800) parts.push(clean.slice(i, i + 1800));
+        return parts;
+      })(),
+      { title: "YORU", perPage: 1, footer: `${provider} · ${model}` },
+    );
+    await paginateInteraction(interaction, pages, { userId: interaction.user.id });
+  } catch (err) {
+    await interaction.editReply({ embeds: [errEmbed("AI failed", String(err.message).slice(0, 1000))] }).catch(() => {});
+  }
+}
+
+async function handleLookup(interaction) {
+  const q = (interaction.options.getString("query", true) || "").trim();
+  if (!q) {
+    return void interaction.reply({ embeds: [infoEmbed("Search for what?", "`/lookup someusername`")], ephemeral: true }).catch(() => {});
+  }
+
+  await interaction.deferReply().catch(() => {});
+  logActivity("bot", `${interaction.user.tag} ran /lookup`, {
+    location: interaction.guild?.name || "direct message",
+    installation: interaction.guildId ? "server context" : "direct context",
+  });
+
+  try {
+    const out = await searchLookups(q);
+    if (out.protected) {
+      return void interaction.editReply({ embeds: [warnEmbed("Protected", out.message || "That identity is whitelisted.")] }).catch(() => {});
+    }
+    const rows = [];
+    let totalHits = 0;
+    for (const m of out.matches || []) {
+      if (m.error) { rows.push(`⚠️ ${m.error}`); continue; }
+      for (const h of (m.hits || []).slice(0, 8)) {
+        totalHits++;
+        const body = h.row ? JSON.stringify(h.row) : (h.context || JSON.stringify(h));
+        rows.push(`> ${String(body).slice(0, 300)}`);
+      }
+    }
+    if (!totalHits) {
+      return void interaction.editReply({ embeds: [warnEmbed("No matches", `Nothing found for \`${q}\`.`)] }).catch(() => {});
+    }
+    const pages = listPages(rows, { title: `🔎 ${q} · ${totalHits} result(s)`, perPage: 12 });
+    await paginateInteraction(interaction, pages, { userId: interaction.user.id });
+  } catch (err) {
+    await interaction.editReply({ embeds: [errEmbed("Lookup failed", String(err.message))] }).catch(() => {});
+  }
 }
 
 /** Same ◀ ▶ ⏹ pagination as ui.paginate, but driven by an interaction. */
