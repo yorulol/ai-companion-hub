@@ -4,6 +4,7 @@ import { extractToolCall, executeTool, stripToolArtifacts, toolSpecFor } from ".
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
 import { isDead, activateKillswitch, jumpstart, detectKillswitchIntent, canControlKillswitch } from "./killswitch.js";
 import { lookup as runLookup } from "./lookups.js";
+import { GPC_TRIGGER_RE, GPC_EXPERT_PROMPT } from "./gpc-expert.js";
 
 /**
  * Pull the actual search term out of a lookup request. Handles quoted strings,
@@ -94,6 +95,7 @@ function explicitlyRequested(call, text) {
     web_vuln_verify: /\b(?:verify|re[- ]?verify|confirm)\b.*\b(?:scan|vuln|finding|last)\b/i,
     web_vuln_report: /\b(?:draft|generate|write|regen(?:erate)?)\b.*\breport/i,
     web_vuln_list: /\b(?:what(?:'s| is)\s+(?:vulnerable|exploitable)|list|show)\b.*\b(?:vuln|finding|exploit)/i,
+    save_gpc: /\b(?:gpc|cronus(?:\s*zen)?|zen\s*studio|gamepack)\b/i,
   };
   return patterns[call.tool]?.test(value) || false;
 }
@@ -173,8 +175,11 @@ export async function chat({ scope, userText, mode = "general", isOwner = false,
       ].join("\n")
     : "Do not discuss, suggest, or invoke lookups unless the latest message explicitly asks for one.";
 
+  const gpcRequested = GPC_TRIGGER_RE.test(userText);
+  if (gpcRequested) mode = "coding";
+  const gpcBlock = gpcRequested ? `\n\n${GPC_EXPERT_PROMPT}` : "";
   const messages = [
-    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolInstructionsFor(userText, isOwner)}` },
+    { role: "system", content: `${persona}\n\n${secrecy}\n\n${platformNote}\n\n${lookupRules}\n\n${toolInstructionsFor(userText, isOwner)}${gpcBlock}` },
     ...history,
   ];
 

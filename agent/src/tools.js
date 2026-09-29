@@ -12,6 +12,7 @@ import * as pc from "./computer.js";
 import { lookup, listLookupFiles } from "./lookups.js";
 import { runFullScan, reverifyHost, regenerateReports, listVulns } from "./scan-run.js";
 import { pentestFile } from "./file-pentest.js";
+import { saveGpc } from "./gpc-expert.js";
 import { config } from "./config.js";
 
 const OWNER_TOOL_SPEC = `
@@ -40,6 +41,7 @@ Security & scans:
 - lockdown_engage(), lockdown_release({key}), lockdown_status()
 - web_vuln_scan({url}), web_vuln_verify({host}), web_vuln_report({host}), web_vuln_list({host})
 - file_pentest({path}) — deep static security analysis of any file (PE-aware for .exe/.dll). Returns risk score, hashes, entropy, PE headers, flagged imports, script sinks, IOCs, secrets. Saves a full bundle under agent/file-pentest/.
+- save_gpc({filename, content}) — write a complete Cronus Zen GPC script to agent/gpc/<filename>.gpc. Use whenever the user asks for a GPC / Cronus Zen script they can flash. The content must be a full, compile-clean GPC 3 program with a main{} block.
 
 Lookups: lookup({query}), list_lookups()
 
@@ -120,6 +122,7 @@ async function run(name, args = {}) {
         savedTo: r.outDir, reportFile: r.reportFile,
       };
     }
+    case "save_gpc": return await saveGpc(args.filename, args.content);
     default: throw new Error(`Unknown tool: ${name}`);
   }
 }
