@@ -5,11 +5,15 @@
  * ready-to-flash .gpc file into agent/gpc/.
  */
 import fs from "node:fs/promises";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const GPC_DIR = path.resolve(HERE, "..", "gpc");
+
+// Ensure agent/gpc/ exists the moment Yoru boots — no reinstall needed.
+try { mkdirSync(GPC_DIR, { recursive: true }); } catch {}
 
 export const GPC_TRIGGER_RE = /\b(?:gpc|cronus(?:\s*zen)?|zen\s*studio|gamepack)\b/i;
 
