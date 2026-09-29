@@ -4,7 +4,7 @@ import { extractToolCall, executeTool, stripToolArtifacts, toolSpecFor } from ".
 import { getSettings, rememberMessage, recallMessages } from "./db.js";
 import { isDead, activateKillswitch, jumpstart, detectKillswitchIntent, canControlKillswitch } from "./killswitch.js";
 import { lookup as runLookup } from "./lookups.js";
-import { GPC_TRIGGER_RE, GPC_EXPERT_PROMPT } from "./gpc-expert.js";
+import { GPC_TRIGGER_RE, GPC_EXPERT_PROMPT, saveGpc } from "./gpc-expert.js";
 
 /**
  * Pull the actual search term out of a lookup request. Handles quoted strings,
