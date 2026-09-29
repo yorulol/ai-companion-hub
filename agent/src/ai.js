@@ -156,6 +156,24 @@ function ollamaWorkload(messages, mode) {
   const numCtxBase = hermes?.tuning?.numCtx || p.numCtx;
   const numPredictBase = hermes?.tuning?.numPredict || p.numPredict;
 
+  // GPC / Cronus long-form authoring: we need the model to keep writing
+  // until a 2-3k line script finishes. Give it a huge token budget and a
+  // wide context so a single reply can fit an entire compile-clean file.
+  if (mode === "gpc") {
+    const model = hermes?.model || p.codeModel || fastModel;
+    return {
+      name: hermes ? "hermes-gpc" : "gpu-gpc",
+      model,
+      temp: 0.2,
+      numGpu: p.numGpu,
+      numThread: p.numThread,
+      numCtx: Math.max(numCtxBase, 8192),
+      numPredict: 8192,
+      latencyBudgetMs: 10 * 60 * 1000,
+    };
+  }
+
+
   if (large) {
     const model = mode === "coding" ? p.codeModel : (hermes?.model || p.reasoningModel);
     return {
