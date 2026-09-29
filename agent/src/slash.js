@@ -45,17 +45,21 @@ const SLASH_COMMANDS = [
 async function registerCommands(client) {
   try {
     const existingGlobal = await client.application.commands.fetch();
-    const currentLookup = existingGlobal.find((command) => command.name === "lookup");
-    if (currentLookup) await currentLookup.edit(SLASH_COMMANDS[0]);
-    else await client.application.commands.create(SLASH_COMMANDS[0]);
-    console.log("[slash] global /lookup registered for guild and user installs");
+    for (const def of SLASH_COMMANDS) {
+      const current = existingGlobal.find((command) => command.name === def.name);
+      if (current) await current.edit(def);
+      else await client.application.commands.create(def);
+    }
+    console.log(`[slash] global commands registered for guild and user installs: ${SLASH_COMMANDS.map((c) => `/${c.name}`).join(", ")}`);
 
-    // Remove the old guild-scoped copy so it cannot shadow the global command.
+    // Remove the old guild-scoped copies so they cannot shadow the global commands.
     await Promise.allSettled(
       client.guilds.cache.map(async (guild) => {
         const commands = await guild.commands.fetch();
-        const oldLookup = commands.find((command) => command.name === "lookup");
-        if (oldLookup) await oldLookup.delete();
+        for (const def of SLASH_COMMANDS) {
+          const old = commands.find((command) => command.name === def.name);
+          if (old) await old.delete();
+        }
       }),
     );
 
