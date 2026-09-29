@@ -622,6 +622,30 @@ async function setupModelsFolder() {
   ok("agent/models folder ready (custom-built models)");
 }
 
+/**
+ * Creates agent/gpc/ — where Yoru writes ready-to-flash Cronus Zen GPC
+ * scripts (via the save_gpc tool in chat).
+ */
+async function setupGpcFolder() {
+  const dir = path.resolve(ROOT, "gpc");
+  await fs.mkdir(dir, { recursive: true });
+  const readme = path.join(dir, "README.txt");
+  try { await fs.access(readme); }
+  catch {
+    await fs.writeFile(readme, [
+      "YORU GPC scripts (Cronus Zen)",
+      "",
+      "Every .gpc script Yoru writes for you lands here, ready to open in",
+      "Zen Studio and flash to a Cronus Zen with zero edits.",
+      "",
+      "Ask in chat, e.g.:",
+      "  \"make me an anti-recoil + rapid-fire GPC for Warzone, save it as wz.gpc\"",
+      "",
+    ].join("\n"), "utf8");
+  }
+  ok("agent/gpc folder ready (Cronus Zen scripts)");
+}
+
 // ─────────────────────── team share (LAN link for teammates) ───────────────
 async function setupTeamShare() {
   const cfg = await fs.readFile(ENV_PATH, "utf8").catch(() => "");
@@ -807,6 +831,9 @@ async function main() {
 
   try { await setupModelsFolder(); }
   catch (e) { warn(`models folder setup skipped: ${e.message}`); }
+
+  try { await setupGpcFolder(); }
+  catch (e) { warn(`gpc folder setup skipped: ${e.message}`); }
 
   try { await setupTeamShare(); }
   catch (e) { warn(`team-share setup skipped: ${e.message}`); }
