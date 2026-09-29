@@ -8,6 +8,10 @@ import { isOwnerId } from "./config.js";
 import { errEmbed, warnEmbed, infoEmbed, listPages, button, row } from "./ui.js";
 import { logActivity } from "./activity.js";
 import { lookup as searchLookups } from "./lookups.js";
+import { chat } from "./chat-loop.js";
+
+// Discord API values: GuildInstall (0), UserInstall (1); Guild (0), Bot DM (1), private DM (2).
+const INSTALL = { integration_types: [0, 1], contexts: [0, 1, 2] };
 
 const SLASH_COMMANDS = [
   {
@@ -21,10 +25,20 @@ const SLASH_COMMANDS = [
         required: true,
       },
     ],
-    // Discord API values: GuildInstall (0), UserInstall (1).
-    integration_types: [0, 1],
-    // Guild (0), Bot DM (1), private/group DM (2).
-    contexts: [0, 1, 2],
+    ...INSTALL,
+  },
+  {
+    name: "ai",
+    description: "Chat with YORU.",
+    options: [
+      {
+        name: "message",
+        description: "What you want to say to YORU.",
+        type: 3,
+        required: true,
+      },
+    ],
+    ...INSTALL,
   },
 ];
 
